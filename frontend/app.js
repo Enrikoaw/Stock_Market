@@ -1,0 +1,650 @@
+/**
+ * SmartFlow IDX - Frontend Controller (app.js)
+ * Mengelola state screener, filter interaktif, upload Excel, dan grafik Inspector.
+ */
+
+let currentStocks = [];
+let currentPage = 1;
+const PAGE_SIZE = 50;
+let selectedTicker = null;
+let selectedStockDetail = null;
+let activeChartTab = 'price';
+let chartInstance = null;
+
+// Formatters
+const fmtNumber = (n) => new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
+const fmtPrice = (n) => `Rp ${fmtNumber(n)}`;
+const fmtSignPct = (n) => `${n >= 0 ? '+' : ''}${Number(n || 0).toFixed(2)}%`;
+
+function getTriggerBadgeClass(triggerType) {
+  switch (triggerType) {
+    case 'MARKUP_BREAKOUT':
+      return 'badge-markup';
+    case 'BIG_ACCUMULATION':
+      return 'badge-big-accum';
+    case 'SILENT_ACCUMULATION':
+      return 'badge-silent-accum';
+    case 'FOREIGN_INFLOW':
+      return 'badge-foreign';
+    case 'DISTRIBUTION_WARNING':
+      return 'badge-dist';
+    default:
+      return 'badge-neutral';
+  }
+}
+
+function getScoreColor(score) {
+  if (score >= 76) return 'from-emerald-500 to-teal-400 text-emerald-300';
+  if (score >= 64) return 'from-blue-500 to-emerald-400 text-blue-300';
+  if (score >= 50) return 'from-amber-500 to-yellow-400 text-amber-300';
+  return 'from-rose-600 to-red-400 text-rose-300';
+}
+
+function showToast(msg, type = 'success') {
+  const banner = document.getElementById('toastBanner');
+  const text = document.getElementById('toastMessage');
+  banner.classList.remove(
+    'hidden',
+    'bg-emerald-950/90',
+    'border-emerald-500/40',
+    'text-emerald-200',
+    'bg-rose-950/90',
+    'border-rose-500/40',
+    'text-rose-200'
+  );
+  if (type === 'error') {
+    banner.classList.add('bg-rose-950/90', 'border-rose-500/40', 'text-rose-200');
+  } else {
+    banner.classList.add('bg-emerald-950/90', 'border-emerald-500/40', 'text-emerald-200');
+  }
+  text.textContent = msg;
+}
+
+async function loadScreenerData(preserveSelection = false) {
+  const trigger = document.getElementById('filterTrigger').value;
+  const minVol = document.getElementById('filterVolRatio').value;
+  const minScore = document.getElementById('filterMinScore').value;
+  const sortBy = document.getElementById('filterSortBy').value;
+  const search = document.getElementById('filterSearch').value.trim();
+
+  const params = new URLSearchParams({
+    trigger,
+    min_vol_ratio: minVol,
+    min_score: minScore,
+    sort_by: sortBy,
+    search,
+  });
+
+  try {
+    const res = await fetch(`/api/screener?${params.toString()}`);
+    if (!res.ok) throw new Error('Gagal mengambil data screener');
+    const data = await res.json();
+
+    document.getElementById('activeSourceBadge').textContent = data.source_name;
+    const syncEl = document.getElementById('lastSyncBadge');
+    if (syncEl && data.last_sync_time) {
+      syncEl.textContent = `Update: ${data.last_sync_time} (Auto ${data.auto_sync_interval_min || 30}m)`;
+    }
+    updateKPICards(data.kpis, trigger);
+
+    currentStocks = data.stocks || [];
+    if (!preserveSelection) currentPage = 1;
+    renderScreenerTable(currentStocks);
+
+    if (currentStocks.length > 0) {
+      const targetTicker =
+        preserveSelection && currentStocks.some((s) => s.ticker === selectedTicker)
+          ? selectedTicker
+          : currentStocks[0].ticker;
+      await selectStock(targetTicker);
+    }
+  } catch (err) {
+    showToast(`Error: ${err.message}`, 'error');
+  }
+}
+
+function updateKPICards(kpis, currentTrigger) {
+  if (!kpis) return;
+  document.getElementById('kpiTotalEmiten').textContent = kpis.total_emiten;
+  document.getElementById('kpiAvgScore').textContent = `Avg Score: ${kpis.avg_smart_money_score}`;
+  document.getElementById('kpiMarkupCount').textContent = kpis.markup_triggers;
+  document.getElementById('kpiAccumCount').textContent = kpis.accum_triggers;
+  document.getElementById('kpiDistCount').textContent = kpis.distribution_warnings;
+
+  // Highlight active KPI card
+  const mapCard = {
+    ALL: 'kpiAll',
+    MARKUP_BREAKOUT: 'kpiMarkup',
+    ACCUM_ALL: 'kpiAccum',
+    DISTRIBUTION_WARNING: 'kpiDist',
+  };
+  ['kpiAll', 'kpiMarkup', 'kpiAccum', 'kpiDist'].forEach((id) => {
+    document.getElementById(id).classList.remove('active-filter');
+  });
+  if (mapCard[currentTrigger]) {
+    document.getElementById(mapCard[currentTrigger]).classList.add('active-filter');
+  }
+}
+
+function applyQuickFilter(triggerCode) {
+  document.getElementById('filterTrigger').value = triggerCode;
+  loadScreenerData(false);
+}
+
+function changePage(delta) {
+  const totalPages = Math.max(1, Math.ceil(currentStocks.length / PAGE_SIZE));
+  currentPage = Math.min(totalPages, Math.max(1, currentPage + delta));
+  renderScreenerTable(currentStocks);
+}
+
+function renderScreenerTable(stocks) {
+  const tbody = document.getElementById('screenerTableBody');
+  const totalPages = Math.max(1, Math.ceil(stocks.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  const startIdx = (currentPage - 1) * PAGE_SIZE;
+  const pageStocks = stocks.slice(startIdx, startIdx + PAGE_SIZE);
+
+  document.getElementById('tableResultCount').textContent = stocks.length
+    ? `Menampilkan ${startIdx + 1}-${startIdx + pageStocks.length} dari ${stocks.length} saham`
+    : 'Menampilkan 0 saham';
+
+  const pageInd = document.getElementById('pageIndicator');
+  const btnPrev = document.getElementById('btnPrevPage');
+  const btnNext = document.getElementById('btnNextPage');
+  if (pageInd) pageInd.textContent = `Hal ${currentPage} / ${totalPages}`;
+  if (btnPrev) btnPrev.disabled = currentPage <= 1;
+  if (btnNext) btnNext.disabled = currentPage >= totalPages;
+
+  if (!pageStocks.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="py-10 text-center text-slate-400">
+          Tidak ada saham yang memenuhi filter kriteria saat ini. Coba longgarkan filter di atas.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = pageStocks
+    .map((s) => {
+      const isSelected = s.ticker === selectedTicker;
+      const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
+      const volColor =
+        s.vol_ratio >= 2.0
+          ? 'text-amber-300 font-bold'
+          : s.vol_ratio >= 1.35
+          ? 'text-emerald-300 font-semibold'
+          : 'text-slate-300';
+      const bsrColor =
+        s.top3_bsr >= 1.35
+          ? 'text-emerald-400 font-bold'
+          : s.top3_bsr < 0.85
+          ? 'text-rose-400 font-semibold'
+          : 'text-slate-300';
+      const foreignColor = s.net_foreign_pct >= 0 ? 'text-emerald-400' : 'text-rose-400';
+      const badgeCls = getTriggerBadgeClass(s.trigger_type);
+      const barGrad = getScoreColor(s.smart_money_score);
+
+      return `
+        <tr
+          id="row-${s.ticker}"
+          onclick="selectStock('${s.ticker}')"
+          class="stock-row ${isSelected ? 'selected-row' : ''}"
+        >
+          <!-- Emiten -->
+          <td class="py-3 pl-4 pr-2">
+            <div class="font-mono font-extrabold text-sm text-white">${s.ticker}</div>
+            <div class="text-[11px] text-slate-400 truncate max-w-[130px]">${s.sector}</div>
+          </td>
+
+          <!-- Harga & Change -->
+          <td class="py-3 px-2 text-right font-mono">
+            <div class="font-bold text-slate-100">${fmtPrice(s.close)}</div>
+            <div class="text-[11px] font-semibold ${chgColor}">${fmtSignPct(s.pct_change)}</div>
+          </td>
+
+          <!-- Volume Spike Ratio -->
+          <td class="py-3 px-2 text-center font-mono">
+            <div class="${volColor}">${s.vol_ratio.toFixed(2)}x <span class="text-[10px] font-normal text-slate-400">MA20</span></div>
+            <div class="text-[10px] text-slate-400">Close Range: ${s.closing_range_pct}%</div>
+          </td>
+
+          <!-- Smart Money Trigger Badge -->
+          <td class="py-3 px-2 text-center">
+            <span class="inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold ${badgeCls}">
+              ${s.trigger_label}
+            </span>
+          </td>
+
+          <!-- Bandarmology Top 3 B/S -->
+          <td class="py-3 px-2">
+            <div class="flex items-center gap-1.5 font-mono">
+              <span class="${bsrColor}">${s.top3_bsr.toFixed(2)}x</span>
+              <span class="text-[10px] text-slate-400">(${s.bdr_pct >= 0 ? '+' : ''}${s.bdr_pct.toFixed(1)}% Vol)</span>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-0.5">
+              B: <span class="text-emerald-300 font-mono">${s.top_buyers}</span> | S: <span class="text-rose-300 font-mono">${s.top_sellers}</span>
+            </div>
+          </td>
+
+          <!-- Ticket Size & Foreign Flow -->
+          <td class="py-3 px-2 text-right font-mono">
+            <div class="text-slate-200">${s.ticket_size.toFixed(0)} <span class="text-[10px] text-slate-400">Lot/Tx (${s.ticket_ratio.toFixed(1)}x)</span></div>
+            <div class="text-[11px] ${foreignColor}">F: ${s.net_foreign_pct >= 0 ? '+' : ''}${s.net_foreign_pct.toFixed(1)}% (${s.net_foreign_b_idr >= 0 ? '+' : ''}${s.net_foreign_b_idr}B)</div>
+          </td>
+
+          <!-- Smart Money Score -->
+          <td class="py-3 pl-2 pr-4 text-right">
+            <div class="flex items-center justify-end gap-2">
+              <div class="w-16 bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r ${barGrad}" style="width: ${s.smart_money_score}%"></div>
+              </div>
+              <span class="font-mono font-extrabold text-sm w-7 text-right text-white">${s.smart_money_score}</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+async function selectStock(ticker) {
+  selectedTicker = ticker;
+
+  // Update row highlight
+  document.querySelectorAll('.stock-row').forEach((el) => el.classList.remove('selected-row'));
+  const activeRow = document.getElementById(`row-${ticker}`);
+  if (activeRow) activeRow.classList.add('selected-row');
+
+  try {
+    const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}`);
+    if (!res.ok) throw new Error(`Gagal memuat detail ${ticker}`);
+    selectedStockDetail = await res.json();
+    renderInspectorPanel(selectedStockDetail);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function renderInspectorPanel(d) {
+  document.getElementById('inspTicker').textContent = d.ticker;
+  const badgeEl = document.getElementById('inspTriggerBadge');
+  badgeEl.textContent = d.trigger_label;
+  badgeEl.className = `text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${getTriggerBadgeClass(d.trigger_type)}`;
+
+  document.getElementById('inspSector').textContent = `${d.sector} • Update: ${d.date}`;
+  document.getElementById('inspPrice').textContent = fmtPrice(d.close);
+
+  const chgEl = document.getElementById('inspPctChange');
+  chgEl.textContent = `${fmtSignPct(d.pct_change)} (${ fmtNumber(d.volume_lot) } Lot)`;
+  chgEl.className = `text-xs font-mono font-semibold ${d.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+
+  // 5-Pillar Scores
+  document.getElementById('inspTotalScoreBadge').textContent = `Score: ${d.smart_money_score} / 100`;
+  document.getElementById('p1Score').textContent = `${d.vsa_score}/25`;
+  document.getElementById('p2Score').textContent = `${d.bandar_score}/30`;
+  document.getElementById('p3Score').textContent = `${d.ticket_score}/15`;
+  document.getElementById('p4Score').textContent = `${d.foreign_score}/15`;
+  document.getElementById('p5Score').textContent = `${d.structure_score}/15`;
+
+  // Auto Trading Plan
+  const plan = d.trading_plan;
+  const biasEl = document.getElementById('planActionBias');
+  biasEl.textContent = plan.action_bias;
+  if (d.trigger_type === 'DISTRIBUTION_WARNING') {
+    biasEl.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30';
+  } else {
+    biasEl.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+  }
+
+  document.getElementById('planEntryZone').textContent = `${fmtPrice(plan.entry_low)} - ${fmtNumber(plan.entry_high)}`;
+  document.getElementById('planBandarAvg').textContent = `${fmtPrice(plan.bandar_avg_buy)} (${fmtSignPct(plan.diff_bandar_avg_pct)})`;
+  document.getElementById('planStopLoss').textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct}%)`;
+  document.getElementById('planTargets').textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct}%) / ${fmtNumber(plan.target_2)}`;
+  document.getElementById('planRationale').textContent = `${plan.rationale} (Risk/Reward = ${plan.risk_reward})`;
+
+  // Render 5-Pillar Checklist
+  const checklistEl = document.getElementById('inspChecklist');
+  checklistEl.innerHTML = (d.checklist || [])
+    .map((item) => {
+      const icon =
+        item.status === 'pass'
+          ? '<span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">✓</span>'
+          : item.status === 'warn'
+          ? '<span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs">!</span>'
+          : '<span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-xs">✕</span>';
+
+      return `
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-1">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              ${icon}
+              <span class="text-xs font-semibold text-slate-200">${item.title}</span>
+            </div>
+            <span class="font-mono text-[11px] font-semibold text-emerald-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">${item.metric}</span>
+          </div>
+          <p class="text-[11px] text-slate-400 pl-7 leading-relaxed">${item.detail}</p>
+        </div>
+      `;
+    })
+    .join('');
+
+  renderInspectorChart(d);
+}
+
+function switchChartTab(tabName) {
+  activeChartTab = tabName;
+  const tabs = {
+    price: 'tabChartPrice',
+    bandar: 'tabChartBandar',
+    score: 'tabChartScore',
+  };
+  Object.entries(tabs).forEach(([key, id]) => {
+    const btn = document.getElementById(id);
+    if (key === tabName) {
+      btn.className = 'px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 text-white transition';
+    } else {
+      btn.className = 'px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-400 hover:text-white transition';
+    }
+  });
+  if (selectedStockDetail) {
+    renderInspectorChart(selectedStockDetail);
+  }
+}
+
+function renderInspectorChart(d) {
+  const ctx = document.getElementById('inspectorChart').getContext('2d');
+  if (chartInstance) {
+    chartInstance.destroy();
+  }
+
+  const hist = d.history || [];
+  const labels = hist.map((h) => h.date.slice(5)); // MM-DD
+
+  if (activeChartTab === 'price') {
+    const prices = hist.map((h) => h.close);
+    const ma20s = hist.map((h) => h.ma20);
+    const vols = hist.map((h) => h.volume_lot);
+    const volColors = hist.map((h, i) => {
+      const prev = i > 0 ? hist[i - 1].close : h.open;
+      return h.close >= prev ? 'rgba(16, 185, 129, 0.45)' : 'rgba(239, 68, 68, 0.45)';
+    });
+
+    chartInstance = new Chart(ctx, {
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'line',
+            label: 'Close Price',
+            data: prices,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            borderWidth: 2,
+            pointRadius: 2,
+            tension: 0.25,
+            yAxisID: 'yPrice',
+          },
+          {
+            type: 'line',
+            label: 'MA20',
+            data: ma20s,
+            borderColor: '#3b82f6',
+            borderDash: [4, 4],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.25,
+            yAxisID: 'yPrice',
+          },
+          {
+            type: 'bar',
+            label: 'Volume (Lot)',
+            data: vols,
+            backgroundColor: volColors,
+            yAxisID: 'yVol',
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 10 } } },
+        },
+        scales: {
+          x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { display: false } },
+          yPrice: {
+            position: 'right',
+            ticks: { color: '#cbd5e1', font: { size: 9 } },
+            grid: { color: 'rgba(51, 65, 85, 0.25)' },
+          },
+          yVol: {
+            position: 'left',
+            display: false,
+            max: Math.max(...vols) * 3.2,
+          },
+        },
+      },
+    });
+  } else if (activeChartTab === 'bandar') {
+    const netTop3 = hist.map((h) => h.net_top3_lot);
+    const barColors = netTop3.map((v) => (v >= 0 ? 'rgba(16, 185, 129, 0.75)' : 'rgba(239, 68, 68, 0.75)'));
+
+    chartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Net Top 3 Broker (Lot)',
+            data: netTop3,
+            backgroundColor: barColors,
+            borderRadius: 3,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 10 } } },
+        },
+        scales: {
+          x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { display: false } },
+          y: {
+            ticks: { color: '#cbd5e1', font: { size: 9 } },
+            grid: { color: 'rgba(51, 65, 85, 0.25)' },
+          },
+        },
+      },
+    });
+  } else {
+    const scores = hist.map((h) => h.sm_score);
+    chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Smart Money Score (0-100)',
+            data: scores,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 2.5,
+            tension: 0.3,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 10 } } },
+        },
+        scales: {
+          x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { display: false } },
+          y: {
+            min: 0,
+            max: 100,
+            ticks: { color: '#cbd5e1', font: { size: 9 } },
+            grid: { color: 'rgba(51, 65, 85, 0.25)' },
+          },
+        },
+      },
+    });
+  }
+}
+
+// Upload Excel Modal & Drag-and-Drop Handlers
+function openUploadModal() {
+  document.getElementById('uploadModal').classList.remove('hidden');
+}
+function closeUploadModal() {
+  document.getElementById('uploadModal').classList.add('hidden');
+}
+function openGuideModal() {
+  document.getElementById('guideModal').classList.remove('hidden');
+}
+function closeGuideModal() {
+  document.getElementById('guideModal').classList.add('hidden');
+}
+
+async function handleExcelUpload(fileList) {
+  if (!fileList || !fileList.length) return;
+  const formData = new FormData();
+  const filesArr = Array.from(fileList);
+  filesArr.forEach((f) => formData.append('files', f));
+
+  try {
+    const label = filesArr.length === 1 ? filesArr[0].name : `${filesArr.length} file Excel`;
+    showToast(`Sedang memproses & menganalisis ${label}...`);
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Gagal memproses file Excel');
+    }
+    closeUploadModal();
+    showToast(data.message || `Berhasil memuat ${label}`);
+    await loadScreenerData(false);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleLoadLocalPath() {
+  const pathInput = document.getElementById('localPathInput');
+  const rawPath = pathInput ? pathInput.value.trim() : '';
+  if (!rawPath) {
+    showToast('Masukkan lokasi path file atau folder Excel terlebih dahulu.', 'error');
+    return;
+  }
+
+  try {
+    showToast(`Sedang membaca data saham dari ${rawPath}...`);
+    const res = await fetch('/api/load-path', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: rawPath }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Gagal membaca path file/folder');
+    }
+    closeUploadModal();
+    showToast(data.message);
+    await loadScreenerData(false);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function syncLiveMarketData() {
+  const btn = document.getElementById('btnSyncLive');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Menarik Data BEI Hari Ini...';
+  }
+  try {
+    showToast('Sedang mengunduh data pasar REAL hari ini (Yahoo Finance .JK) untuk seluruh saham IDX... Mohon tunggu ~30 detik.');
+    const res = await fetch('/api/sync-live', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Gagal sinkronisasi live data');
+    }
+    showToast(data.message);
+    await loadScreenerData(false);
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄 Sync Harga Real Hari Ini';
+    }
+  }
+}
+
+// Event Listeners Setup
+document.addEventListener('DOMContentLoaded', () => {
+  loadScreenerData(false);
+
+  ['filterTrigger', 'filterVolRatio', 'filterMinScore', 'filterSortBy'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', () => loadScreenerData(true));
+  });
+
+  let searchTimeout = null;
+  document.getElementById('filterSearch').addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => loadScreenerData(true), 200);
+  });
+
+  document.getElementById('btnOpenUploadModal').addEventListener('click', openUploadModal);
+  document.getElementById('btnOpenGuideModal').addEventListener('click', openGuideModal);
+
+  document.getElementById('excelFileInput').addEventListener('change', (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleExcelUpload(e.target.files);
+      e.target.value = '';
+    }
+  });
+
+  const dropZone = document.getElementById('dropZone');
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dropzone-active');
+  });
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('dropzone-active');
+  });
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dropzone-active');
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleExcelUpload(e.dataTransfer.files);
+    }
+  });
+
+  document.getElementById('btnResetSample').addEventListener('click', async () => {
+    const res = await fetch('/api/reset', { method: 'POST' });
+    if (res.ok) {
+      document.getElementById('filterTrigger').value = 'ALL';
+      document.getElementById('filterVolRatio').value = '0';
+      document.getElementById('filterMinScore').value = '0';
+      document.getElementById('filterSearch').value = '';
+      showToast('Dataset dikembalikan ke Data Pasar Real 844 Saham IDX.');
+      await loadScreenerData(false);
+    }
+  });
+
+  // Auto-Refresh UI setiap 3 menit untuk pemantauan 24 jam non-stop
+  setInterval(() => {
+    loadScreenerData(true);
+  }, 180000);
+});
