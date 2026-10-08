@@ -581,6 +581,7 @@ async function syncLiveMarketData() {
     }
     showToast(data.message);
     await loadScreenerData(false);
+    await loadTracker();
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
@@ -647,4 +648,222 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(() => {
     loadScreenerData(true);
   }, 180000);
+});
+
+
+// =====================================================================
+// SIGNAL TRACKER — FORWARD TEST (Watchlist -> Running -> Win / Loss)
+// =====================================================================
+let trackerTab = 'ALL';
+
+const TRACKER_STATUS_STYLE = {
+  WATCHLIST: 'bg-blue-500/15 text-blue-300 border-blue-500/40',
+  RUNNING: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+  WIN: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+  LOSS: 'bg-rose-500/15 text-rose-300 border-rose-500/40',
+  EXPIRED: 'bg-slate-500/15 text-slate-300 border-slate-500/40',
+  TIMEOUT: 'bg-purple-500/15 text-purple-300 border-purple-500/40',
+};
+
+const fmtPctOrDash = (v) => (v === null || v === undefined ? '-' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`);
+const pctClass = (v) => (v === null || v === undefined ? 'text-slate-400' : v >= 0 ? 'text-emerald-400' : 'text-rose-400');
+
+async function loadTracker() {
+  try {
+    const [statsRes, sigRes] = await Promise.all([
+      fetch('/api/tracker/stats'),
+      fetch(`/api/tracker/signals?status=${encodeURIComponent(trackerTab)}`),
+    ]);
+    if (!statsRes.ok || !sigRes.ok) return;
+    const statsData = await statsRes.json();
+    const sigData = await sigRes.json();
+    renderTrackerStats(statsData);
+    renderTrackerTable(sigData.signals || []);
+  } catch (err) {
+    console.warn('Tracker error:', err);
+  }
+}
+
+function renderTrackerStats(data) {
+  const s = data.stats;
+  const c = data.config;
+
+  document.getElementById('trackerConfigLine').textContent =
+    `Auto-track: Score ≥ ${c.min_score} · Target TP${c.tp_level} · Entry kedaluwarsa ${c.entry_expiry_days} hari · ` +
+    `Max hold ${c.max_hold_days} hari · Fee ${c.fee_roundtrip_pct}% · DB: ${c.db_backend} · Candle final s/d ${c.final_session_date}` +
+    (data.last_tracker_run ? ` · Evaluasi terakhir: ${data.last_tracker_run}` : '') +
+    (data.is_real_market ? '' : ' · ⚠ Dataset aktif bukan data real (tracker pause)');
+
+  document.getElementById('tsWinRate').textContent = s.win_rate === null ? '-' : `${s.win_rate}%`;
+  document.getElementById('tsDecided').textContent = s.decided ? `${s.win}W / ${s.loss}L dari ${s.decided} trade` : 'belum ada trade selesai';
+  document.getElementById('tsWinBar').style.width = `${s.win_rate || 0}%`;
+
+  document.getElementById('tsWatch').textContent = s.watchlist;
+  document.getElementById('tsRunning').textContent = s.running;
+  document.getElementById('tsRunningPnl').textContent = `floating ${fmtPctOrDash(s.running_avg_pnl_pct)}`;
+  document.getElementById('tsWin').textContent = s.win;
+  document.getElementById('tsAvgWin').textContent = `avg ${fmtPctOrDash(s.avg_win_pct)}`;
+  document.getElementById('tsLoss').textContent = s.loss;
+  document.getElementById('tsAvgLoss').textContent = `avg ${fmtPctOrDash(s.avg_loss_pct)}`;
+  document.getElementById('tsExpired').textContent = s.expired;
+  document.getElementById('tsTimeout').textContent = s.timeout;
+
+  const pfEl = document.getElementById('tsPF');
+  pfEl.textContent = s.profit_factor !== null ? s.profit_factor.toFixed(2) : s.win > 0 ? '∞' : '-';
+  pfEl.className = `text-lg font-bold font-mono mt-0.5 ${s.profit_factor === null ? 'text-white' : s.profit_factor >= 1.5 ? 'text-emerald-400' : s.profit_factor >= 1 ? 'text-amber-300' : 'text-rose-400'}`;
+
+  const expEl = document.getElementById('tsExp');
+  expEl.textContent = fmtPctOrDash(s.expectancy_net_pct);
+  expEl.className = `text-lg font-bold font-mono mt-0.5 ${pctClass(s.expectancy_net_pct)}`;
+
+  const totEl = document.getElementById('tsTotal');
+  totEl.textContent = s.decided || s.timeout ? fmtPctOrDash(s.total_return_net_pct) : '-';
+  totEl.className = `text-lg font-bold font-mono mt-0.5 ${s.decided || s.timeout ? pctClass(s.total_return_net_pct) : 'text-white'}`;
+
+  document.getElementById('tsTotalSignals').textContent = s.total;
+
+  // Win rate per trigger
+  const bt = Object.entries(s.by_trigger || {});
+  const btEl = document.getElementById('tsByTrigger');
+  btEl.innerHTML = bt.length
+    ? bt
+        .map(([type, b]) => {
+          const wr = b.win_rate;
+          return `
+          <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+            <div class="flex items-center justify-between">
+              <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(type)}">${b.label}</span>
+              <span class="font-mono font-bold ${wr === null ? 'text-slate-400' : wr >= 50 ? 'text-emerald-400' : 'text-rose-400'}">${wr === null ? '-' : wr + '%'}</span>
+            </div>
+            <div class="mt-2 text-[11px] font-mono text-slate-400">
+              ${b.total} sinyal · <span class="text-emerald-400">${b.win}W</span> / <span class="text-rose-400">${b.loss}L</span> · <span class="text-amber-300">${b.running} run</span>
+            </div>
+            <div class="text-[11px] font-mono ${pctClass(b.avg_pnl)}">Avg P/L: ${fmtPctOrDash(b.avg_pnl)}</div>
+          </div>`;
+        })
+        .join('')
+    : '<div class="text-slate-500 text-[11px]">Belum ada data.</div>';
+
+  // Tab counts
+  const counts = { ALL: s.total, WATCHLIST: s.watchlist, RUNNING: s.running, WIN: s.win, LOSS: s.loss, EXPIRED: s.expired, TIMEOUT: s.timeout };
+  document.querySelectorAll('#trackerTabs .tracker-tab').forEach((btn) => {
+    const tab = btn.dataset.tab;
+    const label = btn.textContent.replace(/\s*\d+$/, '').trim();
+    btn.innerHTML = `${label}<span class="tab-count">${counts[tab] ?? 0}</span>`;
+    btn.classList.toggle('active', tab === trackerTab);
+  });
+}
+
+function renderTrackerTable(rows) {
+  const tbody = document.getElementById('trackerTableBody');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-500">
+      Belum ada sinyal pada kategori ini. Sinyal akumulasi dengan score tinggi akan otomatis tercatat setelah sinkronisasi data real.
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map((r) => {
+      const statusCls = TRACKER_STATUS_STYLE[r.status] || TRACKER_STATUS_STYLE.EXPIRED;
+      const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT'].includes(r.status);
+      const exitOrLast = isClosed && r.exit_price
+        ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-500">${r.exit_date || ''}</div>`
+        : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-500">last</div>`;
+      const entryCell = r.entry_price
+        ? `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-500">${r.entry_date || ''}</div>`
+        : r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined
+        ? `<span class="text-slate-500">-</span><div class="text-[10px] text-blue-300">jarak ${fmtPctOrDash(r.dist_to_entry_pct)}</div>`
+        : '<span class="text-slate-500">-</span>';
+      const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' ? null : r.pnl_pct;
+
+      return `
+      <tr class="hover:bg-slate-800/40">
+        <td class="py-2.5 pl-4 pr-2">
+          <div class="font-mono font-extrabold text-white cursor-pointer hover:text-emerald-300" onclick="selectStock('${r.ticker}')">${r.ticker}</div>
+          <div class="text-[10px] text-slate-500 truncate max-w-[140px]">${r.source === 'AUTO' ? '🤖 Auto' : '👤 Manual'}</div>
+        </td>
+        <td class="py-2.5 px-2">
+          <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">${r.trigger_label || '-'}</span>
+          <span class="font-mono text-slate-300 ml-1">${r.score ?? '-'}</span>
+        </td>
+        <td class="py-2.5 px-2 font-mono text-slate-300">${r.signal_date}</td>
+        <td class="py-2.5 px-2 text-right font-mono text-emerald-300">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
+        <td class="py-2.5 px-2 text-right font-mono">
+          <span class="text-rose-400">${fmtNumber(r.stop_loss)}</span> / <span class="text-amber-300">${fmtNumber(r.target)}</span>
+        </td>
+        <td class="py-2.5 px-2 text-center">
+          <span class="inline-block px-2 py-0.5 rounded border text-[10px] font-bold ${statusCls}">${r.status}</span>
+        </td>
+        <td class="py-2.5 px-2 text-right font-mono text-slate-200">${entryCell}</td>
+        <td class="py-2.5 px-2 text-right font-mono text-slate-200">${exitOrLast}</td>
+        <td class="py-2.5 px-2 text-right font-mono font-bold ${pctClass(pnl)}">${fmtPctOrDash(pnl)}${r.status === 'RUNNING' ? '<div class="text-[10px] font-normal text-slate-500">floating</div>' : ''}</td>
+        <td class="py-2.5 px-2 text-[11px] text-slate-400 max-w-[240px]">${r.note || ''}</td>
+        <td class="py-2.5 pl-2 pr-4 text-right">
+          <button onclick="deleteSignal(${r.id})" class="text-slate-500 hover:text-rose-400 text-sm" title="Hapus sinyal">&times;</button>
+        </td>
+      </tr>`;
+    })
+    .join('');
+}
+
+function setTrackerTab(tab) {
+  trackerTab = tab;
+  loadTracker();
+}
+
+async function addToWatchlist() {
+  if (!selectedTicker) {
+    showToast('Pilih saham terlebih dahulu dari tabel screener.', 'error');
+    return;
+  }
+  try {
+    const res = await fetch(`/api/tracker/add/${encodeURIComponent(selectedTicker)}`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal menambahkan ke watchlist');
+    showToast(data.message);
+    await loadTracker();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function deleteSignal(id) {
+  if (!confirm('Hapus sinyal ini dari tracker?')) return;
+  const res = await fetch(`/api/tracker/signals/${id}`, { method: 'DELETE' });
+  if (res.ok) {
+    showToast('Sinyal dihapus.');
+    await loadTracker();
+  }
+}
+
+async function evaluateTracker() {
+  const btn = document.getElementById('btnEvalTracker');
+  btn.disabled = true;
+  btn.textContent = '⏳ Mengevaluasi...';
+  try {
+    const res = await fetch('/api/tracker/evaluate', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Evaluasi gagal');
+    showToast(data.message, data.result && data.result.skipped ? 'error' : 'success');
+    await loadTracker();
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚡ Evaluasi Sekarang';
+  }
+}
+
+async function resetTracker() {
+  if (!confirm('Hapus SEMUA catatan Watchlist/Running/Win/Loss dan mulai uji dari nol?')) return;
+  const res = await fetch('/api/tracker/reset', { method: 'POST' });
+  const data = await res.json();
+  showToast(data.message);
+  await loadTracker();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadTracker();
+  setInterval(loadTracker, 180000);
 });

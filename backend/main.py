@@ -34,6 +34,7 @@ from excel_generator import (
     generate_900_idx_master_tickers_df,
 )
 from live_idx_fetcher import fetch_real_idx_market_data
+from signal_tracker import SignalTracker
 from screener_engine import (
     analyze_smart_money_dataframe,
     enrich_master_ticker_list,
@@ -56,7 +57,28 @@ STATE: dict = {
     "last_sync_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     "is_syncing": False,
     "auto_sync_interval_min": AUTO_SYNC_INTERVAL_SECONDS // 60,
+    "is_real_market": False,
+    "last_tracker_run": None,
 }
+
+TRACKER = SignalTracker(BASE_DIR / "data" / "tracker.db")
+
+
+def _process_tracker(analysis: dict) -> dict:
+    """Evaluasi sinyal aktif dengan candle baru, lalu catat sinyal akumulasi baru ke Watchlist.
+    Hanya berjalan untuk data pasar REAL (bukan simulasi / upload manual)."""
+    result = {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "added": 0, "skipped": False}
+    if not STATE.get("is_real_market"):
+        result["skipped"] = True
+        return result
+    try:
+        result.update(TRACKER.evaluate(analysis["details"]))
+        result["added"] = TRACKER.auto_track(analysis)
+        STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[Tracker] {result}")
+    except Exception as exc:
+        print(f"[Tracker] Error: {exc}")
+    return result
 
 
 class LocalPathRequest(BaseModel):
@@ -77,6 +99,8 @@ def _run_sync_job_blocking() -> dict:
     STATE["source_name"] = f"Live IDX 24/7 Auto-Sync ({latest_dt})"
     STATE["analysis"] = analysis
     STATE["last_sync_time"] = now_str
+    STATE["is_real_market"] = True
+    _process_tracker(analysis)
     return analysis
 
 
@@ -132,11 +156,14 @@ def init_default_state() -> None:
         STATE["source_name"] = "Daftar Saham IDX - REAL Market Data (24/7 Active)"
         STATE["analysis"] = analyze_smart_money_dataframe(real_df)
         STATE["last_sync_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        STATE["is_real_market"] = True
+        _process_tracker(STATE["analysis"])
         return
 
     master_900 = generate_900_idx_master_tickers_df()
     enriched_900 = enrich_master_ticker_list(master_900, num_days=15)
     STATE["source_name"] = "daftar_900_emiten_idx.xlsx (900 Emiten IDX)"
+    STATE["is_real_market"] = False
     STATE["analysis"] = analyze_smart_money_dataframe(enriched_900)
     STATE["last_sync_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -296,6 +323,7 @@ async def upload_excel_files(
         analysis = analyze_smart_money_dataframe(df)
         STATE["source_name"] = src_label
         STATE["analysis"] = analysis
+        STATE["is_real_market"] = False
         STATE["last_sync_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return {
             "status": "success",
@@ -339,6 +367,7 @@ def load_excel_from_local_path(req: LocalPathRequest) -> dict:
         analysis = analyze_smart_money_dataframe(df)
         STATE["source_name"] = src_label
         STATE["analysis"] = analysis
+        STATE["is_real_market"] = False
         STATE["last_sync_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return {
             "status": "success",
@@ -375,6 +404,65 @@ def download_excel_template(mode: Literal["sample", "blank"] = Query(default="sa
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ===================== SIGNAL TRACKER / FORWARD TEST =====================
+
+
+@app.get("/api/tracker/stats")
+def tracker_stats() -> dict:
+    return {
+        "config": TRACKER.config(),
+        "stats": TRACKER.stats(),
+        "last_tracker_run": STATE.get("last_tracker_run"),
+        "is_real_market": STATE.get("is_real_market"),
+    }
+
+
+@app.get("/api/tracker/signals")
+def tracker_signals(status: str = Query(default="ALL")) -> dict:
+    rows = TRACKER.list_signals(status)
+    return {"count": len(rows), "signals": rows}
+
+
+@app.post("/api/tracker/add/{ticker}")
+def tracker_add(ticker: str) -> dict:
+    key = ticker.strip().upper()
+    details = STATE["analysis"]["details"] if STATE["analysis"] else {}
+    if key not in details:
+        raise HTTPException(status_code=404, detail=f"Saham '{key}' tidak ditemukan pada dataset aktif.")
+    ok, msg = TRACKER.add_signal(details[key], source="MANUAL")
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"status": "success", "message": msg}
+
+
+@app.post("/api/tracker/evaluate")
+async def tracker_evaluate() -> dict:
+    if STATE["analysis"] is None:
+        init_default_state()
+    result = await asyncio.to_thread(_process_tracker, STATE["analysis"])
+    if result.get("skipped"):
+        msg = "Evaluasi dilewati: dataset aktif bukan data pasar real. Klik 'Sync Harga Real' terlebih dahulu."
+    else:
+        msg = (
+            f"Evaluasi selesai: {result['added']} sinyal baru, {result['entered']} entry, "
+            f"{result['win']} win, {result['loss']} loss, {result['expired']} expired, {result['timeout']} timeout."
+        )
+    return {"status": "success", "result": result, "message": msg}
+
+
+@app.delete("/api/tracker/signals/{signal_id}")
+def tracker_delete(signal_id: int) -> dict:
+    if not TRACKER.delete_signal(signal_id):
+        raise HTTPException(status_code=404, detail="Sinyal tidak ditemukan.")
+    return {"status": "success", "message": "Sinyal dihapus."}
+
+
+@app.post("/api/tracker/reset")
+def tracker_reset() -> dict:
+    n = TRACKER.reset_all()
+    return {"status": "success", "message": f"{n} catatan sinyal dihapus. Tracker dimulai dari nol."}
 
 
 if FRONTEND_DIR.exists():

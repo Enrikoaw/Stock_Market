@@ -112,3 +112,28 @@ body {
   border-color: #10b981 !important;
   background: rgba(16, 185, 129, 0.08) !important;
 }
+
+/* Signal Tracker tabs */
+.tracker-tab {
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(51, 65, 85, 0.7);
+  transition: all 0.15s ease;
+}
+.tracker-tab:hover {
+  color: #f8fafc;
+}
+.tracker-tab.active {
+  color: #ffffff;
+  background: #059669;
+  border-color: #10b981;
+}
+.tracker-tab .tab-count {
+  margin-left: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  opacity: 0.8;
+}

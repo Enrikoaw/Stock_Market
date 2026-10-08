@@ -7,7 +7,22 @@ services:
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
-      - key: AUTO_SYNC_INTERVAL
-        value: "1800"
       - key: PYTHON_VERSION
         value: "3.11.9"
+      - key: TZ
+        value: "Asia/Jakarta"
+      - key: AUTO_SYNC_INTERVAL
+        value: "1800"
+      # Signal Tracker (Forward Test)
+      - key: DATABASE_URL          # isi dengan connection string PostgreSQL (Neon / Supabase) agar data tracker permanen
+        sync: false
+      - key: TRACKER_MIN_SCORE
+        value: "70"
+      - key: TRACKER_TP_LEVEL
+        value: "1"
+      - key: TRACKER_ENTRY_EXPIRY_DAYS
+        value: "5"
+      - key: TRACKER_MAX_HOLD_DAYS
+        value: "20"
+      - key: TRACKER_FEE_PCT
+        value: "0.4"

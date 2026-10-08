@@ -339,9 +339,14 @@
               </svg>
               <span class="text-xs font-bold uppercase tracking-wider text-emerald-300">Auto Trading Plan</span>
             </div>
-            <span id="planActionBias" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              BUY ON BREAKOUT
-            </span>
+            <div class="flex items-center gap-1.5">
+              <span id="planActionBias" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                BUY ON BREAKOUT
+              </span>
+              <button onclick="addToWatchlist()" class="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-500/40 transition" title="Catat trading plan ini ke Signal Tracker">
+                + Watchlist
+              </button>
+            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-2 text-xs">
@@ -375,6 +380,89 @@
         </div>
       </div>
 
+    </section>
+    <!-- SIGNAL TRACKER / FORWARD TEST -->
+    <section id="trackerSection" class="glass-panel rounded-xl overflow-hidden">
+      <div class="p-4 border-b border-slate-800 bg-slate-900/60 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-bold text-white">🎯 Signal Tracker — Forward Test Otomatis</h2>
+          <p class="text-[11px] text-slate-400 mt-1 max-w-3xl leading-relaxed">
+            Sinyal akumulasi otomatis masuk <b class="text-blue-300">Watchlist</b>. Jika harga di hari bursa berikutnya menyentuh zona entry &rarr; <b class="text-amber-300">Running</b>.
+            Menyentuh Target &rarr; <b class="text-emerald-300">Win</b>, menyentuh Stop Loss &rarr; <b class="text-rose-300">Loss</b>.
+            Dievaluasi dengan candle harian final (setelah 16:15 WIB). Jika SL &amp; TP tersentuh di hari yang sama, dihitung <b>Loss</b> (konservatif).
+          </p>
+          <p id="trackerConfigLine" class="text-[10px] font-mono text-slate-500 mt-1">-</p>
+        </div>
+        <div class="flex gap-2">
+          <button id="btnEvalTracker" onclick="evaluateTracker()" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition">⚡ Evaluasi Sekarang</button>
+          <button onclick="resetTracker()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-300 border border-slate-700 text-xs transition">Reset Tracker</button>
+        </div>
+      </div>
+
+      <!-- Statistik utama -->
+      <div class="p-4 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2.5">
+        <div class="col-span-2 bg-slate-950/80 border border-emerald-500/30 rounded-xl p-3">
+          <div class="text-[11px] text-slate-400">Win Rate = Win &divide; (Win + Loss)</div>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="tsWinRate" class="text-3xl font-extrabold font-mono text-emerald-400">-</span>
+            <span id="tsDecided" class="text-[11px] font-mono text-slate-400"></span>
+          </div>
+          <div class="w-full h-1.5 bg-rose-500/40 rounded-full mt-2 overflow-hidden"><div id="tsWinBar" class="h-full bg-emerald-500 transition-all" style="width:0%"></div></div>
+        </div>
+        <div class="bg-slate-950/80 border border-blue-500/30 rounded-xl p-3"><div class="text-[11px] text-blue-300">Watchlist</div><div id="tsWatch" class="text-2xl font-extrabold font-mono text-blue-300 mt-1">0</div><div class="text-[10px] text-slate-500">menunggu entry</div></div>
+        <div class="bg-slate-950/80 border border-amber-500/30 rounded-xl p-3"><div class="text-[11px] text-amber-300">Running</div><div id="tsRunning" class="text-2xl font-extrabold font-mono text-amber-300 mt-1">0</div><div id="tsRunningPnl" class="text-[10px] font-mono text-slate-500">floating -</div></div>
+        <div class="bg-slate-950/80 border border-emerald-500/30 rounded-xl p-3"><div class="text-[11px] text-emerald-300">Win (TP)</div><div id="tsWin" class="text-2xl font-extrabold font-mono text-emerald-400 mt-1">0</div><div id="tsAvgWin" class="text-[10px] font-mono text-slate-500">avg -</div></div>
+        <div class="bg-slate-950/80 border border-rose-500/30 rounded-xl p-3"><div class="text-[11px] text-rose-300">Loss (SL)</div><div id="tsLoss" class="text-2xl font-extrabold font-mono text-rose-400 mt-1">0</div><div id="tsAvgLoss" class="text-[10px] font-mono text-slate-500">avg -</div></div>
+        <div class="bg-slate-950/80 border border-slate-700 rounded-xl p-3"><div class="text-[11px] text-slate-300">Expired</div><div id="tsExpired" class="text-2xl font-extrabold font-mono text-slate-300 mt-1">0</div><div class="text-[10px] text-slate-500">entry tak tersentuh</div></div>
+        <div class="bg-slate-950/80 border border-purple-500/30 rounded-xl p-3"><div class="text-[11px] text-purple-300">Timeout</div><div id="tsTimeout" class="text-2xl font-extrabold font-mono text-purple-300 mt-1">0</div><div class="text-[10px] text-slate-500">lewat max hold</div></div>
+      </div>
+
+      <div class="px-4 pb-4 grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3"><div class="text-[11px] text-slate-400">Profit Factor</div><div id="tsPF" class="text-lg font-bold font-mono text-white mt-0.5">-</div><div class="text-[10px] text-slate-500">&gt; 1.5 = sehat</div></div>
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3"><div class="text-[11px] text-slate-400">Expectancy / Trade (Net Fee)</div><div id="tsExp" class="text-lg font-bold font-mono text-white mt-0.5">-</div><div class="text-[10px] text-slate-500">rata-rata hasil per sinyal</div></div>
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3"><div class="text-[11px] text-slate-400">Total Return Kumulatif (Net)</div><div id="tsTotal" class="text-lg font-bold font-mono text-white mt-0.5">-</div><div class="text-[10px] text-slate-500">jumlah % semua trade selesai</div></div>
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3"><div class="text-[11px] text-slate-400">Total Sinyal Tercatat</div><div id="tsTotalSignals" class="text-lg font-bold font-mono text-white mt-0.5">0</div><div class="text-[10px] text-slate-500">auto + manual</div></div>
+      </div>
+
+      <!-- Win rate per trigger -->
+      <div class="px-4 pb-4">
+        <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Akurasi per Tipe Trigger</div>
+        <div id="tsByTrigger" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 text-xs">
+          <div class="text-slate-500 text-[11px]">Belum ada data.</div>
+        </div>
+      </div>
+
+      <!-- Tabs status -->
+      <div class="px-4 border-t border-slate-800 pt-3 flex flex-wrap gap-1.5" id="trackerTabs">
+        <button data-tab="ALL" onclick="setTrackerTab('ALL')" class="tracker-tab">Semua</button>
+        <button data-tab="WATCHLIST" onclick="setTrackerTab('WATCHLIST')" class="tracker-tab">Watchlist</button>
+        <button data-tab="RUNNING" onclick="setTrackerTab('RUNNING')" class="tracker-tab">Running</button>
+        <button data-tab="WIN" onclick="setTrackerTab('WIN')" class="tracker-tab">Win</button>
+        <button data-tab="LOSS" onclick="setTrackerTab('LOSS')" class="tracker-tab">Loss</button>
+        <button data-tab="EXPIRED" onclick="setTrackerTab('EXPIRED')" class="tracker-tab">Expired</button>
+        <button data-tab="TIMEOUT" onclick="setTrackerTab('TIMEOUT')" class="tracker-tab">Timeout</button>
+      </div>
+
+      <div class="overflow-x-auto mt-2">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="border-y border-slate-800 bg-slate-900/90 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <th class="py-2.5 pl-4 pr-2">Saham</th>
+              <th class="py-2.5 px-2">Trigger · Score</th>
+              <th class="py-2.5 px-2">Tgl Sinyal</th>
+              <th class="py-2.5 px-2 text-right">Zona Entry</th>
+              <th class="py-2.5 px-2 text-right">SL / TP</th>
+              <th class="py-2.5 px-2 text-center">Status</th>
+              <th class="py-2.5 px-2 text-right">Entry</th>
+              <th class="py-2.5 px-2 text-right">Exit / Last</th>
+              <th class="py-2.5 px-2 text-right">P/L</th>
+              <th class="py-2.5 px-2">Catatan</th>
+              <th class="py-2.5 pl-2 pr-4"></th>
+            </tr>
+          </thead>
+          <tbody id="trackerTableBody" class="divide-y divide-slate-800/70"></tbody>
+        </table>
+      </div>
     </section>
   </main>
 
