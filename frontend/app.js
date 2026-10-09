@@ -648,14 +648,14 @@ async function syncLiveMarketData() {
     }
     showToast(data.message);
 
-    // Polling background worker via /api/health setiap 4 detik
+    // Polling status background worker via /api/health setiap 6 detik
     let pollCount = 0;
     const pollInterval = setInterval(async () => {
       pollCount++;
       try {
         const hRes = await fetch('/api/health');
         const hData = await hRes.json();
-        if (!hData.is_syncing || pollCount >= 25) {
+        if (!hData.is_syncing || pollCount >= 20) {
           clearInterval(pollInterval);
           if (btn) {
             btn.disabled = false;
@@ -667,7 +667,7 @@ async function syncLiveMarketData() {
       } catch {
         // ignore polling network errors
       }
-    }, 4000);
+    }, 6000);
   } catch (err) {
     showToast(err.message, 'error');
     if (btn) {
@@ -725,14 +725,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('filterMinScore').value = '0';
       document.getElementById('filterSearch').value = '';
       showToast('Dataset dikembalikan ke Data Pasar Real 844 Saham IDX.');
-      await loadScreenerData(false);
-    }
   });
-
-  // Auto-Refresh UI setiap 3 menit untuk pemantauan 24 jam non-stop
-  setInterval(() => {
-    loadScreenerData(true);
-  }, 180000);
 });
 
 
@@ -1067,5 +1060,4 @@ async function resetTracker() {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadTracker();
-  setInterval(loadTracker, 30000); // Auto-refresh tracker UI setiap 30 detik
 });

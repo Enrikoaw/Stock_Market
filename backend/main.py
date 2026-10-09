@@ -122,11 +122,15 @@ def _run_sync_job_blocking() -> dict:
     else:
         tickers_df = generate_900_idx_master_tickers_df()
 
-    real_df = fetch_real_idx_market_data(tickers_df, output_csv_path=REAL_CACHE_CSV, period="auto", max_workers=6)
+    real_df = fetch_real_idx_market_data(tickers_df, output_csv_path=REAL_CACHE_CSV, period="auto", max_workers=2)
     analysis = analyze_smart_money_dataframe(real_df)
+    del real_df
+    import gc
+    gc.collect()
+
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     latest_dt = analysis["kpis"]["latest_date"]
-    STATE["source_name"] = f"Live IDX 24/7 Auto-Sync ({latest_dt})"
+    STATE["source_name"] = f"Live IDX On-Demand ({latest_dt})"
     STATE["analysis"] = analysis
     STATE["last_sync_time"] = now_str
     STATE["is_real_market"] = True
@@ -135,51 +139,64 @@ def _run_sync_job_blocking() -> dict:
 
 
 async def _background_fast_tracker_worker() -> None:
-    """Worker ringan setiap 60 detik yang memantau saham aktif di Watchlist & Running secara live."""
+    """Worker ringan yang memantau saham aktif di Watchlist & Running secara live (hanya aktif jika ENABLE_BACKGROUND_TRACKER=true)."""
     while True:
-        await asyncio.sleep(60)
+        await asyncio.sleep(120)
         try:
             active_tickers = TRACKER.get_active_tickers()
             if active_tickers:
                 res = await asyncio.to_thread(TRACKER.sync_active_signals_live)
                 if any(res.get(k, 0) > 0 for k in ("entered", "win", "loss", "expired", "timeout")):
-                    print(f"[TrackerLive 60s] Status berubah: {res}")
+                    print(f"[TrackerLive] Status berubah: {res}")
                     STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         except Exception as exc:
-            print(f"[TrackerLive 60s] Error: {exc}")
+            print(f"[TrackerLive] Error: {exc}")
 
 
 async def _background_24h_auto_sync_worker() -> None:
-    """Background worker 24 jam yang menyinkronkan seluruh 800+ data bursa secara otomatis setiap interval waktu."""
+    """Background worker 24 jam (hanya aktif jika ENABLE_AUTO_SYNC=true eksplisit diset di environment)."""
     while True:
         await asyncio.sleep(AUTO_SYNC_INTERVAL_SECONDS)
         if STATE["is_syncing"]:
             continue
         try:
             STATE["is_syncing"] = True
-            print(f"[AutoSync 24/7] Memulai pembaruan otomatis data saham IDX pada {datetime.now()}...")
+            print(f"[AutoSync] Memulai pembaruan otomatis data saham IDX pada {datetime.now()}...")
             await asyncio.to_thread(_run_sync_job_blocking)
-            print(f"[AutoSync 24/7] Pembaruan otomatis selesai pada {STATE['last_sync_time']}.")
         except Exception as exc:
-            print(f"[AutoSync 24/7] Error saat auto-sync: {exc}")
+            print(f"[AutoSync] Error saat auto-sync: {exc}")
         finally:
             STATE["is_syncing"] = False
 
 
+# Mode On-Demand (Default: False agar hemat memori < 150MB dan tidak terkena limit Render Free)
+ENABLE_AUTO_SYNC = os.environ.get("ENABLE_AUTO_SYNC", "false").lower() in ("true", "1")
+ENABLE_BACKGROUND_TRACKER = os.environ.get("ENABLE_BACKGROUND_TRACKER", "false").lower() in ("true", "1")
+
+
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
-    """Mengelola siklus hidup server 24/7 dan menyalakan worker Auto-Sync dan Fast Tracker di background."""
-    sync_task = asyncio.create_task(_background_24h_auto_sync_worker())
-    tracker_task = asyncio.create_task(_background_fast_tracker_worker())
+    """Mengelola siklus hidup server.
+    Secara default PASIF & ON-DEMAND: tidak menyalakan background loop otomatis
+    agar server sangat hemat memori (< 150MB RAM) dan tidak memicu restart limit di Render gratisan.
+    Data hanya ditarik saat pengguna mengeklik tombol sinkronisasi.
+    """
+    tasks = []
+    if ENABLE_AUTO_SYNC:
+        print("[Lifespan] Mode Auto-Sync 24/7 aktif via environment.")
+        tasks.append(asyncio.create_task(_background_24h_auto_sync_worker()))
+    if ENABLE_BACKGROUND_TRACKER:
+        print("[Lifespan] Mode Background Fast Tracker aktif via environment.")
+        tasks.append(asyncio.create_task(_background_fast_tracker_worker()))
     yield
-    sync_task.cancel()
-    tracker_task.cancel()
+    for t in tasks:
+        t.cancel()
 
 
 app = FastAPI(
-    title="SmartFlow IDX - 24/7 Smart Money Stock Screener API",
-    description="API Backend 24/7 untuk deteksi pergerakan Smart Money dari seluruh saham IDX",
-    version="4.0.0",
+    title="SmartFlow IDX - On-Demand Smart Money Stock Screener API",
+    description="API Backend On-Demand untuk deteksi pergerakan Smart Money dari seluruh saham IDX",
+    version="4.1.0",
     lifespan=lifespan,
 )
 
