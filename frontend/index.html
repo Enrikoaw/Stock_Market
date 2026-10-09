@@ -83,6 +83,13 @@
           🔄 Full Sync IDX
         </button>
 
+        <button id="btnTelegramSend" onclick="handleTelegramClick()" class="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-semibold text-xs transition shadow-sm" title="Kirim rekomendasi saham terbaik (akumulasi kuat & belum terbang) langsung ke Telegram Anda">
+          <svg class="w-4 h-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+          </svg>
+          ✈️ Kirim ke Telegram
+        </button>
+
         <a href="/api/template?mode=sample" class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 font-medium text-xs transition" title="Download Template Excel beserta 15 Saham IDX Sample (25 Hari)">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
@@ -625,6 +632,81 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=8.1"></script>
+  
+  <!-- MODAL TELEGRAM INTEGRATION & SETTINGS -->
+  <div id="telegramModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-panel rounded-2xl max-w-lg w-full p-6 border border-slate-700 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <svg class="w-5 h-5 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+          </svg>
+          Kirim Rekomendasi Saham ke Telegram
+        </h3>
+        <button onclick="closeTelegramModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+
+      <p class="text-xs text-slate-300 leading-relaxed">
+        Sistem akan menyaring <b>saham akumulasi terbaik yang belum terbang (&le; 2.5%)</b> dan langsung mengirimkan Trading Plan lengkap (Harga, Entry, Stop Loss, Target TP1/TP2) ke Telegram Anda.
+      </p>
+
+      <div class="space-y-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 text-xs">
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 mb-1">1. Telegram Bot Token</label>
+          <input
+            id="telegramBotToken"
+            type="password"
+            placeholder="Contoh: 1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+            class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-sky-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 mb-1">2. Telegram Chat ID (ID Akun / Channel Anda)</label>
+          <input
+            id="telegramChatId"
+            type="text"
+            placeholder="Contoh: 123456789 atau -1001234567890"
+            class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-sky-500"
+          />
+        </div>
+
+        <!-- Panduan Singkat -->
+        <div class="p-2.5 rounded-lg bg-sky-950/30 border border-sky-800/40 text-[11px] text-sky-200/90 space-y-1">
+          <div class="font-bold text-sky-300">💡 Cara Mendapatkan Token &amp; Chat ID (Gratis 1 Menit):</div>
+          <div>1. Buka Telegram, cari bot <code>@BotFather</code> lalu ketik <code>/newbot</code> untuk mendapatkan <b>Bot Token</b>.</div>
+          <div>2. Cari bot <code>@userinfobot</code> di Telegram untuk melihat <b>Chat ID</b> Anda (angka 9-10 digit).</div>
+          <div>3. <b>PENTING:</b> Buka bot yang Anda buat tadi di Telegram, lalu klik tombol <b>START</b> agar bot bisa mengirim pesan ke Anda.</div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-2 pt-1">
+        <button
+          id="btnTestTelegram"
+          onclick="testTelegramConnection()"
+          class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition"
+        >
+          🔔 Tes Koneksi Bot
+        </button>
+        <div class="flex items-center gap-2">
+          <button
+            onclick="closeTelegramModal()"
+            class="px-3 py-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-400 text-xs transition"
+          >
+            Batal
+          </button>
+          <button
+            id="btnSaveAndSendTelegram"
+            onclick="saveAndSendTelegram()"
+            class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow-lg shadow-sky-600/30 transition flex items-center gap-1.5"
+          >
+            ✈️ Kirim Rekomendasi Sekarang
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=8.2"></script>
 </body>
 </html>

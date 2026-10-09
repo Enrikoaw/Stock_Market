@@ -1060,6 +1060,143 @@ async function resetTracker() {
   await loadTracker();
 }
 
+
+// =====================================================================
+// TELEGRAM NOTIFIER INTEGRATION
+// =====================================================================
+function openTelegramModal() {
+  const token = localStorage.getItem('smartflow_telegram_token') || '';
+  const chatId = localStorage.getItem('smartflow_telegram_chat_id') || '';
+  const tokenInput = document.getElementById('telegramBotToken');
+  const chatInput = document.getElementById('telegramChatId');
+  if (tokenInput && !tokenInput.value) tokenInput.value = token;
+  if (chatInput && !chatInput.value) chatInput.value = chatId;
+  const modal = document.getElementById('telegramModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeTelegramModal() {
+  const modal = document.getElementById('telegramModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function getTelegramCredentials() {
+  const tokenInput = document.getElementById('telegramBotToken');
+  const chatInput = document.getElementById('telegramChatId');
+  const token = (tokenInput ? tokenInput.value.trim() : '') || localStorage.getItem('smartflow_telegram_token') || '';
+  const chatId = (chatInput ? chatInput.value.trim() : '') || localStorage.getItem('smartflow_telegram_chat_id') || '';
+  return { token, chatId };
+}
+
+async function testTelegramConnection() {
+  const { token, chatId } = getTelegramCredentials();
+  if (!token || !chatId) {
+    showToast('Masukkan Bot Token dan Chat ID terlebih dahulu.', 'error');
+    return;
+  }
+  const btn = document.getElementById('btnTestTelegram');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Menguji...';
+  }
+  try {
+    const res = await fetch('/api/telegram/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bot_token: token, chat_id: chatId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal terhubung ke Telegram');
+    localStorage.setItem('smartflow_telegram_token', token);
+    localStorage.setItem('smartflow_telegram_chat_id', chatId);
+    showToast('🔔 ' + data.message, 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔔 Tes Koneksi Bot';
+    }
+  }
+}
+
+async function handleTelegramClick() {
+  const { token, chatId } = getTelegramCredentials();
+  if (!token || !chatId) {
+    try {
+      const cRes = await fetch('/api/telegram/config');
+      const cData = await cRes.json();
+      if (!cData.configured) {
+        openTelegramModal();
+        return;
+      }
+    } catch {
+      openTelegramModal();
+      return;
+    }
+  }
+  await sendTelegramRecommendations(token, chatId);
+}
+
+async function saveAndSendTelegram() {
+  const tokenInput = document.getElementById('telegramBotToken');
+  const chatInput = document.getElementById('telegramChatId');
+  const token = tokenInput ? tokenInput.value.trim() : '';
+  const chatId = chatInput ? chatInput.value.trim() : '';
+
+  if (!token || !chatId) {
+    showToast('Bot Token dan Chat ID wajib diisi.', 'error');
+    return;
+  }
+
+  localStorage.setItem('smartflow_telegram_token', token);
+  localStorage.setItem('smartflow_telegram_chat_id', chatId);
+
+  closeTelegramModal();
+  await sendTelegramRecommendations(token, chatId);
+}
+
+async function sendTelegramRecommendations(token, chatId) {
+  const btn = document.getElementById('btnTelegramSend');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Menyaring & Mengirim...';
+  }
+
+  try {
+    showToast('🔍 Menyaring saham akumulasi aman (< 2.5%) & mengirim ke Telegram...');
+    const res = await fetch('/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bot_token: token || undefined,
+        chat_id: chatId || undefined,
+        max_picks: 3,
+        max_pct_change: 2.5,
+        min_score: 70,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal mengirim rekomendasi ke Telegram');
+
+    showToast(data.message, 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+    if (err.message.includes('Token') || err.message.includes('Chat ID') || err.message.includes('belum disetel')) {
+      openTelegramModal();
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `
+        <svg class="w-4 h-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+        </svg>
+        ✈️ Kirim ke Telegram`;
+    }
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadTracker();
 });

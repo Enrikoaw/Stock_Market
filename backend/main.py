@@ -35,6 +35,12 @@ from excel_generator import (
 )
 from live_idx_fetcher import fetch_real_idx_market_data
 from signal_tracker import SignalTracker
+from telegram_notifier import (
+    filter_smart_telegram_picks,
+    format_telegram_broadcast,
+    format_test_message,
+    send_telegram_message,
+)
 from screener_engine import (
     analyze_smart_money_dataframe,
     enrich_master_ticker_list,
@@ -540,6 +546,101 @@ def tracker_delete(signal_id: int) -> dict:
 def tracker_reset() -> dict:
     n = TRACKER.reset_all()
     return {"status": "success", "message": f"{n} catatan sinyal dihapus. Tracker dimulai dari nol."}
+
+
+# ===================== TELEGRAM NOTIFIER =====================
+
+
+class TelegramConfigRequest(BaseModel):
+    bot_token: Optional[str] = None
+    chat_id: Optional[str] = None
+
+
+class TelegramSendRequest(BaseModel):
+    bot_token: Optional[str] = None
+    chat_id: Optional[str] = None
+    max_picks: int = 3
+    max_pct_change: float = 2.5
+    min_score: int = 70
+
+
+@app.get("/api/telegram/config")
+def get_telegram_config() -> dict:
+    env_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    env_chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    return {
+        "configured": bool(env_token and env_chat),
+        "has_env_token": bool(env_token),
+        "has_env_chat": bool(env_chat),
+    }
+
+
+@app.post("/api/telegram/test")
+def test_telegram_connection(req: TelegramConfigRequest) -> dict:
+    token = (req.bot_token or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
+    chat_id = (req.chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")).strip()
+    if not token or not chat_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Telegram Bot Token dan Chat ID wajib diisi.",
+        )
+    ok, msg = send_telegram_message(token, chat_id, format_test_message())
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"status": "success", "message": msg}
+
+
+@app.post("/api/telegram/send")
+async def send_smart_telegram_recommendations(req: TelegramSendRequest) -> dict:
+    token = (req.bot_token or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
+    chat_id = (req.chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")).strip()
+    if not token or not chat_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Telegram Bot Token dan Chat ID belum disetel. Buka pengaturan Telegram untuk memasukkan Token & Chat ID.",
+        )
+
+    # 1. Pastikan state data pasar tersedia
+    if STATE["analysis"] is None:
+        init_default_state()
+
+    # 2. Saring kandidat saham terbaik yang belum terbang
+    stocks = STATE["analysis"]["stocks"] if STATE["analysis"] else []
+    market_date = STATE["analysis"]["kpis"]["latest_date"] if STATE["analysis"] else "Hari Ini"
+
+    picks = filter_smart_telegram_picks(
+        stocks=stocks,
+        max_picks=req.max_picks,
+        max_pct_change=req.max_pct_change,
+        min_score=req.min_score,
+    )
+
+    # 3. Format pesan HTML Telegram yang rapi
+    text = format_telegram_broadcast(picks, market_date)
+
+    # 4. Kirim ke Telegram
+    ok, send_msg = await asyncio.to_thread(send_telegram_message, token, chat_id, text)
+    if not ok:
+        raise HTTPException(status_code=400, detail=send_msg)
+
+    return {
+        "status": "success",
+        "picks_count": len(picks),
+        "message": f"🚀 Berhasil mengirim {len(picks)} rekomendasi saham aman ke Telegram Anda!",
+        "preview": text,
+        "picks": [
+            {
+                "ticker": p.get("ticker"),
+                "sector": p.get("sector"),
+                "close": p.get("close"),
+                "pct_change": p.get("pct_change"),
+                "smart_money_score": p.get("smart_money_score"),
+                "trigger_label": p.get("trigger_label"),
+                "trading_plan": p.get("trading_plan"),
+            }
+            for p in picks
+        ],
+    }
 
 
 if FRONTEND_DIR.exists():
