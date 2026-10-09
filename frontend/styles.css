@@ -14,14 +14,13 @@
   --crimson: #ef4444;
 }
 
-/* Light Theme Variables */
 html.light {
-  --bg-primary: #f8fafc;
+  --bg-primary: #f1f5f9;
   --bg-card: #ffffff;
-  --bg-card-hover: #f1f5f9;
+  --bg-card-hover: #f8fafc;
   --border-subtle: #e2e8f0;
   --text-primary: #0f172a;
-  --text-secondary: #64748b;
+  --text-secondary: #475569;
 }
 
 * {
@@ -35,7 +34,7 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
-  transition: background-color 0.25s ease, color 0.25s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Custom Scrollbar */
@@ -58,13 +57,7 @@ body {
   background: rgba(15, 23, 42, 0.88);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(51, 65, 85, 0.55);
-  transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
-}
-
-html.light .glass-panel {
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .kpi-card {
@@ -75,9 +68,6 @@ html.light .glass-panel {
   transform: translateY(-2px);
   border-color: rgba(59, 130, 246, 0.6);
   box-shadow: 0 8px 24px -6px rgba(15, 23, 42, 0.9);
-}
-html.light .kpi-card:hover {
-  box-shadow: 0 8px 24px -6px rgba(15, 23, 42, 0.1);
 }
 .kpi-card.active-filter {
   border-color: #10b981;
@@ -91,28 +81,17 @@ html.light .kpi-card:hover {
 .stock-row:hover {
   background-color: rgba(30, 41, 59, 0.65);
 }
-html.light .stock-row:hover {
-  background-color: #f1f5f9;
-}
 .stock-row.selected-row {
   background-color: rgba(16, 185, 129, 0.11);
   border-left: 3px solid #10b981;
 }
-html.light .stock-row.selected-row {
-  background-color: rgba(16, 185, 129, 0.14);
-}
 
-/* Trigger Badges */
+/* Trigger Badges (Dark Mode Default) */
 .badge-markup {
   background: rgba(245, 158, 11, 0.15);
   color: #fbbf24;
   border: 1px solid rgba(245, 158, 11, 0.4);
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.12);
-}
-html.light .badge-markup {
-  background: #fef3c7;
-  color: #b45309;
-  border-color: #fde68a;
 }
 .badge-big-accum {
   background: rgba(16, 185, 129, 0.15);
@@ -120,50 +99,25 @@ html.light .badge-markup {
   border: 1px solid rgba(16, 185, 129, 0.4);
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.12);
 }
-html.light .badge-big-accum {
-  background: #d1fae5;
-  color: #047857;
-  border-color: #a7f3d0;
-}
 .badge-silent-accum {
   background: rgba(59, 130, 246, 0.15);
   color: #60a5fa;
   border: 1px solid rgba(59, 130, 246, 0.4);
-}
-html.light .badge-silent-accum {
-  background: #dbeafe;
-  color: #1d4ed8;
-  border-color: #bfdbfe;
 }
 .badge-foreign {
   background: rgba(139, 92, 246, 0.15);
   color: #a78bfa;
   border: 1px solid rgba(139, 92, 246, 0.4);
 }
-html.light .badge-foreign {
-  background: #ede9fe;
-  color: #6d28d9;
-  border-color: #ddd6fe;
-}
 .badge-dist {
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
   border: 1px solid rgba(239, 68, 68, 0.4);
 }
-html.light .badge-dist {
-  background: #fee2e2;
-  color: #b91c1c;
-  border-color: #fecaca;
-}
 .badge-neutral {
   background: rgba(100, 116, 139, 0.15);
   color: #94a3b8;
   border: 1px solid rgba(100, 116, 139, 0.35);
-}
-html.light .badge-neutral {
-  background: #f1f5f9;
-  color: #475569;
-  border-color: #cbd5e1;
 }
 
 .dropzone-active {
@@ -182,25 +136,13 @@ html.light .badge-neutral {
   border: 1px solid rgba(51, 65, 85, 0.7);
   transition: all 0.15s ease;
 }
-html.light .tracker-tab {
-  color: #64748b;
-  background: #f1f5f9;
-  border-color: #e2e8f0;
-}
 .tracker-tab:hover {
   color: #f8fafc;
-}
-html.light .tracker-tab:hover {
-  color: #0f172a;
 }
 .tracker-tab.active {
   color: #ffffff;
   background: #059669;
   border-color: #10b981;
-}
-html.light .tracker-tab.active {
-  color: #ffffff !important;
-  background: #059669 !important;
 }
 .tracker-tab .tab-count {
   margin-left: 4px;
@@ -209,98 +151,178 @@ html.light .tracker-tab.active {
 }
 
 /* ========================================================= */
-/* COMPREHENSIVE LIGHT THEME ELEMENT OVERRIDES               */
+/* BULLETPROOF LIGHT THEME ENGINE (Comprehensive Overrides)  */
 /* ========================================================= */
-html.light header {
-  background: rgba(255, 255, 255, 0.94) !important;
-  border-bottom-color: #e2e8f0 !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+html.light {
+  color-scheme: light;
 }
 
-html.light .text-white {
+html.light body {
+  background-color: #f1f5f9 !important;
   color: #0f172a !important;
 }
 
-html.light .text-slate-200,
-html.light .text-slate-300 {
-  color: #1e293b !important;
-}
-
-html.light .text-slate-400 {
-  color: #475569 !important;
-}
-
-html.light .text-slate-500 {
-  color: #64748b !important;
-}
-
-/* Backgrounds in Light Mode */
-html.light .bg-slate-950,
-html.light .bg-slate-900,
-html.light .bg-slate-950\/70,
-html.light .bg-slate-950\/80,
-html.light .bg-slate-950\/90,
-html.light .bg-slate-900\/50,
-html.light .bg-slate-900\/80 {
+/* 1. Semuanya yang bernuansa gelap (slate-950, slate-900) berganti putih bersih */
+html.light .glass-panel,
+html.light .modal-box,
+html.light [class*="bg-slate-950"],
+html.light [class*="bg-slate-900"] {
   background-color: #ffffff !important;
 }
 
-html.light .bg-slate-800,
-html.light .bg-slate-800\/50,
-html.light .bg-slate-800\/60,
-html.light .bg-slate-800\/70 {
+html.light [class*="bg-slate-800"] {
   background-color: #f8fafc !important;
 }
 
-/* Borders in Light Mode */
-html.light .border-slate-800,
-html.light .border-slate-700,
-html.light .border-slate-800\/80,
-html.light .border-slate-700\/80,
+html.light header {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06) !important;
+}
+
+/* 2. Semua garis border gelap berganti border halus abu-abu terang */
+html.light [class*="border-slate-800"],
+html.light [class*="border-slate-700"],
 html.light .divide-slate-800 > :not([hidden]) ~ :not([hidden]),
 html.light .divide-slate-800\/70 > :not([hidden]) ~ :not([hidden]) {
   border-color: #e2e8f0 !important;
 }
 
-/* Inputs & Selects */
-html.light select,
-html.light input[type="text"],
-html.light input[type="search"] {
-  background-color: #ffffff !important;
-  border-color: #cbd5e1 !important;
+/* 3. Teks putih & abu-abu gelap berganti teks tajam kontras tinggi */
+html.light .text-white,
+html.light [class*="text-slate-100"],
+html.light [class*="text-slate-200"],
+html.light [class*="text-slate-300"] {
   color: #0f172a !important;
 }
 
-html.light select:focus,
-html.light input:focus {
-  border-color: #10b981 !important;
-  outline: none;
+html.light [class*="text-slate-400"] {
+  color: #475569 !important;
 }
 
-/* Modal Windows in Light Mode */
-html.light .modal-box {
-  background-color: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.15) !important;
+html.light [class*="text-slate-500"] {
+  color: #64748b !important;
 }
 
-/* Table Headers & Hover in Light Mode */
+html.light [class*="text-slate-600"] {
+  color: #94a3b8 !important;
+}
+
+/* 4. Tabel Header & Baris */
+html.light thead tr,
 html.light th {
   background-color: #f8fafc !important;
   color: #475569 !important;
   border-bottom: 1px solid #e2e8f0 !important;
 }
 
+html.light tbody tr:hover,
+html.light .stock-row:hover,
 html.light tr.hover\:bg-slate-800\/40:hover {
   background-color: #f1f5f9 !important;
 }
 
-/* Buttons in Light Mode */
-html.light .btn-secondary {
-  background-color: #f1f5f9 !important;
-  border-color: #cbd5e1 !important;
-  color: #1e293b !important;
+html.light .stock-row.selected-row {
+  background-color: #ecfdf5 !important;
+  border-left: 3px solid #10b981 !important;
 }
-html.light .btn-secondary:hover {
-  background-color: #e2e8f0 !important;
+
+/* 5. Input, Select, Search Box */
+html.light select,
+html.light input[type="text"],
+html.light input[type="search"] {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light select:focus,
+html.light input:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+}
+
+/* 6. Card & KPI Hover */
+html.light .kpi-card {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+html.light .kpi-card:hover {
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.1) !important;
+  border-color: #93c5fd !important;
+}
+
+html.light .kpi-card.active-filter {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 1px #10b981, 0 8px 20px -4px rgba(16, 185, 129, 0.15) !important;
+}
+
+/* 7. Tracker Tabs */
+html.light .tracker-tab {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #64748b !important;
+}
+
+html.light .tracker-tab:hover {
+  color: #0f172a !important;
+  background: #f1f5f9 !important;
+}
+
+html.light .tracker-tab.active {
+  background: #059669 !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+/* 8. Tombol Navbar */
+html.light #btnResetSample,
+html.light #btnOpenGuideModal,
+html.light #btnThemeToggle,
+html.light a[href*="template?mode=blank"] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+html.light #btnResetSample:hover,
+html.light #btnOpenGuideModal:hover,
+html.light #btnThemeToggle:hover,
+html.light a[href*="template?mode=blank"]:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* 9. Badge Kontras Terang */
+html.light .badge-markup {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  border-color: #fde68a !important;
+}
+html.light .badge-big-accum {
+  background: #d1fae5 !important;
+  color: #047857 !important;
+  border-color: #a7f3d0 !important;
+}
+html.light .badge-silent-accum {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+  border-color: #bfdbfe !important;
+}
+html.light .badge-foreign {
+  background: #ede9fe !important;
+  color: #6d28d9 !important;
+  border-color: #ddd6fe !important;
+}
+html.light .badge-dist {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  border-color: #fecaca !important;
+}
+html.light .badge-neutral {
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  border-color: #cbd5e1 !important;
 }
