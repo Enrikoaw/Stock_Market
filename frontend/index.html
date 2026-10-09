@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=6.1" />
+  <link rel="stylesheet" href="/static/styles.css?v=7.0" />
   <script>
     (function() {
       try {
@@ -75,8 +75,12 @@
           Upload Excel (.xlsx / .csv)
         </button>
 
-        <button id="btnSyncLive" onclick="syncLiveMarketData()" class="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-semibold text-xs transition" title="Tarik Harga & Volume Pasar BEI Real-Time Hari Ini dari Yahoo Finance (.JK)">
-          🔄 Sync Harga Real Hari Ini
+        <button id="btnSyncFast" onclick="syncFastMarketData()" class="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-semibold text-xs transition shadow-sm" title="Sync Kilat (< 2 Detik): Mengambil harga realtime khusus saham Watchlist, Running, dan Top Likuid">
+          ⚡ Sync Cepat (< 2s)
+        </button>
+
+        <button id="btnSyncLive" onclick="syncLiveMarketData()" class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-semibold text-xs transition" title="Tarik data lengkap seluruh 844 emiten IDX secara paralel">
+          🔄 Full Sync IDX
         </button>
 
         <a href="/api/template?mode=sample" class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 font-medium text-xs transition" title="Download Template Excel beserta 15 Saham IDX Sample (25 Hari)">
@@ -586,6 +590,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=6.1"></script>
+  <script src="/static/app.js?v=7.0"></script>
 </body>
 </html>

@@ -64,7 +64,7 @@ STATE: dict = {
 TRACKER = SignalTracker(BASE_DIR / "data" / "tracker.db")
 
 
-def _process_tracker(analysis: dict) -> dict:
+def _process_tracker(analysis: dict, sync_live_network: bool = False) -> dict:
     """Evaluasi sinyal aktif dengan candle baru, lalu catat sinyal akumulasi baru ke Watchlist.
     Hanya berjalan untuk data pasar REAL (bukan simulasi / upload manual)."""
     result = {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "added": 0, "skipped": False}
@@ -72,11 +72,12 @@ def _process_tracker(analysis: dict) -> dict:
         result["skipped"] = True
         return result
     try:
-        # 1. Tarik live quotes intraday tercepat untuk seluruh sinyal aktif
-        live_res = TRACKER.sync_active_signals_live()
-        result.update(live_res)
+        # 1. Tarik live quotes intraday via network HANYA jika diminta eksplisit
+        if sync_live_network:
+            live_res = TRACKER.sync_active_signals_live()
+            result.update(live_res)
 
-        # 2. Evaluasi dataset analisis penuh jika tersedia
+        # 2. Evaluasi dataset analisis penuh (sudah berisi harga terbaru dari sync)
         if analysis and "details" in analysis:
             main_res = TRACKER.evaluate(analysis["details"])
             for k in ("entered", "win", "loss", "expired", "timeout"):
@@ -94,14 +95,34 @@ class LocalPathRequest(BaseModel):
     path: str
 
 
+def _run_fast_sync_job_blocking() -> dict:
+    """Sync kilat (< 2-3 detik) khusus untuk evaluasi live Watchlist & Running (Entry, TP, SL)."""
+    tracker_res = TRACKER.sync_active_signals_live()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    STATE["last_tracker_run"] = now_str
+
+    if STATE["analysis"] is None:
+        init_default_state()
+
+    return {
+        "status": "success",
+        "tracker_res": tracker_res,
+        "message": f"⚡ Sync Cepat selesai! {tracker_res.get('tickers_checked', 0)} saham aktif dievaluasi (Status: RUNNING/TP/SL ter-update).",
+        "source_name": STATE["source_name"],
+        "last_sync_time": STATE["last_sync_time"],
+        "kpis": STATE["analysis"]["kpis"],
+        "stocks": STATE["analysis"]["stocks"],
+    }
+
+
 def _run_sync_job_blocking() -> dict:
-    """Fungsi sinkronisasi data pasar BEI yang dijalankan di background thread agar tidak memblokir API."""
+    """Fungsi sinkronisasi data pasar seluruh 844 saham BEI di background thread."""
     if MASTER_UPLOADED_CSV.exists():
         tickers_df = pd.read_csv(MASTER_UPLOADED_CSV)
     else:
         tickers_df = generate_900_idx_master_tickers_df()
 
-    real_df = fetch_real_idx_market_data(tickers_df, output_csv_path=REAL_CACHE_CSV, period="1mo")
+    real_df = fetch_real_idx_market_data(tickers_df, output_csv_path=REAL_CACHE_CSV, period="auto", max_workers=6)
     analysis = analyze_smart_money_dataframe(real_df)
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     latest_dt = analysis["kpis"]["latest_date"]
@@ -109,7 +130,7 @@ def _run_sync_job_blocking() -> dict:
     STATE["analysis"] = analysis
     STATE["last_sync_time"] = now_str
     STATE["is_real_market"] = True
-    _process_tracker(analysis)
+    _process_tracker(analysis, sync_live_network=False)
     return analysis
 
 
@@ -282,33 +303,43 @@ def get_stock_detail(ticker: str) -> dict:
     return details_map[key]
 
 
-@app.post("/api/sync-live")
-async def sync_live_idx_market_data() -> dict:
-    """Menarik data harga & volume REAL terbaru hari ini dari Yahoo Finance (.JK) di background thread."""
-    if STATE["is_syncing"]:
-        return {
-            "status": "busy",
-            "message": "Sinkronisasi sedang berjalan di latar belakang, mohon tunggu sebentar.",
-            "source_name": STATE["source_name"],
-            "kpis": STATE["analysis"]["kpis"],
-            "stocks": STATE["analysis"]["stocks"],
-        }
+async def _run_full_sync_background() -> None:
     try:
-        STATE["is_syncing"] = True
-        analysis = await asyncio.to_thread(_run_sync_job_blocking)
-        latest_dt = analysis["kpis"]["latest_date"]
-        return {
-            "status": "success",
-            "message": f"Berhasil sinkronisasi harga REAL terbaru ({latest_dt}) untuk {analysis['kpis']['total_emiten']} saham aktif IDX!",
-            "source_name": STATE["source_name"],
-            "last_sync_time": STATE["last_sync_time"],
-            "kpis": analysis["kpis"],
-            "stocks": analysis["stocks"],
-        }
+        await asyncio.to_thread(_run_sync_job_blocking)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Gagal sinkronisasi live data: {exc}") from exc
+        print(f"[FullSync Background] Error: {exc}")
     finally:
         STATE["is_syncing"] = False
+
+
+@app.post("/api/sync-fast")
+async def sync_fast_market_data() -> dict:
+    """Sync kilat (< 2-3 detik) khusus untuk saham Watchlist & Running."""
+    try:
+        res = await asyncio.to_thread(_run_fast_sync_job_blocking)
+        return res
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gagal sync cepat: {exc}") from exc
+
+
+@app.post("/api/sync-live")
+async def sync_live_idx_market_data() -> dict:
+    """Menjalankan sinkronisasi seluruh 844 saham IDX secara non-blocking di background thread."""
+    if STATE["is_syncing"]:
+        return {
+            "status": "already_running",
+            "message": "Sinkronisasi seluruh 844 saham sedang berjalan di background...",
+            "source_name": STATE["source_name"],
+            "last_sync_time": STATE["last_sync_time"],
+        }
+    STATE["is_syncing"] = True
+    asyncio.create_task(_run_full_sync_background())
+    return {
+        "status": "started",
+        "message": "🚀 Sinkronisasi seluruh 844 saham IDX berjalan di background. Web tetap responsif!",
+        "source_name": STATE["source_name"],
+        "last_sync_time": STATE["last_sync_time"],
+    }
 
 
 @app.post("/api/upload")

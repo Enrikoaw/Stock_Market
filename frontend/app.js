@@ -610,28 +610,69 @@ async function handleLoadLocalPath() {
   }
 }
 
+async function syncFastMarketData() {
+  const btn = document.getElementById('btnSyncFast');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Memeriksa...';
+  }
+  try {
+    showToast('⚡ Mengevaluasi harga live Watchlist & Running...');
+    const res = await fetch('/api/sync-fast', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal sync cepat');
+    showToast(data.message || '⚡ Status Watchlist & Running berhasil diperbarui!');
+    await Promise.all([loadScreenerData(false), loadTracker()]);
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '⚡ Sync Cepat (< 2s)';
+    }
+  }
+}
+
 async function syncLiveMarketData() {
   const btn = document.getElementById('btnSyncLive');
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '⏳ Menarik Data BEI Hari Ini...';
+    btn.textContent = '⏳ Sync Background...';
   }
   try {
-    showToast('Sedang mengunduh data pasar REAL hari ini (Yahoo Finance .JK) untuk seluruh saham IDX... Mohon tunggu ~30 detik.');
+    showToast('🚀 Memulai unduh paralel 844 saham di background (~30s)...');
     const res = await fetch('/api/sync-live', { method: 'POST' });
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Gagal sinkronisasi live data');
     }
     showToast(data.message);
-    await loadScreenerData(false);
-    await loadTracker();
+
+    // Polling background worker via /api/health setiap 4 detik
+    let pollCount = 0;
+    const pollInterval = setInterval(async () => {
+      pollCount++;
+      try {
+        const hRes = await fetch('/api/health');
+        const hData = await hRes.json();
+        if (!hData.is_syncing || pollCount >= 25) {
+          clearInterval(pollInterval);
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🔄 Full Sync IDX';
+          }
+          await Promise.all([loadScreenerData(false), loadTracker()]);
+          showToast('✅ Pembaruan seluruh 844 saham IDX selesai!', 'success');
+        }
+      } catch {
+        // ignore polling network errors
+      }
+    }, 4000);
   } catch (err) {
     showToast(err.message, 'error');
-  } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '🔄 Sync Harga Real Hari Ini';
+      btn.textContent = '🔄 Full Sync IDX';
     }
   }
 }
