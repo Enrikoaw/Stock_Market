@@ -865,5 +865,5 @@ async function resetTracker() {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadTracker();
-  setInterval(loadTracker, 180000);
+  setInterval(loadTracker, 30000); // Auto-refresh tracker UI setiap 30 detik
 });

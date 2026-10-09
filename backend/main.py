@@ -72,8 +72,17 @@ def _process_tracker(analysis: dict) -> dict:
         result["skipped"] = True
         return result
     try:
-        result.update(TRACKER.evaluate(analysis["details"]))
-        result["added"] = TRACKER.auto_track(analysis)
+        # 1. Tarik live quotes intraday tercepat untuk seluruh sinyal aktif
+        live_res = TRACKER.sync_active_signals_live()
+        result.update(live_res)
+
+        # 2. Evaluasi dataset analisis penuh jika tersedia
+        if analysis and "details" in analysis:
+            main_res = TRACKER.evaluate(analysis["details"])
+            for k in ("entered", "win", "loss", "expired", "timeout"):
+                result[k] = max(result.get(k, 0), main_res.get(k, 0))
+            result["added"] = TRACKER.auto_track(analysis)
+
         STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[Tracker] {result}")
     except Exception as exc:
@@ -104,8 +113,23 @@ def _run_sync_job_blocking() -> dict:
     return analysis
 
 
+async def _background_fast_tracker_worker() -> None:
+    """Worker ringan setiap 60 detik yang memantau saham aktif di Watchlist & Running secara live."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            active_tickers = TRACKER.get_active_tickers()
+            if active_tickers:
+                res = await asyncio.to_thread(TRACKER.sync_active_signals_live)
+                if any(res.get(k, 0) > 0 for k in ("entered", "win", "loss", "expired", "timeout")):
+                    print(f"[TrackerLive 60s] Status berubah: {res}")
+                    STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        except Exception as exc:
+            print(f"[TrackerLive 60s] Error: {exc}")
+
+
 async def _background_24h_auto_sync_worker() -> None:
-    """Background worker 24 jam yang menyinkronkan data bursa secara otomatis setiap interval waktu."""
+    """Background worker 24 jam yang menyinkronkan seluruh 800+ data bursa secara otomatis setiap interval waktu."""
     while True:
         await asyncio.sleep(AUTO_SYNC_INTERVAL_SECONDS)
         if STATE["is_syncing"]:
@@ -123,10 +147,12 @@ async def _background_24h_auto_sync_worker() -> None:
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
-    """Mengelola siklus hidup server 24/7 dan menyalakan worker Auto-Sync di background."""
-    task = asyncio.create_task(_background_24h_auto_sync_worker())
+    """Mengelola siklus hidup server 24/7 dan menyalakan worker Auto-Sync dan Fast Tracker di background."""
+    sync_task = asyncio.create_task(_background_24h_auto_sync_worker())
+    tracker_task = asyncio.create_task(_background_fast_tracker_worker())
     yield
-    task.cancel()
+    sync_task.cancel()
+    tracker_task.cancel()
 
 
 app = FastAPI(
