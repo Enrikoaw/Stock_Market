@@ -453,30 +453,65 @@
         </div>
       </div>
 
-      <!-- Tabs status -->
-      <div class="px-4 border-t border-slate-800 pt-3 flex flex-wrap gap-1.5" id="trackerTabs">
-        <button data-tab="ALL" onclick="setTrackerTab('ALL')" class="tracker-tab">Semua</button>
-        <button data-tab="WATCHLIST" onclick="setTrackerTab('WATCHLIST')" class="tracker-tab">Watchlist</button>
-        <button data-tab="RUNNING" onclick="setTrackerTab('RUNNING')" class="tracker-tab">Running</button>
-        <button data-tab="WIN" onclick="setTrackerTab('WIN')" class="tracker-tab">Win</button>
-        <button data-tab="LOSS" onclick="setTrackerTab('LOSS')" class="tracker-tab">Loss</button>
-        <button data-tab="EXPIRED" onclick="setTrackerTab('EXPIRED')" class="tracker-tab">Expired</button>
-        <button data-tab="TIMEOUT" onclick="setTrackerTab('TIMEOUT')" class="tracker-tab">Timeout</button>
+      <!-- Tabs status & Toolbar Pengurutan -->
+      <div class="px-4 border-t border-slate-800 pt-3 flex flex-wrap items-center justify-between gap-2.5">
+        <div class="flex flex-wrap gap-1.5" id="trackerTabs">
+          <button data-tab="ALL" onclick="setTrackerTab('ALL')" class="tracker-tab">Semua</button>
+          <button data-tab="WATCHLIST" onclick="setTrackerTab('WATCHLIST')" class="tracker-tab">Watchlist</button>
+          <button data-tab="RUNNING" onclick="setTrackerTab('RUNNING')" class="tracker-tab">Running</button>
+          <button data-tab="WIN" onclick="setTrackerTab('WIN')" class="tracker-tab">Win</button>
+          <button data-tab="LOSS" onclick="setTrackerTab('LOSS')" class="tracker-tab">Loss</button>
+          <button data-tab="EXPIRED" onclick="setTrackerTab('EXPIRED')" class="tracker-tab">Expired</button>
+          <button data-tab="TIMEOUT" onclick="setTrackerTab('TIMEOUT')" class="tracker-tab">Timeout</button>
+        </div>
+
+        <!-- Filter & Pengurutan Running Profit / Sinyal -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Search box tracker -->
+          <div class="relative">
+            <input
+              id="trackerSearchInput"
+              type="text"
+              placeholder="Cari kode saham..."
+              oninput="filterTrackerRows()"
+              class="w-36 pl-2.5 pr-2 py-1 rounded-lg bg-slate-950/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <!-- Sort Select -->
+          <div class="flex items-center gap-1.5 bg-slate-950/80 border border-slate-700/80 rounded-lg px-2.5 py-1">
+            <span class="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+              <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+              </svg>
+              Urutkan:
+            </span>
+            <select id="trackerSortSelect" onchange="changeTrackerSort(this.value)" class="bg-transparent text-xs text-amber-300 font-bold focus:outline-none cursor-pointer">
+              <option value="pnl_desc" class="bg-slate-900 text-white">🚀 Running Profit Terbanyak (Terbang Tinggi)</option>
+              <option value="pnl_asc" class="bg-slate-900 text-white">🔻 Running Profit Terendah / Drawdown</option>
+              <option value="id_desc" class="bg-slate-900 text-white">🕒 Sinyal Terbaru</option>
+              <option value="score_desc" class="bg-slate-900 text-white">⭐ Smart Money Score Tertinggi</option>
+              <option value="ticker_asc" class="bg-slate-900 text-white">🔤 Kode Saham (A - Z)</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <div class="overflow-x-auto mt-2">
         <table class="w-full text-left border-collapse text-xs">
           <thead>
             <tr class="border-y border-slate-800 bg-slate-900/90 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              <th class="py-2.5 pl-4 pr-2">Saham</th>
-              <th class="py-2.5 px-2">Trigger · Score</th>
-              <th class="py-2.5 px-2">Tgl Sinyal</th>
+              <th class="py-2.5 pl-4 pr-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('ticker')">Saham <span id="sortIconTicker" class="font-mono text-[10px]"></span></th>
+              <th class="py-2.5 px-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('score')">Trigger · Score <span id="sortIconScore" class="font-mono text-[10px]"></span></th>
+              <th class="py-2.5 px-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('date')">Tgl Sinyal <span id="sortIconDate" class="font-mono text-[10px]"></span></th>
               <th class="py-2.5 px-2 text-right">Zona Entry</th>
               <th class="py-2.5 px-2 text-right">SL / TP</th>
               <th class="py-2.5 px-2 text-center">Status</th>
               <th class="py-2.5 px-2 text-right">Entry</th>
               <th class="py-2.5 px-2 text-right">Exit / Last</th>
-              <th class="py-2.5 px-2 text-right">P/L</th>
+              <th class="py-2.5 px-2 text-right cursor-pointer hover:text-amber-300 select-none" onclick="toggleTrackerSort('pnl')" title="Klik untuk mengurutkan Profit Terbanyak / Terendah">
+                P/L <span id="sortIconPnl" class="font-mono text-[11px] text-amber-400">▼</span>
+              </th>
               <th class="py-2.5 px-2">Catatan</th>
               <th class="py-2.5 pl-2 pr-4"></th>
             </tr>
@@ -590,6 +625,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=7.0"></script>
+  <script src="/static/app.js?v=7.2"></script>
 </body>
 </html>

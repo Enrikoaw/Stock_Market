@@ -740,6 +740,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // SIGNAL TRACKER — FORWARD TEST (Watchlist -> Running -> Win / Loss)
 // =====================================================================
 let trackerTab = 'ALL';
+let trackerSortBy = 'pnl_desc'; // Default: Running Profit Terbanyak (Terbang Tinggi)
+let currentTrackerSignals = [];
+let trackerSearchTerm = '';
 
 const TRACKER_STATUS_STYLE = {
   WATCHLIST: 'bg-blue-500/15 text-blue-300 border-blue-500/40',
@@ -757,16 +760,77 @@ async function loadTracker() {
   try {
     const [statsRes, sigRes] = await Promise.all([
       fetch('/api/tracker/stats'),
-      fetch(`/api/tracker/signals?status=${encodeURIComponent(trackerTab)}`),
+      fetch(`/api/tracker/signals?status=${encodeURIComponent(trackerTab)}&sort_by=${encodeURIComponent(trackerSortBy)}`),
     ]);
     if (!statsRes.ok || !sigRes.ok) return;
     const statsData = await statsRes.json();
     const sigData = await sigRes.json();
+    currentTrackerSignals = sigData.signals || [];
     renderTrackerStats(statsData);
-    renderTrackerTable(sigData.signals || []);
+    filterAndRenderTracker();
   } catch (err) {
     console.warn('Tracker error:', err);
   }
+}
+
+function changeTrackerSort(newSort) {
+  trackerSortBy = newSort;
+  const sel = document.getElementById('trackerSortSelect');
+  if (sel) sel.value = newSort;
+  updateTrackerSortIcons();
+  loadTracker();
+}
+
+function toggleTrackerSort(field) {
+  if (field === 'pnl') {
+    trackerSortBy = trackerSortBy === 'pnl_desc' ? 'pnl_asc' : 'pnl_desc';
+  } else if (field === 'ticker') {
+    trackerSortBy = trackerSortBy === 'ticker_asc' ? 'ticker_desc' : 'ticker_asc';
+  } else if (field === 'score') {
+    trackerSortBy = trackerSortBy === 'score_desc' ? 'score_asc' : 'score_desc';
+  } else if (field === 'date') {
+    trackerSortBy = trackerSortBy === 'date_desc' ? 'date_asc' : 'date_desc';
+  }
+  const sel = document.getElementById('trackerSortSelect');
+  if (sel) sel.value = trackerSortBy;
+  updateTrackerSortIcons();
+  loadTracker();
+}
+
+function updateTrackerSortIcons() {
+  const icons = {
+    pnl: document.getElementById('sortIconPnl'),
+    ticker: document.getElementById('sortIconTicker'),
+    score: document.getElementById('sortIconScore'),
+    date: document.getElementById('sortIconDate'),
+  };
+  Object.values(icons).forEach((el) => { if (el) el.textContent = ''; });
+  if (trackerSortBy === 'pnl_desc' && icons.pnl) icons.pnl.textContent = '▼';
+  else if (trackerSortBy === 'pnl_asc' && icons.pnl) icons.pnl.textContent = '▲';
+  else if (trackerSortBy === 'ticker_asc' && icons.ticker) icons.ticker.textContent = '▲';
+  else if (trackerSortBy === 'ticker_desc' && icons.ticker) icons.ticker.textContent = '▼';
+  else if (trackerSortBy === 'score_desc' && icons.score) icons.score.textContent = '▼';
+  else if (trackerSortBy === 'score_asc' && icons.score) icons.score.textContent = '▲';
+  else if (trackerSortBy === 'date_desc' && icons.date) icons.date.textContent = '▼';
+  else if (trackerSortBy === 'date_asc' && icons.date) icons.date.textContent = '▲';
+}
+
+function filterTrackerRows() {
+  const input = document.getElementById('trackerSearchInput');
+  trackerSearchTerm = input ? input.value.trim().toUpperCase() : '';
+  filterAndRenderTracker();
+}
+
+function filterAndRenderTracker() {
+  let list = currentTrackerSignals;
+  if (trackerSearchTerm) {
+    list = list.filter((r) =>
+      (r.ticker && r.ticker.toUpperCase().includes(trackerSearchTerm)) ||
+      (r.trigger_label && r.trigger_label.toUpperCase().includes(trackerSearchTerm)) ||
+      (r.sector && r.sector.toUpperCase().includes(trackerSearchTerm))
+    );
+  }
+  renderTrackerTable(list);
 }
 
 function renderTrackerStats(data) {
@@ -862,15 +926,61 @@ function renderTrackerTable(rows) {
         : '<span class="text-slate-500">-</span>';
       const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' ? null : r.pnl_pct;
 
+      // Desain P/L Cell & Badge Terbang Tinggi
+      let pnlContent = '';
+      let isHighFlyer = false;
+
+      if (r.status === 'RUNNING') {
+        if (pnl !== null && pnl >= 2.0) {
+          isHighFlyer = true;
+          pnlContent = `
+            <div class="flex items-center justify-end gap-1">
+              <span class="text-xs" title="Sedang Terbang Tinggi!">🚀</span>
+              <span class="font-extrabold text-emerald-400 font-mono text-xs">${fmtPctOrDash(pnl)}</span>
+            </div>
+            <div class="text-[9px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-500/30 inline-block mt-0.5">
+              Terbang Tinggi
+            </div>`;
+        } else if (pnl !== null && pnl > 0) {
+          pnlContent = `
+            <div class="font-bold text-emerald-400 font-mono text-xs">${fmtPctOrDash(pnl)}</div>
+            <div class="text-[10px] text-emerald-500/80">floating profit</div>`;
+        } else if (pnl !== null) {
+          pnlContent = `
+            <div class="font-bold text-rose-400 font-mono text-xs">${fmtPctOrDash(pnl)}</div>
+            <div class="text-[10px] text-slate-500">floating loss</div>`;
+        }
+      } else if (r.status === 'WIN') {
+        pnlContent = `
+          <div class="flex items-center justify-end gap-1">
+            <span class="text-xs">🏆</span>
+            <span class="font-bold text-emerald-400 font-mono text-xs">${fmtPctOrDash(pnl)}</span>
+          </div>
+          <div class="text-[10px] text-emerald-500/80 font-medium">take profit</div>`;
+      } else if (r.status === 'LOSS') {
+        pnlContent = `
+          <div class="font-bold text-rose-400 font-mono text-xs">${fmtPctOrDash(pnl)}</div>
+          <div class="text-[10px] text-rose-500/80 font-medium">stop loss</div>`;
+      } else {
+        pnlContent = `<span class="text-slate-500">-</span>`;
+      }
+
+      const rowHighlight = isHighFlyer
+        ? 'hover:bg-slate-800/60 bg-emerald-950/20 border-l-2 border-emerald-400'
+        : 'hover:bg-slate-800/40';
+
       return `
-      <tr class="hover:bg-slate-800/40">
+      <tr class="${rowHighlight}">
         <td class="py-2.5 pl-4 pr-2">
-          <div class="font-mono font-extrabold text-white cursor-pointer hover:text-emerald-300" onclick="selectStock('${r.ticker}')">${r.ticker}</div>
+          <div class="font-mono font-extrabold text-white cursor-pointer hover:text-emerald-300 flex items-center gap-1.5" onclick="selectStock('${r.ticker}')">
+            <span>${r.ticker}</span>
+            ${isHighFlyer ? '<span class="text-[11px]" title="Terbang Tinggi">🚀</span>' : ''}
+          </div>
           <div class="text-[10px] text-slate-500 truncate max-w-[140px]">${r.source === 'AUTO' ? '🤖 Auto' : '👤 Manual'}</div>
         </td>
         <td class="py-2.5 px-2">
           <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">${r.trigger_label || '-'}</span>
-          <span class="font-mono text-slate-300 ml-1">${r.score ?? '-'}</span>
+          <span class="font-mono text-slate-300 ml-1 font-bold">${r.score ?? '-'}</span>
         </td>
         <td class="py-2.5 px-2 font-mono text-slate-300">${r.signal_date}</td>
         <td class="py-2.5 px-2 text-right font-mono text-emerald-300">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
@@ -882,7 +992,7 @@ function renderTrackerTable(rows) {
         </td>
         <td class="py-2.5 px-2 text-right font-mono text-slate-200">${entryCell}</td>
         <td class="py-2.5 px-2 text-right font-mono text-slate-200">${exitOrLast}</td>
-        <td class="py-2.5 px-2 text-right font-mono font-bold ${pctClass(pnl)}">${fmtPctOrDash(pnl)}${r.status === 'RUNNING' ? '<div class="text-[10px] font-normal text-slate-500">floating</div>' : ''}</td>
+        <td class="py-2.5 px-2 text-right font-mono font-bold">${pnlContent}</td>
         <td class="py-2.5 px-2 text-[11px] text-slate-400 max-w-[240px]">${r.note || ''}</td>
         <td class="py-2.5 pl-2 pr-4 text-right">
           <button onclick="deleteSignal(${r.id})" class="text-slate-500 hover:text-rose-400 text-sm" title="Hapus sinyal">&times;</button>
@@ -894,6 +1004,13 @@ function renderTrackerTable(rows) {
 
 function setTrackerTab(tab) {
   trackerTab = tab;
+  // Jika tab RUNNING dipilih, otomatis urutkan dari profit tertinggi (terbang tinggi)
+  if (tab === 'RUNNING' && trackerSortBy !== 'pnl_desc' && trackerSortBy !== 'pnl_asc') {
+    trackerSortBy = 'pnl_desc';
+    const sel = document.getElementById('trackerSortSelect');
+    if (sel) sel.value = 'pnl_desc';
+  }
+  updateTrackerSortIcons();
   loadTracker();
 }
 

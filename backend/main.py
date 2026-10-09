@@ -477,8 +477,11 @@ def tracker_stats() -> dict:
 
 
 @app.get("/api/tracker/signals")
-def tracker_signals(status: str = Query(default="ALL")) -> dict:
-    rows = TRACKER.list_signals(status)
+def tracker_signals(
+    status: str = Query(default="ALL"),
+    sort_by: str = Query(default="id_desc", description="Urutkan sinyal: pnl_desc, pnl_asc, score_desc, date_desc, ticker_asc"),
+) -> dict:
+    rows = TRACKER.list_signals(status=status, sort_by=sort_by)
     return {"count": len(rows), "signals": rows}
 
 

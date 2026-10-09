@@ -460,10 +460,32 @@ class SignalTracker:
         changes[status.lower()] = changes.get(status.lower(), 0) + 1
 
     # ---------------------------------------------------------------- query
-    def list_signals(self, status: str | None = None, limit: int = 500) -> list[dict]:
-        q = select(signals_table).order_by(signals_table.c.id.desc()).limit(limit)
+    def list_signals(self, status: str | None = None, sort_by: str = "id_desc", limit: int = 500) -> list[dict]:
+        q = select(signals_table)
         if status and status.upper() != "ALL":
             q = q.where(signals_table.c.status == status.upper())
+
+        sort_by_clean = (sort_by or "id_desc").lower().strip()
+        if sort_by_clean == "pnl_desc":
+            q = q.order_by(signals_table.c.pnl_pct.desc().nulls_last(), signals_table.c.id.desc())
+        elif sort_by_clean == "pnl_asc":
+            q = q.order_by(signals_table.c.pnl_pct.asc().nulls_last(), signals_table.c.id.desc())
+        elif sort_by_clean == "score_desc":
+            q = q.order_by(signals_table.c.score.desc(), signals_table.c.id.desc())
+        elif sort_by_clean == "score_asc":
+            q = q.order_by(signals_table.c.score.asc(), signals_table.c.id.desc())
+        elif sort_by_clean == "date_desc":
+            q = q.order_by(signals_table.c.signal_date.desc(), signals_table.c.id.desc())
+        elif sort_by_clean == "date_asc":
+            q = q.order_by(signals_table.c.signal_date.asc(), signals_table.c.id.asc())
+        elif sort_by_clean == "ticker_asc":
+            q = q.order_by(signals_table.c.ticker.asc())
+        elif sort_by_clean == "ticker_desc":
+            q = q.order_by(signals_table.c.ticker.desc())
+        else:
+            q = q.order_by(signals_table.c.id.desc())
+
+        q = q.limit(limit)
         with self.engine.connect() as conn:
             rows = [dict(r) for r in conn.execute(q).mappings().all()]
         for r in rows:
