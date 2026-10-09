@@ -16,6 +16,45 @@ const fmtNumber = (n) => new Intl.NumberFormat('id-ID').format(Math.round(n || 0
 const fmtPrice = (n) => `Rp ${fmtNumber(n)}`;
 const fmtSignPct = (n) => `${n >= 0 ? '+' : ''}${Number(n || 0).toFixed(2)}%`;
 
+// =====================================================================
+// THEME ENGINE (Dark & Light Mode Toggle)
+// =====================================================================
+function initTheme() {
+  const saved = localStorage.getItem('smartflow_theme') || 'dark';
+  applyTheme(saved);
+}
+
+function applyTheme(theme) {
+  const html = document.documentElement;
+  const icon = document.getElementById('themeIcon');
+  const label = document.getElementById('themeLabel');
+
+  if (theme === 'light') {
+    html.classList.remove('dark');
+    html.classList.add('light');
+    if (icon) icon.textContent = '☀️';
+    if (label) label.textContent = 'Terang';
+  } else {
+    html.classList.remove('light');
+    html.classList.add('dark');
+    if (icon) icon.textContent = '🌙';
+    if (label) label.textContent = 'Gelap';
+  }
+  localStorage.setItem('smartflow_theme', theme);
+
+  if (selectedStockDetail) {
+    renderDetailChart(selectedStockDetail);
+  }
+}
+
+function toggleTheme() {
+  const isDark = document.documentElement.classList.contains('dark');
+  applyTheme(isDark ? 'light' : 'dark');
+}
+
+// Inisialisasi tema segera
+initTheme();
+
 function getTriggerBadgeClass(triggerType) {
   switch (triggerType) {
     case 'MARKUP_BREAKOUT':
@@ -363,6 +402,11 @@ function renderInspectorChart(d) {
   const hist = d.history || [];
   const labels = hist.map((h) => h.date.slice(5)); // MM-DD
 
+  const isLight = document.documentElement.classList.contains('light');
+  const chartTextColor = isLight ? '#334155' : '#cbd5e1';
+  const chartSubColor = isLight ? '#64748b' : '#94a3b8';
+  const chartGridColor = isLight ? 'rgba(203, 213, 225, 0.65)' : 'rgba(51, 65, 85, 0.25)';
+
   if (activeChartTab === 'price') {
     const prices = hist.map((h) => h.close);
     const ma20s = hist.map((h) => h.ma20);
@@ -412,14 +456,14 @@ function renderInspectorChart(d) {
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { labels: { color: '#94a3b8', font: { size: 10 } } },
+          legend: { labels: { color: chartSubColor, font: { size: 10 } } },
         },
         scales: {
-          x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { display: false } },
+          x: { ticks: { color: chartSubColor, font: { size: 9 } }, grid: { display: false } },
           yPrice: {
             position: 'right',
-            ticks: { color: '#cbd5e1', font: { size: 9 } },
-            grid: { color: 'rgba(51, 65, 85, 0.25)' },
+            ticks: { color: chartTextColor, font: { size: 9 } },
+            grid: { color: chartGridColor },
           },
           yVol: {
             position: 'left',
@@ -450,13 +494,13 @@ function renderInspectorChart(d) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { labels: { color: '#94a3b8', font: { size: 10 } } },
+          legend: { labels: { color: chartSubColor, font: { size: 10 } } },
         },
         scales: {
-          x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { display: false } },
+          x: { ticks: { color: chartSubColor, font: { size: 9 } }, grid: { display: false } },
           y: {
-            ticks: { color: '#cbd5e1', font: { size: 9 } },
-            grid: { color: 'rgba(51, 65, 85, 0.25)' },
+            ticks: { color: chartTextColor, font: { size: 9 } },
+            grid: { color: chartGridColor },
           },
         },
       },
@@ -484,15 +528,15 @@ function renderInspectorChart(d) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { labels: { color: '#94a3b8', font: { size: 10 } } },
+          legend: { labels: { color: chartSubColor, font: { size: 10 } } },
         },
         scales: {
-          x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { display: false } },
+          x: { ticks: { color: chartSubColor, font: { size: 9 } }, grid: { display: false } },
           y: {
             min: 0,
             max: 100,
-            ticks: { color: '#cbd5e1', font: { size: 9 } },
-            grid: { color: 'rgba(51, 65, 85, 0.25)' },
+            ticks: { color: chartTextColor, font: { size: 9 } },
+            grid: { color: chartGridColor },
           },
         },
       },
