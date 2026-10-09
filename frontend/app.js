@@ -725,6 +725,8 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('filterMinScore').value = '0';
       document.getElementById('filterSearch').value = '';
       showToast('Dataset dikembalikan ke Data Pasar Real 844 Saham IDX.');
+      await loadScreenerData(false);
+    }
   });
 });
 
