@@ -342,3 +342,46 @@ html.light .badge-neutral {
   color: #475569 !important;
   border-color: #cbd5e1 !important;
 }
+
+/* =====================================================================
+   RESPONSIVE MOBILE ENHANCEMENTS (Fix overlapping & squished tables)
+   ===================================================================== */
+@media (max-width: 640px) {
+  /* Prevent horizontal overflow on mobile body */
+  body {
+    font-size: 13px;
+  }
+
+  /* Table styling for touch / small screens: min-width ensures no column collision */
+  table {
+    min-width: 680px;
+  }
+
+  #trackerTableBody table,
+  #trackerSection table {
+    min-width: 820px;
+  }
+
+  /* KPI Cards on Mobile: clean compact spacing */
+  .kpi-card {
+    padding: 0.85rem !important;
+  }
+
+  /* Stat metric badges wrap smoothly without clipping */
+  #tsWinRate {
+    font-size: 11px;
+  }
+
+  /* Sticky Header on mobile: tighter padding */
+  header {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    padding-top: 0.65rem !important;
+    padding-bottom: 0.65rem !important;
+  }
+}
+
+/* Smooth horizontal scroll container with indicator shadow */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}

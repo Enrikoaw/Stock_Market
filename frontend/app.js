@@ -306,7 +306,7 @@ function renderScreenerTable(stocks) {
     .join('');
 }
 
-async function selectStock(ticker) {
+async function selectStock(ticker, scrollToTradingPlan = false) {
   selectedTicker = ticker;
 
   // Update row highlight
@@ -319,6 +319,19 @@ async function selectStock(ticker) {
     if (!res.ok) throw new Error(`Gagal memuat detail ${ticker}`);
     selectedStockDetail = await res.json();
     renderInspectorPanel(selectedStockDetail);
+
+    if (scrollToTradingPlan) {
+      setTimeout(() => {
+        const planCard = document.getElementById('autoTradingPlanCard');
+        if (planCard) {
+          planCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          planCard.classList.add('ring-2', 'ring-emerald-400', 'ring-offset-2', 'ring-offset-slate-900');
+          setTimeout(() => {
+            planCard.classList.remove('ring-2', 'ring-emerald-400', 'ring-offset-2', 'ring-offset-slate-900');
+          }, 2000);
+        }
+      }, 100);
+    }
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1008,14 +1021,14 @@ function renderTrackerTable(rows) {
       <tr class="${rowHighlight}">
         <!-- Saham -->
         <td class="py-3 pl-4 pr-2">
-          <div class="flex items-center gap-2.5">
+          <div class="flex items-center gap-2.5 cursor-pointer group" onclick="selectStock('${r.ticker}', true)" title="Klik untuk membuka Auto Trading Plan ${r.ticker}">
             ${getStockLogoImg(r.ticker, 'w-7 h-7')}
             <div>
-              <div class="font-mono font-black text-sm text-white cursor-pointer hover:text-emerald-300 flex items-center gap-1.5 transition" onclick="selectStock('${r.ticker}')">
+              <div class="font-mono font-black text-sm text-white group-hover:text-emerald-300 flex items-center gap-1.5 transition">
                 <span>${r.ticker}</span>
                 ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
               </div>
-              <div class="text-[10px] text-slate-400 truncate max-w-[140px] mt-0.5">${r.sector || (r.source === 'AUTO' ? '🤖 Auto Sinyal' : '👤 Watchlist Manual')}</div>
+              <div class="text-[10px] text-slate-400 group-hover:text-slate-300 truncate max-w-[140px] mt-0.5">${r.sector || (r.source === 'AUTO' ? '🤖 Auto Sinyal' : '👤 Watchlist Manual')}</div>
             </div>
           </div>
         </td>
