@@ -619,6 +619,49 @@ function closeGuideModal() {
   document.getElementById('guideModal').classList.add('hidden');
 }
 
+// TradingView Advanced Chart Modal
+function openTradingViewModal() {
+  const ticker = selectedTicker || (selectedStockDetail ? selectedStockDetail.ticker : 'BBCA');
+  const cleanTicker = ticker.trim().toUpperCase();
+
+  const modal = document.getElementById('tradingViewModal');
+  const modalTicker = document.getElementById('tvModalTicker');
+  const modalLogo = document.getElementById('tvModalLogo');
+  const extLink = document.getElementById('tvModalExternalLink');
+  const container = document.getElementById('tradingViewWidgetContainer');
+
+  if (modalTicker) modalTicker.textContent = cleanTicker;
+  if (modalLogo) modalLogo.innerHTML = getStockLogoImg(cleanTicker, 'w-8 h-8');
+  if (extLink) extLink.href = `https://id.tradingview.com/symbols/IDX-${cleanTicker}/`;
+
+  const isLight = document.documentElement.classList.contains('light');
+  const theme = isLight ? 'light' : 'dark';
+
+  // Embed TradingView official interactive iframe widget
+  if (container) {
+    const symbolParam = encodeURIComponent(`IDX:${cleanTicker}`);
+    container.innerHTML = `
+      <iframe
+        id="tradingview_iframe"
+        src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=${symbolParam}&interval=D&hidesidetoolbar=0&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=%5B%5D&theme=${theme}&style=1&timezone=Asia%2FJakarta&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%5D&locale=id&utm_source=localhost&utm_medium=widget&utm_campaign=chart&utm_term=${symbolParam}"
+        style="width: 100%; height: 100%; border: none;"
+        allowtransparency="true"
+        scrolling="no"
+        allowfullscreen="true"
+      ></iframe>
+    `;
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeTradingViewModal() {
+  const modal = document.getElementById('tradingViewModal');
+  const container = document.getElementById('tradingViewWidgetContainer');
+  if (modal) modal.classList.add('hidden');
+  if (container) container.innerHTML = ''; // bersihkan iframe untuk menghemat memori
+}
+
 async function handleExcelUpload(fileList) {
   if (!fileList || !fileList.length) return;
   const formData = new FormData();

@@ -387,7 +387,20 @@
                 Histori Score
               </button>
             </div>
-            <span class="text-[10px] font-mono text-slate-500">25 Hari Bursa</span>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-mono text-slate-500">25 Hari</span>
+              <button
+                id="btnOpenTradingViewModal"
+                onclick="openTradingViewModal()"
+                class="flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 hover:bg-emerald-600/30 text-slate-300 hover:text-emerald-300 border border-slate-700 hover:border-emerald-500/40 text-[11px] font-semibold transition active:scale-95"
+                title="Buka Popup Chart Interaktif TradingView Full Screen untuk Analisis Candlestick"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+                <span class="hidden sm:inline">Perbesar</span>
+              </button>
+            </div>
           </div>
           <div class="h-48 w-full relative">
             <canvas id="inspectorChart"></canvas>
@@ -797,6 +810,59 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=14.0"></script>
+  <!-- POPUP MODAL: TRADINGVIEW ADVANCED REAL-TIME CHART -->
+  <div
+    id="tradingViewModal"
+    class="fixed inset-0 z-50 hidden bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4"
+  >
+    <div class="glass-panel w-full max-w-6xl h-[88vh] rounded-2xl flex flex-col border border-slate-700/80 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <!-- Modal Header -->
+      <div class="px-4 py-3 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between gap-3 shrink-0">
+        <div class="flex items-center gap-3">
+          <div id="tvModalLogo" class="shrink-0"></div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400 font-medium">TradingView Interactive Chart:</span>
+              <h3 id="tvModalTicker" class="text-base font-black font-mono text-white tracking-wide">BBCA</h3>
+              <span class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                IDX Live Stream
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400">Analisis candlestick lengkap dengan indikator teknikal &amp; drawing tools</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <a
+            id="tvModalExternalLink"
+            href="https://id.tradingview.com/symbols/IDX-BBCA/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition"
+            title="Buka di tab baru TradingView"
+          >
+            <span>Buka di Web TV</span>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+          <button
+            onclick="closeTradingViewModal()"
+            class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 flex items-center justify-center font-bold text-base transition"
+            title="Tutup (Esc)"
+          >
+            &times;
+          </button>
+        </div>
+      </div>
+
+      <!-- TradingView Widget Container -->
+      <div class="flex-1 w-full h-full bg-slate-950 relative" id="tradingViewWidgetContainer">
+        <!-- Iframe or TradingView script populated dynamically via app.js -->
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=15.0"></script>
 </body>
 </html>
