@@ -961,36 +961,36 @@ function renderTrackerTable(rows) {
       }
 
       const rowHighlight = isHighFlyer
-        ? 'hover:bg-slate-800/60 bg-emerald-950/20 border-l-2 border-emerald-400'
-        : 'hover:bg-slate-800/40';
+        ? 'hover:bg-slate-800/60 bg-emerald-950/20 border-l-4 border-emerald-400'
+        : 'hover:bg-slate-800/40 transition-colors';
 
       return `
       <tr class="${rowHighlight}">
-        <td class="py-2.5 pl-4 pr-2">
-          <div class="font-mono font-extrabold text-white cursor-pointer hover:text-emerald-300 flex items-center gap-1.5" onclick="selectStock('${r.ticker}')">
+        <td class="py-3 pl-4 pr-2">
+          <div class="font-mono font-extrabold text-sm text-white cursor-pointer hover:text-emerald-300 flex items-center gap-1.5 transition" onclick="selectStock('${r.ticker}')">
             <span>${r.ticker}</span>
-            ${isHighFlyer ? '<span class="text-[11px]" title="Terbang Tinggi">🚀</span>' : ''}
+            ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
           </div>
-          <div class="text-[10px] text-slate-500 truncate max-w-[140px]">${r.source === 'AUTO' ? '🤖 Auto' : '👤 Manual'}</div>
+          <div class="text-[10px] text-slate-400 truncate max-w-[140px] mt-0.5">${r.source === 'AUTO' ? '🤖 Auto' : '👤 Manual'}</div>
         </td>
-        <td class="py-2.5 px-2">
-          <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">${r.trigger_label || '-'}</span>
+        <td class="py-3 px-2">
+          <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">${r.trigger_label || '-'}</span>
           <span class="font-mono text-slate-300 ml-1 font-bold">${r.score ?? '-'}</span>
         </td>
-        <td class="py-2.5 px-2 font-mono text-slate-300">${r.signal_date}</td>
-        <td class="py-2.5 px-2 text-right font-mono text-emerald-300">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
-        <td class="py-2.5 px-2 text-right font-mono">
-          <span class="text-rose-400">${fmtNumber(r.stop_loss)}</span> / <span class="text-amber-300">${fmtNumber(r.target)}</span>
+        <td class="py-3 px-2 font-mono text-slate-300">${r.signal_date}</td>
+        <td class="py-3 px-2 text-right font-mono text-emerald-300 font-semibold">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
+        <td class="py-3 px-2 text-right font-mono">
+          <span class="text-rose-400 font-semibold">${fmtNumber(r.stop_loss)}</span> / <span class="text-amber-300 font-semibold">${fmtNumber(r.target)}</span>
         </td>
-        <td class="py-2.5 px-2 text-center">
-          <span class="inline-block px-2 py-0.5 rounded border text-[10px] font-bold ${statusCls}">${r.status}</span>
+        <td class="py-3 px-2 text-center">
+          <span class="inline-block px-2.5 py-0.5 rounded-lg border text-[10px] font-extrabold shadow-sm ${statusCls}">${r.status}</span>
         </td>
-        <td class="py-2.5 px-2 text-right font-mono text-slate-200">${entryCell}</td>
-        <td class="py-2.5 px-2 text-right font-mono text-slate-200">${exitOrLast}</td>
-        <td class="py-2.5 px-2 text-right font-mono font-bold">${pnlContent}</td>
-        <td class="py-2.5 px-2 text-[11px] text-slate-400 max-w-[240px]">${r.note || ''}</td>
-        <td class="py-2.5 pl-2 pr-4 text-right">
-          <button onclick="deleteSignal(${r.id})" class="text-slate-500 hover:text-rose-400 text-sm" title="Hapus sinyal">&times;</button>
+        <td class="py-3 px-2 text-right font-mono text-slate-200">${entryCell}</td>
+        <td class="py-3 px-2 text-right font-mono text-slate-200">${exitOrLast}</td>
+        <td class="py-3 px-2 text-right font-mono font-bold">${pnlContent}</td>
+        <td class="py-3 px-2 text-[11px] text-slate-400 max-w-[240px] leading-snug">${r.note || ''}</td>
+        <td class="py-3 pl-2 pr-4 text-right">
+          <button onclick="deleteSignal(${r.id})" class="text-slate-500 hover:text-rose-400 text-base font-bold transition" title="Hapus sinyal">&times;</button>
         </td>
       </tr>`;
     })
