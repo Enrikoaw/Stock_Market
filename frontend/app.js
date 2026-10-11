@@ -756,12 +756,12 @@ let currentTrackerSignals = [];
 let trackerSearchTerm = '';
 
 const TRACKER_STATUS_STYLE = {
-  WATCHLIST: 'bg-blue-500/15 text-blue-300 border-blue-500/40',
-  RUNNING: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
-  WIN: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
-  LOSS: 'bg-rose-500/15 text-rose-300 border-rose-500/40',
-  EXPIRED: 'bg-slate-500/15 text-slate-300 border-slate-500/40',
-  TIMEOUT: 'bg-purple-500/15 text-purple-300 border-purple-500/40',
+  WATCHLIST: 'bg-sky-500/20 text-sky-300 border-sky-400/50 shadow-sm shadow-sky-500/20',
+  RUNNING: 'bg-amber-500/25 text-amber-300 border-amber-400/60 shadow-sm shadow-amber-500/25',
+  WIN: 'bg-emerald-500/25 text-emerald-300 border-emerald-400/60 shadow-sm shadow-emerald-500/25',
+  LOSS: 'bg-rose-500/25 text-rose-300 border-rose-400/60 shadow-sm shadow-rose-500/25',
+  EXPIRED: 'bg-slate-700/40 text-slate-300 border-slate-600',
+  TIMEOUT: 'bg-purple-500/20 text-purple-300 border-purple-400/50 shadow-sm shadow-purple-500/20',
 };
 
 const fmtPctOrDash = (v) => (v === null || v === undefined ? '-' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`);
@@ -982,31 +982,57 @@ function renderTrackerTable(rows) {
 
       return `
       <tr class="${rowHighlight}">
+        <!-- Saham -->
         <td class="py-3 pl-4 pr-2">
-          <div class="font-mono font-extrabold text-sm text-white cursor-pointer hover:text-emerald-300 flex items-center gap-1.5 transition" onclick="selectStock('${r.ticker}')">
+          <div class="font-mono font-black text-sm text-white cursor-pointer hover:text-emerald-300 flex items-center gap-1.5 transition" onclick="selectStock('${r.ticker}')">
             <span>${r.ticker}</span>
             ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
           </div>
-          <div class="text-[10px] text-slate-400 truncate max-w-[140px] mt-0.5">${r.source === 'AUTO' ? '🤖 Auto' : '👤 Manual'}</div>
+          <div class="text-[10px] text-slate-400 truncate max-w-[140px] mt-0.5">${r.sector || (r.source === 'AUTO' ? '🤖 Auto Sinyal' : '👤 Watchlist Manual')}</div>
         </td>
+
+        <!-- Trigger & Score -->
         <td class="py-3 px-2">
-          <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">${r.trigger_label || '-'}</span>
-          <span class="font-mono text-slate-300 ml-1 font-bold">${r.score ?? '-'}</span>
+          <span class="inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${getTriggerBadgeClass(r.trigger_type)}">${r.trigger_label || '-'}</span>
+          <span class="font-mono text-white ml-1.5 font-extrabold text-xs">${r.score ?? '-'}</span>
         </td>
-        <td class="py-3 px-2 font-mono text-slate-300">${r.signal_date}</td>
-        <td class="py-3 px-2 text-right font-mono text-emerald-300 font-semibold">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
-        <td class="py-3 px-2 text-right font-mono">
-          <span class="text-rose-400 font-semibold">${fmtNumber(r.stop_loss)}</span> / <span class="text-amber-300 font-semibold">${fmtNumber(r.target)}</span>
+
+        <!-- Tanggal Sinyal -->
+        <td class="py-3 px-2 font-mono text-slate-300 text-xs">${r.signal_date}</td>
+
+        <!-- Zona Entry -->
+        <td class="py-3 px-2 text-right font-mono text-emerald-400 font-bold text-xs">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
+
+        <!-- SL / TP -->
+        <td class="py-3 px-2 text-right font-mono text-xs">
+          <span class="text-rose-400 font-bold">${fmtNumber(r.stop_loss)}</span> / <span class="text-emerald-300 font-bold">${fmtNumber(r.target)}</span>
         </td>
+
+        <!-- Status Pill Glowing (Matching Image) -->
         <td class="py-3 px-2 text-center">
-          <span class="inline-block px-2.5 py-0.5 rounded-lg border text-[10px] font-extrabold shadow-sm ${statusCls}">${r.status}</span>
+          <span class="inline-block px-3 py-1 rounded-full border text-[11px] font-black tracking-wide ${statusCls}">
+            ${r.status === 'RUNNING' ? 'Running' : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : r.status}
+          </span>
         </td>
-        <td class="py-3 px-2 text-right font-mono text-slate-200">${entryCell}</td>
-        <td class="py-3 px-2 text-right font-mono text-slate-200">${exitOrLast}</td>
-        <td class="py-3 px-2 text-right font-mono font-bold">${pnlContent}</td>
-        <td class="py-3 px-2 text-[11px] text-slate-400 max-w-[240px] leading-snug">${r.note || ''}</td>
+
+        <!-- Entry Price -->
+        <td class="py-3 px-2 text-right font-mono text-slate-100 font-semibold text-xs">${entryCell}</td>
+
+        <!-- Last Price -->
+        <td class="py-3 px-2 text-right font-mono text-slate-100 font-semibold text-xs">${exitOrLast}</td>
+
+        <!-- P/L Badge (Pill Hijau / Merah Matching Image) -->
+        <td class="py-3 px-2 text-right font-mono">
+          ${pnl !== null ? `
+            <span class="inline-block px-2.5 py-1 rounded-full text-xs font-black font-mono ${pnl >= 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/60 shadow-sm shadow-emerald-500/20' : 'bg-rose-500/20 text-rose-300 border border-rose-400/60 shadow-sm shadow-rose-500/20'}">
+              ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%
+            </span>
+          ` : '<span class="text-slate-500">-</span>'}
+        </td>
+
+        <!-- Action / Delete -->
         <td class="py-3 pl-2 pr-4 text-right">
-          <button onclick="deleteSignal(${r.id})" class="text-slate-500 hover:text-rose-400 text-base font-bold transition" title="Hapus sinyal">&times;</button>
+          <button onclick="deleteSignal(${r.id})" class="text-slate-500 hover:text-rose-400 text-base font-bold transition px-1" title="Hapus sinyal">&times;</button>
         </td>
       </tr>`;
     })

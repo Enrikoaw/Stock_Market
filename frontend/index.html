@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=10.1" />
+  <link rel="stylesheet" href="/static/styles.css?v=11.0" />
   <script>
     (function() {
       try {
@@ -465,67 +465,75 @@
         </div>
       </div>
 
-      <!-- Statistik utama (Ring Cards dengan Glowing Effect) -->
-      <div class="p-4 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2.5">
-        <div class="col-span-2 bg-slate-950/90 border border-emerald-500/30 rounded-2xl p-3.5 relative overflow-hidden group">
-          <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
-          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Win Rate (Decided)</div>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="tsWinRate" class="text-3xl font-black font-mono text-emerald-400">-</span>
-            <span id="tsDecided" class="text-[11px] font-mono text-slate-400"></span>
-          </div>
-          <div class="w-full h-2 bg-rose-500/30 rounded-full mt-2.5 overflow-hidden p-0.5 border border-slate-800">
-            <div id="tsWinBar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500 shadow-sm shadow-emerald-500/50" style="width:0%"></div>
-          </div>
-        </div>
+      <!-- Statistik utama Watchlist (Sesuai Persis Gambar: Win Rate circle, Watchlist, Running gold, Win TP, Loss SL) -->
+      <div class="p-4 bg-slate-900/60 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-4">
         
-        <div class="bg-slate-950/80 border border-sky-500/30 rounded-2xl p-3 hover:border-sky-500/50 transition">
-          <div class="text-[11px] font-semibold text-sky-300 flex items-center justify-between">
-            <span>Watchlist</span>
-            <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+        <!-- Win Rate Indicator -->
+        <div class="flex items-center gap-3">
+          <div>
+            <div class="text-xs font-semibold text-slate-300">Win Rate:</div>
+            <div class="w-20 h-1.5 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
+              <div id="tsWinBar" class="h-full bg-emerald-400 rounded-full" style="width: 68%"></div>
+            </div>
           </div>
-          <div id="tsWatch" class="text-2xl font-black font-mono text-sky-300 mt-1">0</div>
-          <div class="text-[10px] text-slate-500 mt-0.5">menunggu entry</div>
-        </div>
-
-        <div class="bg-slate-950/80 border border-amber-500/30 rounded-2xl p-3 hover:border-amber-500/50 transition">
-          <div class="text-[11px] font-semibold text-amber-300 flex items-center justify-between">
-            <span>Running</span>
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+          <div class="w-12 h-12 rounded-full border-2 border-emerald-400/80 flex items-center justify-center bg-emerald-500/10 shadow-lg shadow-emerald-500/20">
+            <span id="tsWinRate" class="text-xs font-mono font-black text-emerald-300">68.4%</span>
           </div>
-          <div id="tsRunning" class="text-2xl font-black font-mono text-amber-300 mt-1">0</div>
-          <div id="tsRunningPnl" class="text-[10px] font-mono text-amber-400/90 font-medium mt-0.5">floating -</div>
         </div>
 
-        <div class="bg-slate-950/80 border border-emerald-500/30 rounded-2xl p-3 hover:border-emerald-500/50 transition">
-          <div class="text-[11px] font-semibold text-emerald-300 flex items-center justify-between">
-            <span>Win (TP)</span>
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <!-- Watchlist Count -->
+        <div class="flex items-center gap-2.5">
+          <div>
+            <div class="text-xs font-semibold text-slate-300">Watchlist:</div>
+            <div class="w-16 h-1.5 bg-sky-500/30 rounded-full mt-1.5"></div>
           </div>
-          <div id="tsWin" class="text-2xl font-black font-mono text-emerald-400 mt-1">0</div>
-          <div id="tsAvgWin" class="text-[10px] font-mono text-emerald-400/90 font-medium mt-0.5">avg -</div>
-        </div>
-
-        <div class="bg-slate-950/80 border border-rose-500/30 rounded-2xl p-3 hover:border-rose-500/50 transition">
-          <div class="text-[11px] font-semibold text-rose-300 flex items-center justify-between">
-            <span>Loss (SL)</span>
-            <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+          <div class="w-10 h-10 rounded-full bg-sky-500/20 border border-sky-400/60 flex items-center justify-center text-sky-300 font-mono font-black text-sm shadow-sm shadow-sky-500/20">
+            <span id="tsWatch">14</span>
           </div>
-          <div id="tsLoss" class="text-2xl font-black font-mono text-rose-400 mt-1">0</div>
-          <div id="tsAvgLoss" class="text-[10px] font-mono text-rose-400/90 font-medium mt-0.5">avg -</div>
         </div>
 
-        <div class="bg-slate-950/80 border border-slate-700/80 rounded-2xl p-3 hover:border-slate-600 transition">
-          <div class="text-[11px] font-semibold text-slate-300">Expired</div>
-          <div id="tsExpired" class="text-2xl font-black font-mono text-slate-300 mt-1">0</div>
-          <div class="text-[10px] text-slate-500 mt-0.5">entry tak kena</div>
+        <!-- Running with Gold Floating and Mini Trend -->
+        <div class="flex items-center gap-3 bg-slate-950/60 px-3.5 py-1.5 rounded-2xl border border-amber-500/30 shadow-inner">
+          <div class="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-400/60 flex items-center justify-center text-amber-300 font-mono font-black text-sm shadow-sm shadow-amber-500/20">
+            <span id="tsRunning">6</span>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+              <span>Running:</span>
+              <span class="text-amber-400">📈</span>
+            </div>
+            <div id="tsRunningPnl" class="text-[10px] font-mono text-emerald-400 font-semibold mt-0.5">floating +5.2%</div>
+          </div>
         </div>
 
-        <div class="bg-slate-950/80 border border-purple-500/30 rounded-2xl p-3 hover:border-purple-500/50 transition">
-          <div class="text-[11px] font-semibold text-purple-300">Timeout</div>
-          <div id="tsTimeout" class="text-2xl font-black font-mono text-purple-300 mt-1">0</div>
-          <div class="text-[10px] text-slate-500 mt-0.5">lewat max hold</div>
+        <!-- Win (TP) Indicator -->
+        <div class="flex items-center gap-2.5">
+          <div>
+            <div class="text-xs font-semibold text-slate-300">Win TP:</div>
+            <div class="w-16 h-1.5 bg-emerald-500/40 rounded-full mt-1.5"></div>
+          </div>
+          <div class="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-400/60 flex items-center justify-center text-emerald-300 font-mono font-black text-sm shadow-sm shadow-emerald-500/20">
+            <span id="tsWin">28</span>
+          </div>
         </div>
+
+        <!-- Loss (SL) Indicator -->
+        <div class="flex items-center gap-2.5">
+          <div>
+            <div class="text-xs font-semibold text-slate-300">Loss SL:</div>
+            <div class="w-12 h-1.5 bg-rose-500/40 rounded-full mt-1.5"></div>
+          </div>
+          <div class="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-400/60 flex items-center justify-center text-rose-300 font-mono font-black text-sm shadow-sm shadow-rose-500/20">
+            <span id="tsLoss">7</span>
+          </div>
+        </div>
+
+        <!-- Hidden counters preserved for code logic -->
+        <span id="tsExpired" class="hidden">0</span>
+        <span id="tsTimeout" class="hidden">0</span>
+        <span id="tsAvgWin" class="hidden"></span>
+        <span id="tsAvgLoss" class="hidden"></span>
+        <span id="tsDecided" class="hidden"></span>
       </div>
 
       <div class="px-4 pb-4 grid grid-cols-2 md:grid-cols-4 gap-2.5">
@@ -543,45 +551,42 @@
         </div>
       </div>
 
-      <!-- Tabs status & Toolbar Pengurutan -->
-      <div class="px-4 py-3 border-t border-slate-800 bg-slate-900/40 flex flex-wrap items-center justify-between gap-3">
-        <div class="flex flex-wrap gap-1.5" id="trackerTabs">
-          <button data-tab="ALL" onclick="setTrackerTab('ALL')" class="tracker-tab">Semua</button>
+      <!-- Tabs status & Toolbar Pengurutan (Matching Image) -->
+      <div class="px-4 py-3 border-t border-slate-800/80 bg-slate-900/40 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2" id="trackerTabs">
+          <button data-tab="ALL" onclick="setTrackerTab('ALL')" class="tracker-tab">All</button>
           <button data-tab="WATCHLIST" onclick="setTrackerTab('WATCHLIST')" class="tracker-tab">Watchlist</button>
           <button data-tab="RUNNING" onclick="setTrackerTab('RUNNING')" class="tracker-tab">Running</button>
           <button data-tab="WIN" onclick="setTrackerTab('WIN')" class="tracker-tab">Win</button>
           <button data-tab="LOSS" onclick="setTrackerTab('LOSS')" class="tracker-tab">Loss</button>
-          <button data-tab="EXPIRED" onclick="setTrackerTab('EXPIRED')" class="tracker-tab">Expired</button>
-          <button data-tab="TIMEOUT" onclick="setTrackerTab('TIMEOUT')" class="tracker-tab">Timeout</button>
+          <button data-tab="EXPIRED" onclick="setTrackerTab('EXPIRED')" class="tracker-tab hidden">Expired</button>
+          <button data-tab="TIMEOUT" onclick="setTrackerTab('TIMEOUT')" class="tracker-tab hidden">Timeout</button>
         </div>
 
         <!-- Filter & Pengurutan Running Profit / Sinyal -->
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-3">
           <!-- Search box tracker -->
           <div class="relative">
+            <svg class="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+            </svg>
             <input
               id="trackerSearchInput"
               type="text"
-              placeholder="Cari kode saham..."
+              placeholder="Cari saham..."
               oninput="filterTrackerRows()"
-              class="w-36 pl-3 pr-2.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+              class="w-44 pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition shadow-inner"
             />
           </div>
 
           <!-- Sort Select -->
-          <div class="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 shadow-sm">
-            <span class="text-[11px] text-slate-400 font-medium flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
-              </svg>
-              Urut:
-            </span>
-            <select id="trackerSortSelect" onchange="changeTrackerSort(this.value)" class="bg-transparent text-xs text-amber-300 font-bold focus:outline-none cursor-pointer">
-              <option value="pnl_desc" class="bg-slate-900 text-white">🚀 Profit Terbanyak (Terbang Tinggi)</option>
-              <option value="pnl_asc" class="bg-slate-900 text-white">🔻 Profit Terendah / Drawdown</option>
-              <option value="id_desc" class="bg-slate-900 text-white">🕒 Sinyal Terbaru</option>
-              <option value="score_desc" class="bg-slate-900 text-white">⭐ Score Tertinggi</option>
-              <option value="ticker_asc" class="bg-slate-900 text-white">🔤 Kode Saham (A - Z)</option>
+          <div class="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-1.5 shadow-sm">
+            <select id="trackerSortSelect" onchange="changeTrackerSort(this.value)" class="bg-transparent text-xs text-slate-200 font-medium focus:outline-none cursor-pointer">
+              <option value="pnl_desc" class="bg-slate-900 text-white">Urutkan: Running Profit Terbanyak ▾</option>
+              <option value="pnl_asc" class="bg-slate-900 text-white">Urutkan: Profit Terendah / Drawdown</option>
+              <option value="id_desc" class="bg-slate-900 text-white">Urutkan: Sinyal Terbaru</option>
+              <option value="score_desc" class="bg-slate-900 text-white">Urutkan: Score Tertinggi</option>
+              <option value="ticker_asc" class="bg-slate-900 text-white">Urutkan: Kode Saham (A - Z)</option>
             </select>
           </div>
         </div>
@@ -591,19 +596,18 @@
         <table class="w-full text-left border-collapse text-xs">
           <thead>
             <tr class="border-b border-slate-800 bg-slate-900/95 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              <th class="py-3 pl-4 pr-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('ticker')">Saham <span id="sortIconTicker" class="font-mono text-[10px]"></span></th>
-              <th class="py-3 px-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('score')">Trigger · Score <span id="sortIconScore" class="font-mono text-[10px]"></span></th>
-              <th class="py-3 px-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('date')">Tgl Sinyal <span id="sortIconDate" class="font-mono text-[10px]"></span></th>
+              <th class="py-3 pl-4 pr-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('ticker')">Saham</th>
+              <th class="py-3 px-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('score')">Trigger &amp; Score</th>
+              <th class="py-3 px-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('date')">Tanggal Sinyal</th>
               <th class="py-3 px-2 text-right">Zona Entry</th>
               <th class="py-3 px-2 text-right">SL / TP</th>
               <th class="py-3 px-2 text-center">Status</th>
-              <th class="py-3 px-2 text-right">Entry</th>
-              <th class="py-3 px-2 text-right">Exit / Last</th>
+              <th class="py-3 px-2 text-right">Entry Price</th>
+              <th class="py-3 px-2 text-right">Last Price</th>
               <th class="py-3 px-2 text-right cursor-pointer hover:text-amber-300 select-none" onclick="toggleTrackerSort('pnl')" title="Klik untuk mengurutkan Profit Terbanyak / Terendah">
                 P/L <span id="sortIconPnl" class="font-mono text-[11px] text-amber-400">▼</span>
               </th>
-              <th class="py-3 px-2">Catatan</th>
-              <th class="py-3 pl-2 pr-4"></th>
+              <th class="py-3 pl-2 pr-4 text-right">Aksi</th>
             </tr>
           </thead>
           <tbody id="trackerTableBody" class="divide-y divide-slate-800/60"></tbody>
@@ -790,6 +794,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=10.1"></script>
+  <script src="/static/app.js?v=11.0"></script>
 </body>
 </html>
