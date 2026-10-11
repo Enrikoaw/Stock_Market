@@ -232,55 +232,46 @@ function renderScreenerTable(stocks) {
           onclick="selectStock('${s.ticker}')"
           class="stock-row ${isSelected ? 'selected-row' : ''}"
         >
-          <!-- Emiten -->
+          <!-- Ticker -->
           <td class="py-3 pl-4 pr-2">
-            <div class="font-mono font-extrabold text-sm text-white">${s.ticker}</div>
-            <div class="text-[11px] text-slate-400 truncate max-w-[130px]">${s.sector}</div>
+            <div class="font-mono font-black text-sm text-white">${s.ticker}</div>
+            <div class="text-[10px] text-slate-400 truncate max-w-[120px]">${s.sector}</div>
           </td>
 
-          <!-- Harga & Change -->
-          <td class="py-3 px-2 text-right font-mono">
-            <div class="font-bold text-slate-100">${fmtPrice(s.close)}</div>
-            <div class="text-[11px] font-semibold ${chgColor}">${fmtSignPct(s.pct_change)}</div>
+          <!-- Price -->
+          <td class="py-3 px-2 text-right font-mono font-bold text-slate-100 text-xs">
+            ${fmtPrice(s.close)}
           </td>
 
-          <!-- Volume Spike Ratio -->
+          <!-- Change -->
+          <td class="py-3 px-2 text-right font-mono text-xs font-bold ${chgColor}">
+            ${fmtSignPct(s.pct_change)}
+          </td>
+
+          <!-- Volume Spike Badge -->
           <td class="py-3 px-2 text-center font-mono">
-            <div class="${volColor}">${s.vol_ratio.toFixed(2)}x <span class="text-[10px] font-normal text-slate-400">MA20</span></div>
-            <div class="text-[10px] text-slate-400">Close Range: ${s.closing_range_pct}%</div>
-          </td>
-
-          <!-- Smart Money Trigger Badge -->
-          <td class="py-3 px-2 text-center">
-            <span class="inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold ${badgeCls}">
-              ${s.trigger_label}
+            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/35' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">
+              ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
             </span>
           </td>
 
-          <!-- Bandarmology Top 3 B/S -->
-          <td class="py-3 px-2">
-            <div class="flex items-center gap-1.5 font-mono">
-              <span class="${bsrColor}">${s.top3_bsr.toFixed(2)}x</span>
-              <span class="text-[10px] text-slate-400">(${s.bdr_pct >= 0 ? '+' : ''}${s.bdr_pct.toFixed(1)}% Vol)</span>
-            </div>
-            <div class="text-[10px] text-slate-400 mt-0.5">
-              B: <span class="text-emerald-300 font-mono">${s.top_buyers}</span> | S: <span class="text-rose-300 font-mono">${s.top_sellers}</span>
-            </div>
-          </td>
-
-          <!-- Ticket Size & Foreign Flow -->
-          <td class="py-3 px-2 text-right font-mono">
-            <div class="text-slate-200">${s.ticket_size.toFixed(0)} <span class="text-[10px] text-slate-400">Lot/Tx (${s.ticket_ratio.toFixed(1)}x)</span></div>
-            <div class="text-[11px] ${foreignColor}">F: ${s.net_foreign_pct >= 0 ? '+' : ''}${s.net_foreign_pct.toFixed(1)}% (${s.net_foreign_b_idr >= 0 ? '+' : ''}${s.net_foreign_b_idr}B)</div>
-          </td>
-
-          <!-- Smart Money Score -->
-          <td class="py-3 pl-2 pr-4 text-right">
-            <div class="flex items-center justify-end gap-2">
-              <div class="w-16 bg-slate-800 h-2 rounded-full overflow-hidden">
-                <div class="h-full bg-gradient-to-r ${barGrad}" style="width: ${s.smart_money_score}%"></div>
+          <!-- Smart Money Score with Progress Bar -->
+          <td class="py-3 px-2 text-right">
+            <div class="flex items-center justify-end gap-2.5">
+              <span class="font-mono font-extrabold text-xs text-white">${s.smart_money_score}</span>
+              <div class="w-20 bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-emerald-400 to-teal-300 rounded-full" style="width: ${s.smart_money_score}%"></div>
               </div>
-              <span class="font-mono font-extrabold text-sm w-7 text-right text-white">${s.smart_money_score}</span>
+            </div>
+          </td>
+
+          <!-- Broker Summary -->
+          <td class="py-3 pl-2 pr-4 text-xs font-mono">
+            <div class="text-[11px] text-slate-300">
+              Top B: <span class="text-emerald-400 font-bold">${s.top_buyers || '-'}</span> | S: <span class="text-rose-400 font-bold">${s.top_sellers || '-'}</span>
+            </div>
+            <div class="text-[10px] text-slate-400">
+              Ratio: <span class="${bsrColor}">${s.top3_bsr.toFixed(2)}x</span> · Net F: <span class="${foreignColor}">${s.net_foreign_pct >= 0 ? '+' : ''}${s.net_foreign_pct.toFixed(1)}%</span>
             </div>
           </td>
         </tr>
@@ -328,6 +319,17 @@ function renderInspectorPanel(d) {
   document.getElementById('p4Score').textContent = `${d.foreign_score}/15`;
   document.getElementById('p5Score').textContent = `${d.structure_score}/15`;
 
+  const bar1 = document.getElementById('p1Bar');
+  const bar2 = document.getElementById('p2Bar');
+  const bar3 = document.getElementById('p3Bar');
+  const bar4 = document.getElementById('p4Bar');
+  const bar5 = document.getElementById('p5Bar');
+  if (bar1) bar1.style.width = `${Math.min(100, Math.round((d.vsa_score / 25) * 100))}%`;
+  if (bar2) bar2.style.width = `${Math.min(100, Math.round((d.bandar_score / 30) * 100))}%`;
+  if (bar3) bar3.style.width = `${Math.min(100, Math.round((d.ticket_score / 15) * 100))}%`;
+  if (bar4) bar4.style.width = `${Math.min(100, Math.round((d.foreign_score / 15) * 100))}%`;
+  if (bar5) bar5.style.width = `${Math.min(100, Math.round((d.structure_score / 15) * 100))}%`;
+
   // Auto Trading Plan
   const plan = d.trading_plan;
   const biasEl = document.getElementById('planActionBias');
@@ -339,9 +341,10 @@ function renderInspectorPanel(d) {
   }
 
   document.getElementById('planEntryZone').textContent = `${fmtPrice(plan.entry_low)} - ${fmtNumber(plan.entry_high)}`;
-  document.getElementById('planBandarAvg').textContent = `${fmtPrice(plan.bandar_avg_buy)} (${fmtSignPct(plan.diff_bandar_avg_pct)})`;
-  document.getElementById('planStopLoss').textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct}%)`;
-  document.getElementById('planTargets').textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct}%) / ${fmtNumber(plan.target_2)}`;
+  const slEl = document.getElementById('planStopLoss');
+  if (slEl) slEl.textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct}%)`;
+  const tgtEl = document.getElementById('planTargets');
+  if (tgtEl) tgtEl.textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct}%)`;
   document.getElementById('planRationale').textContent = `${plan.rationale} (Risk/Reward = ${plan.risk_reward})`;
 
   // Render 5-Pillar Checklist

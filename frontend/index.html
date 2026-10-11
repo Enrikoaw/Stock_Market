@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=9.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=10.0" />
   <script>
     (function() {
       try {
@@ -135,78 +135,56 @@
     <!-- 4 KPI SUMMARY CARDS (CLICKABLE TO FILTER) -->
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
       <!-- KPI 1: Total Emiten -->
-      <div id="kpiAll" onclick="applyQuickFilter('ALL')" class="kpi-card active-filter glass-panel rounded-2xl p-4 flex items-center justify-between group">
-        <div>
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 group-hover:text-blue-300 transition">Total Emiten Dianalisis</p>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="kpiTotalEmiten" class="text-2xl font-black font-mono text-white">0</span>
-            <span id="kpiAvgScore" class="text-xs font-mono text-slate-400">Avg: 0</span>
+      <div id="kpiAll" onclick="applyQuickFilter('ALL')" class="kpi-card active-filter rounded-2xl p-4 flex flex-col justify-between">
+        <div class="flex items-start justify-between">
+          <p class="text-xs font-medium text-slate-400">Total Emiten</p>
+          <div class="w-7 h-7 rounded-lg bg-slate-800/80 flex items-center justify-center text-slate-400 text-xs">
+            📈
           </div>
-          <p class="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> Klik untuk semua emiten
-          </p>
         </div>
-        <div class="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 group-hover:scale-110 group-hover:bg-blue-500/20 transition">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-          </svg>
+        <div class="mt-2">
+          <span id="kpiTotalEmiten" class="text-3xl font-extrabold font-mono text-white tracking-tight">843</span>
         </div>
       </div>
 
       <!-- KPI 2: Markup Breakout Signals -->
-      <div id="kpiMarkup" onclick="applyQuickFilter('MARKUP_BREAKOUT')" class="kpi-card glass-panel rounded-2xl p-4 flex items-center justify-between group">
-        <div>
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-amber-300/90 group-hover:text-amber-200 transition">Markup Breakout Triggers</p>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="kpiMarkupCount" class="text-2xl font-black font-mono text-amber-400">0</span>
-            <span class="text-xs text-amber-300/80 font-medium">Momentum Ledakan</span>
+      <div id="kpiMarkup" onclick="applyQuickFilter('MARKUP_BREAKOUT')" class="kpi-card rounded-2xl p-4 flex flex-col justify-between border-emerald-500/40 bg-gradient-to-br from-emerald-950/20 to-slate-900/60 shadow-lg shadow-emerald-950/20">
+        <div class="flex items-start justify-between">
+          <p class="text-xs font-semibold text-emerald-400">Markup Breakout</p>
+          <div class="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold">
+            ↗
           </div>
-          <p class="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Vol Spike &ge; 1.8x + HAKA
-          </p>
         </div>
-        <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-110 group-hover:bg-amber-500/20 transition">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
+        <div class="mt-2 flex items-baseline gap-2">
+          <span id="kpiMarkupCount" class="text-3xl font-extrabold font-mono text-emerald-400 tracking-tight">24</span>
+          <span class="text-xs font-mono font-semibold text-emerald-400/90">(▲ 5.2%)</span>
         </div>
       </div>
 
       <!-- KPI 3: Strong & Silent Accumulation -->
-      <div id="kpiAccum" onclick="applyQuickFilter('ACCUM_ALL')" class="kpi-card glass-panel rounded-2xl p-4 flex items-center justify-between group">
-        <div>
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-emerald-300/90 group-hover:text-emerald-200 transition">Big &amp; Silent Accumulation</p>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="kpiAccumCount" class="text-2xl font-black font-mono text-emerald-400">0</span>
-            <span class="text-xs text-emerald-300/80 font-medium">Smart Money Masuk</span>
+      <div id="kpiAccum" onclick="applyQuickFilter('ACCUM_ALL')" class="kpi-card rounded-2xl p-4 flex flex-col justify-between">
+        <div class="flex items-start justify-between">
+          <p class="text-xs font-medium text-slate-400">Accumulation</p>
+          <div class="w-7 h-7 rounded-lg bg-sky-500/20 flex items-center justify-center text-sky-400 text-xs font-bold">
+            ↗
           </div>
-          <p class="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Top 3 B/S &ge; 1.35x
-          </p>
         </div>
-        <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-500/20 transition">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+        <div class="mt-2">
+          <span id="kpiAccumCount" class="text-3xl font-extrabold font-mono text-white tracking-tight">56</span>
         </div>
       </div>
 
       <!-- KPI 4: Distribution Warnings -->
-      <div id="kpiDist" onclick="applyQuickFilter('DISTRIBUTION_WARNING')" class="kpi-card glass-panel rounded-2xl p-4 flex items-center justify-between group">
-        <div>
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-rose-300/90 group-hover:text-rose-200 transition">Distribution Warnings</p>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="kpiDistCount" class="text-2xl font-black font-mono text-rose-400">0</span>
-            <span class="text-xs text-rose-300/80 font-medium">Bandar Jualan</span>
+      <div id="kpiDist" onclick="applyQuickFilter('DISTRIBUTION_WARNING')" class="kpi-card rounded-2xl p-4 flex flex-col justify-between">
+        <div class="flex items-start justify-between">
+          <p class="text-xs font-medium text-slate-400">Distribution Warning</p>
+          <div class="w-7 h-7 rounded-lg bg-rose-500/20 flex items-center justify-center text-rose-400 text-xs font-bold">
+            ↘
           </div>
-          <p class="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Top Seller Dominan
-          </p>
         </div>
-        <div class="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 group-hover:scale-110 group-hover:bg-rose-500/20 transition">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
+        <div class="mt-2 flex items-baseline gap-2">
+          <span id="kpiDistCount" class="text-3xl font-extrabold font-mono text-white tracking-tight">12</span>
+          <span class="text-xs font-mono font-semibold text-rose-400/90">(▼ 1.8%)</span>
         </div>
       </div>
     </section>
@@ -216,17 +194,32 @@
 
       <!-- LEFT/CENTER PANEL: SCREENER CONTROLS & TABLE (8 Cols on XL) -->
       <div class="xl:col-span-8 glass-panel rounded-2xl overflow-hidden flex flex-col border border-slate-800 shadow-xl">
+        <!-- Sub-Header Pill Navigation (matching image 2) -->
+        <div class="px-4 pt-3.5 pb-2 flex items-center justify-between border-b border-slate-800/80">
+          <div class="flex items-center gap-2">
+            <button class="px-3.5 py-1.5 rounded-xl bg-slate-800 text-white font-bold text-xs border border-slate-700 shadow-sm flex items-center gap-1.5">
+              <span>Stock Screener</span>
+            </button>
+            <button onclick="document.getElementById('trackerSection').scrollIntoView({behavior: 'smooth'})" class="px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-white font-medium text-xs border border-slate-800 transition">
+              Tracking &amp; Watchlist ▾
+            </button>
+          </div>
+          <div class="text-[11px] font-mono text-slate-400">
+            Realtime IDX Stream
+          </div>
+        </div>
+
         <!-- Filter Bar -->
-        <div class="p-3.5 border-b border-slate-800 bg-slate-900/70 flex flex-wrap items-center justify-between gap-2.5">
+        <div class="p-3.5 border-b border-slate-800 bg-slate-900/50 flex flex-wrap items-center justify-between gap-2.5">
           <!-- Search Box -->
-          <div class="relative flex-1 min-w-[220px]">
+          <div class="relative flex-1 min-w-[200px]">
             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
             </svg>
             <input
               id="filterSearch"
               type="text"
-              placeholder="Cari kode saham (BBCA, BREN), sektor, atau broker (ZP, MG)..."
+              placeholder="Cari kode saham (BBCA, BREN)..."
               class="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition shadow-inner"
             />
           </div>
@@ -234,7 +227,7 @@
           <!-- Filter Trigger Dropdown -->
           <div class="flex flex-wrap items-center gap-2">
             <select id="filterTrigger" class="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 transition shadow-sm">
-              <option value="ALL">Semua Trigger</option>
+              <option value="ALL">All Filters / Trigger ▾</option>
               <option value="ACCUM_ALL">🔥 Semua Sinyal Akumulasi</option>
               <option value="MARKUP_BREAKOUT">⚡ Markup Breakout</option>
               <option value="BIG_ACCUMULATION">🐋 Big Accumulation</option>
@@ -275,13 +268,12 @@
           <table class="w-full text-left border-collapse">
             <thead>
               <tr class="border-b border-slate-800 bg-slate-900/90 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                <th class="py-3 pl-4 pr-2">Emiten</th>
-                <th class="py-3 px-2 text-right">Harga &amp; Chg</th>
-                <th class="py-3 px-2 text-center">Vol Spike (MA20)</th>
-                <th class="py-3 px-2 text-center">Smart Money Trigger</th>
-                <th class="py-3 px-2">Bandarmology (Top 3 B/S)</th>
-                <th class="py-3 px-2 text-right">Ticket &amp; Foreign</th>
-                <th class="py-3 pl-2 pr-4 text-right">SM Score</th>
+                <th class="py-3 pl-4 pr-2">Ticker</th>
+                <th class="py-3 px-2 text-right">Price</th>
+                <th class="py-3 px-2 text-right">Change</th>
+                <th class="py-3 px-2 text-center">Volume Spike</th>
+                <th class="py-3 px-2 text-right">Smart Money Score</th>
+                <th class="py-3 pl-2 pr-4">Broker Summary</th>
               </tr>
             </thead>
             <tbody id="screenerTableBody" class="divide-y divide-slate-800/70 text-xs">
@@ -304,46 +296,75 @@
       <!-- RIGHT PANEL: STOCK DETAIL INSPECTOR (4 Cols on XL) -->
       <div class="xl:col-span-4 glass-panel rounded-xl p-4 space-y-4 sticky top-20">
         <!-- Header Saham Terpilih -->
+        <!-- Header Saham Terpilih (Matching Image 2) -->
         <div class="flex items-start justify-between border-b border-slate-800 pb-3">
           <div>
             <div class="flex items-center gap-2">
-              <h2 id="inspTicker" class="text-xl font-extrabold font-mono text-white">BBCA</h2>
-              <span id="inspTriggerBadge" class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full badge-markup">Markup Breakout</span>
+              <span class="text-xs text-slate-400 font-medium">Stock Details:</span>
+              <h2 id="inspTicker" class="text-lg font-black font-mono text-white">BBCA</h2>
+              <span id="inspSector" class="text-xs text-slate-400 truncate max-w-[150px]">(Bank Central Asia Tbk)</span>
             </div>
-            <p id="inspSector" class="text-xs text-slate-400 mt-0.5">Banking • Update: 2026-10-08</p>
+            <div class="mt-1 flex items-center gap-1.5">
+              <span id="inspTriggerBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded-full badge-markup">Markup Breakout</span>
+            </div>
           </div>
           <div class="text-right">
-            <div id="inspPrice" class="text-lg font-extrabold font-mono text-white">Rp 9,850</div>
-            <div id="inspPctChange" class="text-xs font-mono font-semibold text-emerald-400">+3.45%</div>
+            <div id="inspPrice" class="text-xl font-black font-mono text-white">Rp 9,850</div>
+            <div id="inspPctChange" class="text-xs font-mono font-bold text-emerald-400">+3.45%</div>
           </div>
         </div>
 
-        <!-- 5-PILLAR SCORE BREAKDOWN MINI BARS -->
-        <div class="bg-slate-950/80 border border-slate-800/90 rounded-xl p-3">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-xs font-semibold text-slate-300">Komposisi 5 Pilar Smart Money</span>
-            <span id="inspTotalScoreBadge" class="font-mono text-xs font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Score: 88 / 100</span>
+        <!-- 5-PILLAR SCORE BREAKDOWN (Matching Image 2 Progress Bars) -->
+        <div class="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold text-white tracking-wide">5-Pillar Score</span>
+            <span id="inspTotalScoreBadge" class="font-mono text-xs font-extrabold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Score: 88 / 100</span>
           </div>
-          <div class="grid grid-cols-5 gap-1.5 text-center">
-            <div class="bg-slate-900/90 rounded-lg p-1.5 border border-slate-800">
-              <div class="text-[10px] text-slate-400">VSA/Vol</div>
-              <div id="p1Score" class="text-xs font-mono font-bold text-emerald-400 mt-0.5">22/25</div>
+          <div class="space-y-2 text-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400 text-[11px]">Fundamental (VSA)</span>
+              <div class="flex items-center gap-2">
+                <div class="w-24 bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div id="p1Bar" class="h-full bg-emerald-400 rounded-full" style="width: 88%"></div>
+                </div>
+                <span id="p1Score" class="font-mono text-[11px] font-bold text-slate-200 w-8 text-right">22/25</span>
+              </div>
             </div>
-            <div class="bg-slate-900/90 rounded-lg p-1.5 border border-slate-800">
-              <div class="text-[10px] text-slate-400">Bandar</div>
-              <div id="p2Score" class="text-xs font-mono font-bold text-emerald-400 mt-0.5">27/30</div>
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400 text-[11px]">Bandarmology</span>
+              <div class="flex items-center gap-2">
+                <div class="w-24 bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div id="p2Bar" class="h-full bg-emerald-400 rounded-full" style="width: 90%"></div>
+                </div>
+                <span id="p2Score" class="font-mono text-[11px] font-bold text-slate-200 w-8 text-right">27/30</span>
+              </div>
             </div>
-            <div class="bg-slate-900/90 rounded-lg p-1.5 border border-slate-800">
-              <div class="text-[10px] text-slate-400">Ticket</div>
-              <div id="p3Score" class="text-xs font-mono font-bold text-blue-400 mt-0.5">13/15</div>
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400 text-[11px]">Ticket Size</span>
+              <div class="flex items-center gap-2">
+                <div class="w-24 bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div id="p3Bar" class="h-full bg-emerald-400 rounded-full" style="width: 85%"></div>
+                </div>
+                <span id="p3Score" class="font-mono text-[11px] font-bold text-slate-200 w-8 text-right">13/15</span>
+              </div>
             </div>
-            <div class="bg-slate-900/90 rounded-lg p-1.5 border border-slate-800">
-              <div class="text-[10px] text-slate-400">Foreign</div>
-              <div id="p4Score" class="text-xs font-mono font-bold text-purple-400 mt-0.5">13/15</div>
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400 text-[11px]">Foreign Flow</span>
+              <div class="flex items-center gap-2">
+                <div class="w-24 bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div id="p4Bar" class="h-full bg-emerald-400 rounded-full" style="width: 85%"></div>
+                </div>
+                <span id="p4Score" class="font-mono text-[11px] font-bold text-slate-200 w-8 text-right">13/15</span>
+              </div>
             </div>
-            <div class="bg-slate-900/90 rounded-lg p-1.5 border border-slate-800">
-              <div class="text-[10px] text-slate-400">Struktur</div>
-              <div id="p5Score" class="text-xs font-mono font-bold text-amber-400 mt-0.5">13/15</div>
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400 text-[11px]">Struktur Tren</span>
+              <div class="flex items-center gap-2">
+                <div class="w-24 bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div id="p5Bar" class="h-full bg-emerald-400 rounded-full" style="width: 85%"></div>
+                </div>
+                <span id="p5Score" class="font-mono text-[11px] font-bold text-slate-200 w-8 text-right">13/15</span>
+              </div>
             </div>
           </div>
         </div>
@@ -388,22 +409,22 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2 text-xs">
-            <div class="bg-slate-950/90 p-2.5 rounded-xl border border-slate-800">
-              <div class="text-[10px] text-slate-400 font-medium">Area Entry Ideal</div>
-              <div id="planEntryZone" class="font-mono font-bold text-emerald-400 mt-0.5">Rp 9,700 - 9,850</div>
+          <div class="space-y-1.5 text-xs">
+            <div class="flex items-center justify-between bg-slate-950/90 px-3 py-2 rounded-xl border border-slate-800">
+              <span class="text-xs text-slate-400 font-medium">Entry Zone:</span>
+              <span id="planEntryZone" class="font-mono font-bold text-emerald-400">9600 - 9700</span>
             </div>
-            <div class="bg-slate-950/90 p-2.5 rounded-xl border border-slate-800">
-              <div class="text-[10px] text-slate-400 font-medium">Modal Avg Bandar (5H)</div>
-              <div id="planBandarAvg" class="font-mono font-bold text-blue-300 mt-0.5">Rp 9,675 (+1.8%)</div>
+            <div class="flex items-center justify-between bg-slate-950/90 px-3 py-2 rounded-xl border border-slate-800">
+              <span class="text-xs text-slate-400 font-medium">Stop Loss:</span>
+              <span id="planStopLoss" class="font-mono font-bold text-rose-400">9400</span>
             </div>
-            <div class="bg-slate-950/90 p-2.5 rounded-xl border border-slate-800">
-              <div class="text-[10px] text-slate-400 font-medium">Stop Loss (SL)</div>
-              <div id="planStopLoss" class="font-mono font-bold text-rose-400 mt-0.5">Rp 9,350 (-4.1%)</div>
+            <div class="flex items-center justify-between bg-slate-950/90 px-3 py-2 rounded-xl border border-slate-800">
+              <span class="text-xs text-slate-400 font-medium">Target TP1:</span>
+              <span id="planTargets" class="font-mono font-bold text-emerald-400">10100</span>
             </div>
-            <div class="bg-slate-950/90 p-2.5 rounded-xl border border-slate-800">
-              <div class="text-[10px] text-slate-400 font-medium">Target TP1 / TP2</div>
-              <div id="planTargets" class="font-mono font-bold text-amber-300 mt-0.5">10,450 / 11,150</div>
+            <div class="flex items-center justify-between bg-slate-950/90 px-3 py-2 rounded-xl border border-slate-800">
+              <span class="text-xs text-slate-400 font-medium">Target TP2:</span>
+              <span class="font-mono font-bold text-emerald-400">10450</span>
             </div>
           </div>
 
@@ -768,6 +789,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=9.0"></script>
+  <script src="/static/app.js?v=10.0"></script>
 </body>
 </html>
