@@ -394,6 +394,14 @@ function renderInspectorPanel(d) {
   if (slEl) slEl.textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct}%)`;
   const tgtEl = document.getElementById('planTargets');
   if (tgtEl) tgtEl.textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct}%)`;
+  const tgt2El = document.getElementById('planTarget2');
+  if (tgt2El) {
+    if (plan.target_2 && plan.target_2 > 0) {
+      tgt2El.textContent = `${fmtNumber(plan.target_2)} (+${plan.target_2_pct}%)`;
+    } else {
+      tgt2El.textContent = '-';
+    }
+  }
   const pr = document.getElementById('planRationale');
   if (pr) pr.textContent = `${plan.rationale} (Risk/Reward = ${plan.risk_reward})`;
 
