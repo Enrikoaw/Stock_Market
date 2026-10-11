@@ -79,6 +79,22 @@ function getScoreColor(score) {
   return 'from-rose-600 to-red-400 text-rose-300';
 }
 
+function getStockLogoImg(ticker, sizeCls = 'w-7 h-7') {
+  if (!ticker) return '';
+  const cleanTicker = ticker.trim().toUpperCase();
+  const cdnUrl = `https://assets.stockbit.com/logos/companies/${cleanTicker}.png`;
+  const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanTicker)}&background=1e293b&color=38bdf8&bold=true&length=2`;
+  return `
+    <img
+      src="${cdnUrl}"
+      alt="${cleanTicker}"
+      loading="lazy"
+      class="${sizeCls} rounded-full bg-slate-900 border border-slate-700/60 object-contain p-0.5 shrink-0 shadow-sm inline-block"
+      onerror="this.onerror=null; this.src='${fallbackUrl}';"
+    />
+  `;
+}
+
 function showToast(msg, type = 'success') {
   const banner = document.getElementById('toastBanner');
   const text = document.getElementById('toastMessage');
@@ -237,10 +253,15 @@ function renderScreenerTable(stocks) {
           onclick="selectStock('${s.ticker}')"
           class="stock-row ${isSelected ? 'selected-row' : ''}"
         >
-          <!-- Ticker -->
+          <!-- Ticker & Logo -->
           <td class="py-3 pl-4 pr-2">
-            <div class="font-mono font-black text-sm text-white">${s.ticker}</div>
-            <div class="text-[10px] text-slate-400 truncate max-w-[120px]">${s.sector}</div>
+            <div class="flex items-center gap-2.5">
+              ${getStockLogoImg(s.ticker, 'w-8 h-8')}
+              <div>
+                <div class="font-mono font-black text-sm text-white">${s.ticker}</div>
+                <div class="text-[10px] text-slate-400 truncate max-w-[120px]">${s.sector}</div>
+              </div>
+            </div>
           </td>
 
           <!-- Price -->
@@ -304,6 +325,9 @@ async function selectStock(ticker) {
 }
 
 function renderInspectorPanel(d) {
+  const logoEl = document.getElementById('inspLogoContainer');
+  if (logoEl) logoEl.innerHTML = getStockLogoImg(d.ticker, 'w-10 h-10');
+
   document.getElementById('inspTicker').textContent = d.ticker;
   const badgeEl = document.getElementById('inspTriggerBadge');
   badgeEl.textContent = d.trigger_label;
@@ -984,11 +1008,16 @@ function renderTrackerTable(rows) {
       <tr class="${rowHighlight}">
         <!-- Saham -->
         <td class="py-3 pl-4 pr-2">
-          <div class="font-mono font-black text-sm text-white cursor-pointer hover:text-emerald-300 flex items-center gap-1.5 transition" onclick="selectStock('${r.ticker}')">
-            <span>${r.ticker}</span>
-            ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
+          <div class="flex items-center gap-2.5">
+            ${getStockLogoImg(r.ticker, 'w-7 h-7')}
+            <div>
+              <div class="font-mono font-black text-sm text-white cursor-pointer hover:text-emerald-300 flex items-center gap-1.5 transition" onclick="selectStock('${r.ticker}')">
+                <span>${r.ticker}</span>
+                ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
+              </div>
+              <div class="text-[10px] text-slate-400 truncate max-w-[140px] mt-0.5">${r.sector || (r.source === 'AUTO' ? '🤖 Auto Sinyal' : '👤 Watchlist Manual')}</div>
+            </div>
           </div>
-          <div class="text-[10px] text-slate-400 truncate max-w-[140px] mt-0.5">${r.sector || (r.source === 'AUTO' ? '🤖 Auto Sinyal' : '👤 Watchlist Manual')}</div>
         </td>
 
         <!-- Trigger & Score -->
