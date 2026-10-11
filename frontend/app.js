@@ -144,11 +144,16 @@ async function loadScreenerData(preserveSelection = false) {
 
 function updateKPICards(kpis, currentTrigger) {
   if (!kpis) return;
-  document.getElementById('kpiTotalEmiten').textContent = kpis.total_emiten;
-  document.getElementById('kpiAvgScore').textContent = `Avg Score: ${kpis.avg_smart_money_score}`;
-  document.getElementById('kpiMarkupCount').textContent = kpis.markup_triggers;
-  document.getElementById('kpiAccumCount').textContent = kpis.accum_triggers;
-  document.getElementById('kpiDistCount').textContent = kpis.distribution_warnings;
+  const elTotal = document.getElementById('kpiTotalEmiten');
+  if (elTotal) elTotal.textContent = kpis.total_emiten;
+  const elAvg = document.getElementById('kpiAvgScore');
+  if (elAvg) elAvg.textContent = `Avg: ${kpis.avg_smart_money_score}`;
+  const elMarkup = document.getElementById('kpiMarkupCount');
+  if (elMarkup) elMarkup.textContent = kpis.markup_triggers;
+  const elAccum = document.getElementById('kpiAccumCount');
+  if (elAccum) elAccum.textContent = kpis.accum_triggers;
+  const elDist = document.getElementById('kpiDistCount');
+  if (elDist) elDist.textContent = kpis.distribution_warnings;
 
   // Highlight active KPI card
   const mapCard = {
@@ -308,16 +313,20 @@ function renderInspectorPanel(d) {
   document.getElementById('inspPrice').textContent = fmtPrice(d.close);
 
   const chgEl = document.getElementById('inspPctChange');
-  chgEl.textContent = `${fmtSignPct(d.pct_change)} (${ fmtNumber(d.volume_lot) } Lot)`;
-  chgEl.className = `text-xs font-mono font-semibold ${d.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+  if (chgEl) {
+    chgEl.textContent = `${fmtSignPct(d.pct_change)} (${ fmtNumber(d.volume_lot) } Lot)`;
+    chgEl.className = `text-xs font-mono font-semibold ${d.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+  }
 
   // 5-Pillar Scores
-  document.getElementById('inspTotalScoreBadge').textContent = `Score: ${d.smart_money_score} / 100`;
-  document.getElementById('p1Score').textContent = `${d.vsa_score}/25`;
-  document.getElementById('p2Score').textContent = `${d.bandar_score}/30`;
-  document.getElementById('p3Score').textContent = `${d.ticket_score}/15`;
-  document.getElementById('p4Score').textContent = `${d.foreign_score}/15`;
-  document.getElementById('p5Score').textContent = `${d.structure_score}/15`;
+  const totalScoreBadge = document.getElementById('inspTotalScoreBadge');
+  if (totalScoreBadge) totalScoreBadge.textContent = `Score: ${d.smart_money_score} / 100`;
+
+  const p1 = document.getElementById('p1Score'); if (p1) p1.textContent = `${d.vsa_score}/25`;
+  const p2 = document.getElementById('p2Score'); if (p2) p2.textContent = `${d.bandar_score}/30`;
+  const p3 = document.getElementById('p3Score'); if (p3) p3.textContent = `${d.ticket_score}/15`;
+  const p4 = document.getElementById('p4Score'); if (p4) p4.textContent = `${d.foreign_score}/15`;
+  const p5 = document.getElementById('p5Score'); if (p5) p5.textContent = `${d.structure_score}/15`;
 
   const bar1 = document.getElementById('p1Bar');
   const bar2 = document.getElementById('p2Bar');
@@ -333,19 +342,23 @@ function renderInspectorPanel(d) {
   // Auto Trading Plan
   const plan = d.trading_plan;
   const biasEl = document.getElementById('planActionBias');
-  biasEl.textContent = plan.action_bias;
-  if (d.trigger_type === 'DISTRIBUTION_WARNING') {
-    biasEl.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30';
-  } else {
-    biasEl.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+  if (biasEl) {
+    biasEl.textContent = plan.action_bias;
+    if (d.trigger_type === 'DISTRIBUTION_WARNING') {
+      biasEl.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30';
+    } else {
+      biasEl.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+    }
   }
 
-  document.getElementById('planEntryZone').textContent = `${fmtPrice(plan.entry_low)} - ${fmtNumber(plan.entry_high)}`;
+  const pez = document.getElementById('planEntryZone');
+  if (pez) pez.textContent = `${fmtPrice(plan.entry_low)} - ${fmtNumber(plan.entry_high)}`;
   const slEl = document.getElementById('planStopLoss');
   if (slEl) slEl.textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct}%)`;
   const tgtEl = document.getElementById('planTargets');
   if (tgtEl) tgtEl.textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct}%)`;
-  document.getElementById('planRationale').textContent = `${plan.rationale} (Risk/Reward = ${plan.risk_reward})`;
+  const pr = document.getElementById('planRationale');
+  if (pr) pr.textContent = `${plan.rationale} (Risk/Reward = ${plan.risk_reward})`;
 
   // Render 5-Pillar Checklist
   const checklistEl = document.getElementById('inspChecklist');
