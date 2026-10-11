@@ -43,7 +43,7 @@ function applyTheme(theme) {
   localStorage.setItem('smartflow_theme', theme);
 
   if (selectedStockDetail) {
-    renderDetailChart(selectedStockDetail);
+    renderInspectorChart(selectedStockDetail);
   }
 }
 
