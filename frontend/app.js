@@ -1269,40 +1269,42 @@ function renderTrackerTable(rows) {
       return `
       <tr class="${rowHighlight}">
         <!-- Saham -->
-        <td class="py-3 pl-4 pr-2">
-          <div class="flex items-center gap-2.5 cursor-pointer group" onclick="selectStock('${r.ticker}', true)" title="Klik untuk membuka Auto Trading Plan ${r.ticker}">
-            ${getStockLogoImg(r.ticker, 'w-7 h-7')}
+        <td class="py-3.5 pl-4 pr-2">
+          <div class="flex items-center gap-3 cursor-pointer group" onclick="selectStock('${r.ticker}', true)" title="Klik untuk membuka Auto Trading Plan ${r.ticker}">
+            ${getStockLogoImg(r.ticker, 'w-8 h-8')}
             <div>
-              <div class="font-mono font-black text-sm text-white group-hover:text-emerald-300 flex items-center gap-1.5 transition">
-                <span>${r.ticker}</span>
+              <div class="font-sans font-extrabold text-sm text-white group-hover:text-emerald-300 flex items-center gap-1.5 transition">
+                <span>${r.ticker}.JK</span>
                 ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
                 ${hasDistWarning ? `<span class="text-xs animate-pulse" title="${noteText}">⚠️</span>` : ''}
               </div>
-              <div class="text-[10px] text-slate-400 group-hover:text-slate-300 truncate max-w-[140px] mt-0.5">${r.sector || (r.source === 'AUTO' ? '🤖 Auto Sinyal' : '👤 Watchlist Manual')}</div>
+              <div class="text-[11px] text-slate-400 group-hover:text-slate-300 truncate max-w-[150px] mt-0.5">${r.sector || (r.source === 'AUTO' ? 'Auto Sinyal' : 'Watchlist Manual')}</div>
             </div>
           </div>
         </td>
 
-        <!-- Trigger & Score -->
-        <td class="py-3 px-2">
-          <span class="inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${getTriggerBadgeClass(r.trigger_type)}">${r.trigger_label || '-'}</span>
-          <span class="font-mono text-white ml-1.5 font-extrabold text-xs">${r.score ?? '-'}</span>
+        <!-- Trigger & Score (Unified Glowing Pill) -->
+        <td class="py-3.5 px-3">
+          <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">
+            <span>${r.trigger_label || '-'}</span>
+            <span class="font-mono font-extrabold text-white">${r.score ?? '-'}</span>
+          </span>
         </td>
 
         <!-- Tanggal Sinyal -->
-        <td class="py-3 px-2 font-mono text-slate-400 text-xs">${r.signal_date}</td>
+        <td class="py-3.5 px-3 font-sans font-medium text-slate-200 text-xs">${r.signal_date}</td>
 
         <!-- Zona Entry -->
-        <td class="py-3 px-2 text-right font-mono text-emerald-400 font-bold text-xs">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
+        <td class="py-3.5 px-3 text-right font-mono text-slate-200 font-semibold text-xs">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
 
         <!-- SL / TP -->
-        <td class="py-3 px-2 text-right font-mono text-xs">
-          <span class="text-rose-400 font-bold">${fmtNumber(r.stop_loss)}</span> / <span class="text-emerald-300 font-bold">${fmtNumber(r.target)}</span>
+        <td class="py-3.5 px-3 text-right font-mono text-white font-semibold text-xs">
+          ${fmtNumber(r.stop_loss)} / ${fmtNumber(r.target)}
         </td>
 
         <!-- Status Pill Glowing (Matching Image) -->
-        <td class="py-3 px-2 text-center">
-          <span class="inline-block px-3 py-1 rounded-full border text-[11px] font-black tracking-wide ${statusCls}" title="${noteText}">
+        <td class="py-3.5 px-3 text-center">
+          <span class="inline-block min-w-[82px] text-center px-3.5 py-1 rounded-full border text-xs font-bold tracking-wide ${statusCls}" title="${noteText}">
             ${r.status === 'RUNNING' ? 'Running' : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : r.status}
           </span>
           ${hasDistWarning ? `<div class="mt-1 text-[9px] font-extrabold text-rose-300 bg-rose-500/20 border border-rose-500/40 rounded px-1.5 py-0.5 animate-pulse" title="${noteText}">⚠️ AWAS DISTRIBUSI</div>` : ''}
@@ -1310,23 +1312,23 @@ function renderTrackerTable(rows) {
         </td>
 
         <!-- Entry Price -->
-        <td class="py-3 px-2 text-right font-mono text-white font-semibold text-xs">${entryCell}</td>
+        <td class="py-3.5 px-3 text-right font-mono text-white font-semibold text-xs">${entryCell}</td>
 
         <!-- Last Price -->
-        <td class="py-3 px-2 text-right font-mono text-white font-semibold text-xs">${exitOrLast}</td>
+        <td class="py-3.5 px-3 text-right font-mono text-white font-semibold text-xs">${exitOrLast}</td>
 
         <!-- P/L Badge (Pill Hijau / Merah Matching Image) -->
-        <td class="py-3 px-2 text-right font-mono">
+        <td class="py-3.5 px-3 text-right font-mono">
           ${pnl !== null ? `
-            <span class="inline-block px-2.5 py-1 rounded-full text-xs font-black font-mono ${pnl >= 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]' : 'bg-rose-500/20 text-rose-300 border border-rose-400/50 shadow-[0_0_12px_rgba(244,63,94,0.2)]'}">
+            <span class="inline-block min-w-[66px] text-center px-3 py-1 rounded-full text-xs font-extrabold font-mono ${pnl >= 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/70 shadow-[0_0_16px_rgba(16,185,129,0.28)]' : 'bg-rose-500/20 text-rose-300 border border-rose-400/70 shadow-[0_0_16px_rgba(244,63,94,0.25)]'}">
               ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%
             </span>
           ` : '<span class="text-slate-400">-</span>'}
         </td>
 
         <!-- Action / Delete -->
-        <td class="py-3 pl-2 pr-4 text-right">
-          <button onclick="deleteSignal(${r.id})" class="text-slate-400 hover:text-rose-400 text-base font-bold transition px-1" title="Hapus sinyal">&times;</button>
+        <td class="py-3.5 pl-1 pr-3 text-right">
+          <button onclick="deleteSignal(${r.id})" class="text-slate-500 hover:text-rose-400 text-base font-bold transition px-1" title="Hapus sinyal">&times;</button>
         </td>
       </tr>`;
     })

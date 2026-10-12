@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=14.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=15.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -552,114 +552,113 @@
 
     </section>
 
-    <!-- SIGNAL TRACKER / FORWARD TEST -->
-    <section id="trackerSection" class="glass-panel rounded-2xl overflow-hidden">
-      <div class="p-4 sm:p-5 border-b border-white/[0.08] bg-slate-900/35 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div class="flex items-center gap-2">
-            <div class="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-400 font-bold text-sm shadow-[0_0_14px_rgba(16,185,129,0.2)]">
-              🎯
-            </div>
-            <h2 class="text-sm sm:text-base font-extrabold text-white tracking-tight">Signal Tracker &amp; Forward Test Otomatis</h2>
-          </div>
-          <p class="text-[11px] text-slate-400 mt-1 max-w-3xl leading-relaxed">
-            Sinyal akumulasi otomatis masuk <b class="text-sky-300 font-semibold">Watchlist</b>. Jika harga di hari bursa berikutnya menyentuh zona entry &rarr; <b class="text-amber-300 font-semibold">Running</b>.
-            Menyentuh Target &rarr; <b class="text-emerald-300 font-semibold">Win</b>, menyentuh Stop Loss &rarr; <b class="text-rose-300 font-semibold">Loss</b>.
-            Dievaluasi dengan candle harian final (setelah 16:15 WIB). Jika SL &amp; TP tersentuh di hari yang sama, dihitung <b>Loss</b> (konservatif).
-          </p>
-          <p id="trackerConfigLine" class="text-[10px] font-mono text-slate-400 mt-1.5">-</p>
-        </div>
-      </div>
+    <!-- SIGNAL TRACKER / FORWARD TEST (MATCHING REFERENCE IMAGE DESIGN) -->
+    <section id="trackerSection" class="glass-panel rounded-3xl p-4 sm:p-6 space-y-5 bg-[#0b1120]/85 border border-white/[0.08] shadow-[0_24px_60px_rgba(0,0,0,0.65)]">
 
-      <!-- Statistik utama Watchlist -->
-      <div class="p-4 bg-slate-950/25 border-b border-white/[0.08] flex flex-wrap items-center justify-between gap-4">
-        
-        <!-- Win Rate Indicator -->
-        <div class="flex items-center gap-3">
+      <!-- TOP STATS BAR (Win Rate, Watchlist, Running + Gold Sparkline, Win TP, Loss SL) -->
+      <div class="rounded-2xl bg-[#11192c]/90 border border-white/[0.08] px-5 py-4 flex flex-wrap items-center justify-between gap-4 shadow-inner">
+
+        <!-- 1. Win Rate -->
+        <div class="flex items-center gap-4">
           <div>
-            <div class="text-xs font-semibold text-slate-400">Win Rate:</div>
-            <div class="w-20 h-1.5 bg-white/[0.08] rounded-full mt-1.5 overflow-hidden">
-              <div id="tsWinBar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-300 rounded-full" style="width: 68%"></div>
+            <div class="text-sm font-medium text-slate-200">Win Rate:</div>
+            <div class="w-24 h-2 bg-slate-800/90 rounded-full mt-2 overflow-hidden">
+              <div id="tsWinBar" class="h-full bg-gradient-to-r from-emerald-500 to-emerald-300 rounded-full shadow-[0_0_10px_#10b981]" style="width: 68%"></div>
             </div>
           </div>
-          <div class="w-12 h-12 rounded-full border-2 border-emerald-400/70 flex items-center justify-center bg-emerald-500/15 shadow-[0_0_18px_rgba(16,185,129,0.25)]">
-            <span id="tsWinRate" class="text-xs font-mono font-black text-white">68.4%</span>
+          <div class="w-12 h-12 rounded-full border-[2.5px] border-emerald-400 bg-emerald-500/15 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.38)]">
+            <span id="tsWinRate" class="text-xs font-extrabold text-white">68.4%</span>
           </div>
         </div>
 
-        <!-- Watchlist Count -->
-        <div class="flex items-center gap-2.5">
+        <div class="hidden lg:block h-10 w-px bg-white/[0.08]"></div>
+
+        <!-- 2. Watchlist -->
+        <div class="flex items-center gap-3.5">
           <div>
-            <div class="text-xs font-semibold text-slate-400">Watchlist:</div>
-            <div class="w-16 h-1.5 bg-sky-500/30 rounded-full mt-1.5"></div>
+            <div class="text-sm font-medium text-slate-200">Watchlist:</div>
+            <div class="w-20 h-2 bg-slate-800/90 rounded-full mt-2 overflow-hidden">
+              <div class="h-full w-3/5 bg-gradient-to-r from-blue-500 to-sky-400 rounded-full shadow-[0_0_10px_#38bdf8]"></div>
+            </div>
           </div>
-          <div class="w-10 h-10 rounded-full bg-sky-500/15 border border-sky-400/50 flex items-center justify-center text-white font-mono font-black text-sm shadow-[0_0_14px_rgba(14,165,233,0.22)]">
+          <div class="w-11 h-11 rounded-full border-[2.5px] border-blue-400 bg-blue-500/20 flex items-center justify-center text-white font-extrabold text-sm shadow-[0_0_18px_rgba(59,130,246,0.38)]">
             <span id="tsWatch">14</span>
           </div>
         </div>
 
-        <!-- Running with Gold Floating and Mini Trend -->
-        <div class="flex items-center gap-3 bg-slate-950/45 px-3.5 py-1.5 rounded-2xl border border-amber-400/30 shadow-[0_0_20px_rgba(245,158,11,0.1)]">
-          <div class="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-400/60 flex items-center justify-center text-white font-mono font-black text-sm shadow-[0_0_14px_rgba(245,158,11,0.25)]">
+        <div class="hidden lg:block h-10 w-px bg-white/[0.08]"></div>
+
+        <!-- 3. Running (Gold Ring + Floating P/L + Gold Sparkline with Glowing Dot) -->
+        <div class="flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-full border-[2.5px] border-amber-400 bg-amber-500/20 flex items-center justify-center text-white font-extrabold text-sm shadow-[0_0_18px_rgba(245,158,11,0.38)]">
             <span id="tsRunning">6</span>
           </div>
           <div>
-            <div class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-              <span>Running:</span>
-              <span class="text-amber-400">📈</span>
-            </div>
-            <div id="tsRunningPnl" class="text-[10px] font-mono text-emerald-400 font-semibold mt-0.5">floating +5.2%</div>
+            <div class="text-sm font-medium text-slate-200">Running:</div>
+            <div id="tsRunningPnl" class="text-xs font-medium text-emerald-400 mt-0.5">Floating +5.2%</div>
           </div>
+          <svg class="w-20 h-8 overflow-visible ml-1" viewBox="0 0 74 30" fill="none">
+            <defs>
+              <linearGradient id="runSparkGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.32"/>
+                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M2 24 L14 21 L24 23 L34 15 L44 17 L56 10 L68 5 L68 29 L2 29 Z" fill="url(#runSparkGrad)"/>
+            <path d="M2 24 L14 21 L24 23 L34 15 L44 17 L56 10 L68 5" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="68" cy="5" r="3" fill="#fde68a" stroke="#f59e0b" stroke-width="1.5"/>
+          </svg>
         </div>
 
-        <!-- Win (TP) Indicator -->
-        <div class="flex items-center gap-2.5">
+        <div class="hidden lg:block h-10 w-px bg-white/[0.08]"></div>
+
+        <!-- 4. Win TP -->
+        <div class="flex items-center gap-3.5">
           <div>
-            <div class="text-xs font-semibold text-slate-400">Win TP:</div>
-            <div class="w-16 h-1.5 bg-emerald-500/40 rounded-full mt-1.5"></div>
+            <div class="text-sm font-medium text-slate-200">Win TP:</div>
+            <div class="w-20 h-2 bg-slate-800/90 rounded-full mt-2 overflow-hidden">
+              <div class="h-full w-4/5 bg-gradient-to-r from-emerald-500 to-emerald-300 rounded-full shadow-[0_0_10px_#10b981]"></div>
+            </div>
           </div>
-          <div class="w-10 h-10 rounded-full bg-emerald-500/15 border border-emerald-400/50 flex items-center justify-center text-white font-mono font-black text-sm shadow-[0_0_14px_rgba(16,185,129,0.22)]">
+          <div class="w-11 h-11 rounded-full border-[2.5px] border-emerald-400 bg-emerald-500/25 flex items-center justify-center text-white font-extrabold text-sm shadow-[0_0_18px_rgba(16,185,129,0.42)]">
             <span id="tsWin">28</span>
           </div>
         </div>
 
-        <!-- Loss (SL) Indicator -->
-        <div class="flex items-center gap-2.5">
+        <div class="hidden lg:block h-10 w-px bg-white/[0.08]"></div>
+
+        <!-- 5. Loss SL -->
+        <div class="flex items-center gap-3.5">
           <div>
-            <div class="text-xs font-semibold text-slate-400">Loss SL:</div>
-            <div class="w-12 h-1.5 bg-rose-500/40 rounded-full mt-1.5"></div>
+            <div class="text-sm font-medium text-slate-200">Loss SL:</div>
+            <div class="w-16 h-2 bg-slate-800/90 rounded-full mt-2 overflow-hidden">
+              <div class="h-full w-1/3 bg-gradient-to-r from-rose-500 to-red-400 rounded-full shadow-[0_0_10px_#f43f5e]"></div>
+            </div>
           </div>
-          <div class="w-10 h-10 rounded-full bg-rose-500/15 border border-rose-400/50 flex items-center justify-center text-white font-mono font-black text-sm shadow-[0_0_14px_rgba(244,63,94,0.22)]">
+          <div class="w-11 h-11 rounded-full border-[2.5px] border-rose-400 bg-rose-500/20 flex items-center justify-center text-white font-extrabold text-sm shadow-[0_0_18px_rgba(244,63,94,0.38)]">
             <span id="tsLoss">7</span>
           </div>
         </div>
 
-        <!-- Hidden counters preserved for code logic -->
-        <span id="tsExpired" class="hidden">0</span>
-        <span id="tsTimeout" class="hidden">0</span>
-        <span id="tsAvgWin" class="hidden"></span>
-        <span id="tsAvgLoss" class="hidden"></span>
-        <span id="tsDecided" class="hidden"></span>
-      </div>
-
-      <div class="px-4 py-3.5 grid grid-cols-2 md:grid-cols-4 gap-2.5">
-        <div class="glass-subcard rounded-xl p-3"><div class="text-[11px] text-slate-400">Profit Factor</div><div id="tsPF" class="text-lg font-bold font-mono text-white mt-0.5">-</div><div class="text-[10px] text-slate-400">&gt; 1.5 = sehat</div></div>
-        <div class="glass-subcard rounded-xl p-3"><div class="text-[11px] text-slate-400">Expectancy / Trade (Net Fee)</div><div id="tsExp" class="text-lg font-bold font-mono text-white mt-0.5">-</div><div class="text-[10px] text-slate-400">rata-rata hasil per sinyal</div></div>
-        <div class="glass-subcard rounded-xl p-3"><div class="text-[11px] text-slate-400">Total Return Kumulatif (Net)</div><div id="tsTotal" class="text-lg font-bold font-mono text-white mt-0.5">-</div><div class="text-[10px] text-slate-400">jumlah % semua trade selesai</div></div>
-        <div class="glass-subcard rounded-xl p-3"><div class="text-[11px] text-slate-400">Total Sinyal Tercatat</div><div id="tsTotalSignals" class="text-lg font-bold font-mono text-white mt-0.5">0</div><div class="text-[10px] text-slate-400">auto + manual</div></div>
-      </div>
-
-      <!-- Win rate per trigger -->
-      <div class="px-4 pb-4">
-        <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Akurasi per Tipe Trigger</div>
-        <div id="tsByTrigger" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 text-xs">
-          <div class="text-slate-400 text-[11px]">Belum ada data.</div>
+        <!-- Hidden elements preserved for JS DOM compatibility -->
+        <div class="hidden">
+          <p id="trackerConfigLine">-</p>
+          <span id="tsExpired">0</span>
+          <span id="tsTimeout">0</span>
+          <span id="tsAvgWin"></span>
+          <span id="tsAvgLoss"></span>
+          <span id="tsDecided"></span>
+          <div id="tsPF">-</div>
+          <div id="tsExp">-</div>
+          <div id="tsTotal">-</div>
+          <div id="tsTotalSignals">0</div>
+          <div id="tsByTrigger"></div>
         </div>
       </div>
 
-      <!-- Tabs status & Toolbar Pengurutan -->
-      <div class="px-4 py-3 border-t border-white/[0.08] bg-slate-950/30 flex flex-wrap items-center justify-between gap-3">
-        <div class="flex flex-wrap items-center gap-2" id="trackerTabs">
+      <!-- TABS & SEARCH / SORT TOOLBAR -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2.5" id="trackerTabs">
           <button data-tab="ALL" onclick="setTrackerTab('ALL')" class="tracker-tab">All</button>
           <button data-tab="WATCHLIST" onclick="setTrackerTab('WATCHLIST')" class="tracker-tab">Watchlist</button>
           <button data-tab="RUNNING" onclick="setTrackerTab('RUNNING')" class="tracker-tab">Running</button>
@@ -669,11 +668,10 @@
           <button data-tab="TIMEOUT" onclick="setTrackerTab('TIMEOUT')" class="tracker-tab hidden">Timeout</button>
         </div>
 
-        <!-- Filter & Pengurutan Running Profit / Sinyal -->
         <div class="flex flex-wrap items-center gap-3">
           <!-- Search box tracker -->
           <div class="relative">
-            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
             </svg>
             <input
@@ -681,14 +679,14 @@
               type="text"
               placeholder="Cari saham..."
               oninput="filterTrackerRows()"
-              class="w-44 pl-9 pr-3 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400/70 transition shadow-inner"
+              class="w-52 sm:w-60 pl-10 pr-3.5 py-2 rounded-xl bg-[#131c31]/90 border border-white/[0.08] text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400/60 transition shadow-inner"
             />
           </div>
 
           <!-- Sort Select -->
-          <div class="flex items-center gap-1.5 bg-slate-950/60 border border-white/10 rounded-xl px-3.5 py-1.5 shadow-sm">
+          <div class="flex items-center bg-[#131c31]/90 border border-white/[0.08] rounded-xl px-4 py-2 shadow-inner">
             <select id="trackerSortSelect" onchange="changeTrackerSort(this.value)" class="bg-transparent text-xs text-slate-200 font-medium focus:outline-none cursor-pointer">
-              <option value="pnl_desc" class="bg-slate-900 text-white">Urutkan: Running Profit Terbanyak ▾</option>
+              <option value="pnl_desc" class="bg-slate-900 text-white">Urutkan: Running Profit Terbanyak</option>
               <option value="pnl_asc" class="bg-slate-900 text-white">Urutkan: Profit Terendah / Drawdown</option>
               <option value="id_desc" class="bg-slate-900 text-white">Urutkan: Sinyal Terbaru</option>
               <option value="score_desc" class="bg-slate-900 text-white">Urutkan: Score Tertinggi</option>
@@ -698,25 +696,26 @@
         </div>
       </div>
 
+      <!-- TRACKER TABLE -->
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse text-xs">
           <thead>
-            <tr class="border-b border-white/[0.08] bg-white/[0.03] text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              <th class="py-3 pl-4 pr-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('ticker')">Saham</th>
-              <th class="py-3 px-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('score')">Trigger &amp; Score</th>
-              <th class="py-3 px-2 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('date')">Tanggal Sinyal</th>
-              <th class="py-3 px-2 text-right">Zona Entry</th>
-              <th class="py-3 px-2 text-right">SL / TP</th>
-              <th class="py-3 px-2 text-center">Status</th>
-              <th class="py-3 px-2 text-right">Entry Price</th>
-              <th class="py-3 px-2 text-right">Last Price</th>
-              <th class="py-3 px-2 text-right cursor-pointer hover:text-amber-300 select-none" onclick="toggleTrackerSort('pnl')" title="Klik untuk mengurutkan Profit Terbanyak / Terendah">
-                P/L <span id="sortIconPnl" class="font-mono text-[11px] text-amber-400">▼</span>
+            <tr class="bg-[#131c31]/80 border-y border-white/[0.07] text-xs font-medium text-slate-400">
+              <th class="py-3.5 pl-4 pr-2 cursor-pointer hover:text-white select-none rounded-l-xl" onclick="toggleTrackerSort('ticker')">Saham</th>
+              <th class="py-3.5 px-3 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('score')">Trigger &amp; Score</th>
+              <th class="py-3.5 px-3 cursor-pointer hover:text-white select-none" onclick="toggleTrackerSort('date')">Tanggal Sinyal</th>
+              <th class="py-3.5 px-3 text-right">Zona Entry</th>
+              <th class="py-3.5 px-3 text-right">SL / TP</th>
+              <th class="py-3.5 px-3 text-center">Status</th>
+              <th class="py-3.5 px-3 text-right">Entry Price</th>
+              <th class="py-3.5 px-3 text-right">Last Price</th>
+              <th class="py-3.5 px-3 text-right cursor-pointer hover:text-amber-300 select-none" onclick="toggleTrackerSort('pnl')" title="Klik untuk mengurutkan Profit Terbanyak / Terendah">
+                P/L <span id="sortIconPnl" class="hidden font-mono text-[11px] text-amber-400">▼</span>
               </th>
-              <th class="py-3 pl-2 pr-4 text-right">Aksi</th>
+              <th class="py-3.5 pl-1 pr-3 text-right rounded-r-xl"></th>
             </tr>
           </thead>
-          <tbody id="trackerTableBody" class="divide-y divide-white/[0.05]"></tbody>
+          <tbody id="trackerTableBody" class="divide-y divide-white/[0.06]"></tbody>
         </table>
       </div>
     </section>
@@ -952,6 +951,6 @@
   </div>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=25.0"></script>
+  <script src="/static/app.js?v=26.0"></script>
 </body>
 </html>
