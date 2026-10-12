@@ -144,59 +144,56 @@ def _run_sync_job_blocking() -> dict:
     return analysis
 
 
-async def _background_fast_tracker_worker() -> None:
-    """Worker ringan yang memantau saham aktif di Watchlist & Running secara live (hanya aktif jika ENABLE_BACKGROUND_TRACKER=true)."""
+def is_idx_market_open_now() -> bool:
+    """Mengecek apakah bursa saham BEI/IDX saat ini sedang berlangsung (09:00 - 16:05 WIB, Senin-Jumat)."""
+    try:
+        from zoneinfo import ZoneInfo
+        wib = ZoneInfo("Asia/Jakarta")
+        now = datetime.now(wib)
+    except Exception:
+        # Fallback manual UTC+7 jika zoneinfo belum terpasang
+        from datetime import timezone, timedelta
+        wib_tz = timezone(timedelta(hours=7))
+        now = datetime.now(wib_tz)
+
+    if now.weekday() >= 5:  # Sabtu / Minggu
+        return False
+    t = now.time()
+    from datetime import time as dtime
+    return dtime(9, 0) <= t <= dtime(16, 10)
+
+
+async def _background_market_session_worker() -> None:
+    """
+    Worker Otomatis Jam Bursa:
+    - Selama jam bursa aktif (09:00 - 16:05 WIB, Senin-Jumat): Otomatis memantau harga realtime
+      dan mengevaluasi status Watchlist -> Running -> TP/SL setiap 90 detik.
+    - Saat bursa tutup (setelah 16:05 WIB / Hari Libur): Mode pasif & hemat resource,
+      hanya menampilkan data candle final hari tersebut.
+    """
+    print("[MarketWorker] Background Market Session Worker aktif.")
     while True:
-        await asyncio.sleep(120)
         try:
-            active_tickers = TRACKER.get_active_tickers()
-            if active_tickers:
-                res = await asyncio.to_thread(TRACKER.sync_active_signals_live)
-                if any(res.get(k, 0) > 0 for k in ("entered", "win", "loss", "expired", "timeout")):
-                    print(f"[TrackerLive] Status berubah: {res}")
-                    STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if is_idx_market_open_now():
+                active_tickers = TRACKER.get_active_tickers()
+                if active_tickers:
+                    res = await asyncio.to_thread(TRACKER.sync_active_signals_live)
+                    if any(res.get(k, 0) > 0 for k in ("entered", "win", "loss", "expired", "timeout")):
+                        print(f"[MarketLive] Perubahan status sinyal terdeteksi: {res}")
+                        STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         except Exception as exc:
-            print(f"[TrackerLive] Error: {exc}")
+            print(f"[MarketWorker] Error: {exc}")
 
-
-async def _background_24h_auto_sync_worker() -> None:
-    """Background worker 24 jam (hanya aktif jika ENABLE_AUTO_SYNC=true eksplisit diset di environment)."""
-    while True:
-        await asyncio.sleep(AUTO_SYNC_INTERVAL_SECONDS)
-        if STATE["is_syncing"]:
-            continue
-        try:
-            STATE["is_syncing"] = True
-            print(f"[AutoSync] Memulai pembaruan otomatis data saham IDX pada {datetime.now()}...")
-            await asyncio.to_thread(_run_sync_job_blocking)
-        except Exception as exc:
-            print(f"[AutoSync] Error saat auto-sync: {exc}")
-        finally:
-            STATE["is_syncing"] = False
-
-
-# Mode On-Demand (Default: False agar hemat memori < 150MB dan tidak terkena limit Render Free)
-ENABLE_AUTO_SYNC = os.environ.get("ENABLE_AUTO_SYNC", "false").lower() in ("true", "1")
-ENABLE_BACKGROUND_TRACKER = os.environ.get("ENABLE_BACKGROUND_TRACKER", "false").lower() in ("true", "1")
+        # Tidur 90 detik sebelum cek iterasi berikutnya
+        await asyncio.sleep(90)
 
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
-    """Mengelola siklus hidup server.
-    Secara default PASIF & ON-DEMAND: tidak menyalakan background loop otomatis
-    agar server sangat hemat memori (< 150MB RAM) dan tidak memicu restart limit di Render gratisan.
-    Data hanya ditarik saat pengguna mengeklik tombol sinkronisasi.
-    """
-    tasks = []
-    if ENABLE_AUTO_SYNC:
-        print("[Lifespan] Mode Auto-Sync 24/7 aktif via environment.")
-        tasks.append(asyncio.create_task(_background_24h_auto_sync_worker()))
-    if ENABLE_BACKGROUND_TRACKER:
-        print("[Lifespan] Mode Background Fast Tracker aktif via environment.")
-        tasks.append(asyncio.create_task(_background_fast_tracker_worker()))
+    """Mengelola siklus hidup server: Menjalankan worker market session cerdas secara otomatis."""
+    market_task = asyncio.create_task(_background_market_session_worker())
     yield
-    for t in tasks:
-        t.cancel()
+    market_task.cancel()
 
 
 app = FastAPI(
@@ -243,11 +240,12 @@ init_default_state()
 
 @app.get("/api/health")
 def health_check() -> dict:
-    """Endpoint Health Check untuk pemantauan server Cloud 24 jam (UptimeRobot / Render / Railway)."""
+    """Endpoint Health Check untuk pemantauan server Cloud & Keep-Alive anti-sleep."""
     return {
         "status": "online",
-        "mode": "24/7_auto_sync",
+        "market_open": is_idx_market_open_now(),
         "last_sync_time": STATE["last_sync_time"],
+        "last_tracker_run": STATE["last_tracker_run"],
         "is_syncing": STATE["is_syncing"],
         "total_emiten": STATE["analysis"]["kpis"]["total_emiten"] if STATE["analysis"] else 0,
     }

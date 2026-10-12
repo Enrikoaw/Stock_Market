@@ -51,9 +51,9 @@
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-lg font-extrabold tracking-tight text-white">SmartFlow <span class="text-emerald-400">IDX</span></h1>
-            <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1" title="Mode On-Demand: Data ditarik hanya saat Anda mengklik tombol sinkronisasi (Aman dari limit Render)">
+            <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1" title="Realtime Smart Money Engine: Auto-update saat jam bursa (09:00 - 16:00 WIB)">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-              ON-DEMAND SYNC
+              REALTIME IDX ENGINE
             </span>
           </div>
           <p class="text-xs text-slate-400 flex flex-wrap items-center gap-1.5">
@@ -69,26 +69,26 @@
       <div class="flex flex-wrap items-center gap-2">
         <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" multiple class="hidden" />
 
+        <!-- Market Status Badge & Live Indicator -->
+        <div id="marketLivePill" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs shadow-inner">
+          <span id="marketStatusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="marketStatusText" class="font-bold text-emerald-300">BURSA LIVE</span>
+          <span id="marketAutoTimer" class="font-mono text-[11px] text-slate-400 border-l border-slate-700 pl-2">Auto-Sync On</span>
+        </div>
+
         <!-- Sync Actions Group -->
         <div class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 shadow-inner">
-          <button id="btnSyncFast" onclick="syncFastMarketData()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-xs transition active:scale-95" title="Sync Kilat (< 2 Detik): Mengambil harga realtime khusus saham Watchlist, Running, dan Top Likuid">
+          <button id="btnSyncFast" onclick="syncFastMarketData()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-xs transition active:scale-95" title="Sync Kilat (< 2 Detik): Evaluasi status Watchlist, Running, TP, SL">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            Sync Cepat (&lt; 2s)
+            Sync Cepat
           </button>
-          <button id="btnSyncLive" onclick="syncLiveMarketData()" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-amber-300 font-medium text-xs transition" title="Tarik data lengkap seluruh 844 emiten IDX secara paralel">
+          <button id="btnSyncLive" onclick="syncLiveMarketData()" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-amber-300 font-medium text-xs transition" title="Tarik data lengkap seluruh emiten IDX secara paralel">
             <span>🔄</span>
             <span class="hidden sm:inline">Full IDX</span>
           </button>
         </div>
 
-        <!-- Primary Action: Upload & Telegram -->
-        <button id="btnOpenUploadModal" class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/25 transition active:scale-95">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12" />
-          </svg>
-          Upload Excel
-        </button>
-
+        <!-- Telegram Alert -->
         <button id="btnTelegramSend" onclick="handleTelegramClick()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/35 font-semibold text-xs transition shadow-sm active:scale-95" title="Kirim rekomendasi saham terbaik (akumulasi kuat & belum terbang) langsung ke Telegram Anda">
           <svg class="w-3.5 h-3.5 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
@@ -96,23 +96,11 @@
           Telegram Alert
         </button>
 
-        <!-- Template & Help Menu -->
-        <a href="/api/template?mode=sample" class="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-medium transition" title="Download Template Excel beserta 15 Saham IDX Sample (25 Hari)">
-          <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
-          </svg>
-          Sample
-        </a>
-
         <button id="btnOpenGuideModal" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 font-medium text-xs transition" title="Metodologi 5 Pilar Smart Money">
           <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
           </svg>
           Rumus
-        </button>
-
-        <button id="btnResetSample" class="px-2.5 py-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 text-xs transition" title="Kembalikan ke Data Simulasi 15 Saham IDX">
-          Reset
         </button>
 
         <button id="btnThemeToggle" onclick="toggleTheme()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-800 text-xs font-semibold shadow-sm transition active:scale-95" title="Ganti Tema (Gelap / Terang)">
@@ -863,6 +851,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=15.0"></script>
+  <script src="/static/app.js?v=16.0"></script>
 </body>
 </html>

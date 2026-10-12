@@ -795,44 +795,92 @@ document.addEventListener('DOMContentLoaded', () => {
     searchTimeout = setTimeout(() => loadScreenerData(true), 200);
   });
 
-  document.getElementById('btnOpenUploadModal').addEventListener('click', openUploadModal);
-  document.getElementById('btnOpenGuideModal').addEventListener('click', openGuideModal);
+  const guideBtn = document.getElementById('btnOpenGuideModal');
+  if (guideBtn) guideBtn.addEventListener('click', openGuideModal);
 
-  document.getElementById('excelFileInput').addEventListener('change', (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleExcelUpload(e.target.files);
-      e.target.value = '';
-    }
-  });
-
-  const dropZone = document.getElementById('dropZone');
-  dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.classList.add('dropzone-active');
-  });
-  dropZone.addEventListener('dragleave', () => {
-    dropZone.classList.remove('dropzone-active');
-  });
-  dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('dropzone-active');
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleExcelUpload(e.dataTransfer.files);
-    }
-  });
-
-  document.getElementById('btnResetSample').addEventListener('click', async () => {
-    const res = await fetch('/api/reset', { method: 'POST' });
-    if (res.ok) {
-      document.getElementById('filterTrigger').value = 'ALL';
-      document.getElementById('filterVolRatio').value = '0';
-      document.getElementById('filterMinScore').value = '0';
-      document.getElementById('filterSearch').value = '';
-      showToast('Dataset dikembalikan ke Data Pasar Real 844 Saham IDX.');
-      await loadScreenerData(false);
-    }
-  });
+  // Setup Live Market Auto Poller & Anti-Sleep Keep-Alive
+  initLiveMarketAutoSync();
 });
+
+// =====================================================================
+// REALTIME MARKET SESSION AUTO-SYNC & ANTI-SLEEP ENGINE
+// =====================================================================
+let autoSyncTimerId = null;
+let keepAliveTimerId = null;
+
+function isIDXMarketOpenNow() {
+  // Waktu Indonesia Barat (WIB = UTC+7)
+  const now = new Date();
+  const utcHours = now.getUTCHours();
+  const utcMinutes = now.getUTCMinutes();
+  const wibHours = (utcHours + 7) % 24;
+  const wibMinutes = utcMinutes;
+  const dayOfWeek = (now.getUTCDay() + (utcHours + 7 >= 24 ? 1 : 0)) % 7; // 0=Sun, 6=Sat
+
+  // Senin (1) s/d Jumat (5)
+  const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+  // Jam Bursa: 09:00 s/d 16:05 WIB
+  const wibTotalMins = wibHours * 60 + wibMinutes;
+  const isMarketHours = wibTotalMins >= 9 * 60 && wibTotalMins <= 16 * 60 + 5;
+
+  return isWeekday && isMarketHours;
+}
+
+function updateMarketLiveStatusUI() {
+  const isLive = isIDXMarketOpenNow();
+  const pill = document.getElementById('marketLivePill');
+  const dot = document.getElementById('marketStatusDot');
+  const text = document.getElementById('marketStatusText');
+  const timer = document.getElementById('marketAutoTimer');
+
+  if (!pill) return;
+
+  if (isLive) {
+    if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+    if (text) {
+      text.textContent = 'BURSA LIVE';
+      text.className = 'font-bold text-emerald-300';
+    }
+    if (timer) timer.textContent = 'Auto-Update Tiap 60s';
+  } else {
+    if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-500';
+    if (text) {
+      text.textContent = 'BURSA TUTUP';
+      text.className = 'font-bold text-slate-400';
+    }
+    if (timer) timer.textContent = 'Data Terakhir 16:00';
+  }
+}
+
+function initLiveMarketAutoSync() {
+  updateMarketLiveStatusUI();
+
+  // 1. Ping server setiap 5 menit (Keep-Alive agar Render tidak tidur di jam bursa)
+  if (keepAliveTimerId) clearInterval(keepAliveTimerId);
+  keepAliveTimerId = setInterval(() => {
+    if (isIDXMarketOpenNow()) {
+      fetch('/api/health').catch(() => {});
+    }
+  }, 5 * 60 * 1000);
+
+  // 2. Auto-Sync Screener & Watchlist setiap 60 detik selama jam bursa aktif
+  if (autoSyncTimerId) clearInterval(autoSyncTimerId);
+  autoSyncTimerId = setInterval(async () => {
+    updateMarketLiveStatusUI();
+    if (isIDXMarketOpenNow() && !isSyncingFast) {
+      try {
+        // Otomatis tarik harga live saham Watchlist/Running & update Screener
+        await fetch('/api/market/fast-sync', { method: 'POST' }).catch(() => {});
+        await Promise.all([
+          loadScreenerData(true),
+          loadTracker(),
+        ]);
+      } catch (err) {
+        console.debug('Background market auto-update:', err);
+      }
+    }
+  }, 60 * 1000);
+}
 
 
 // =====================================================================
