@@ -471,28 +471,90 @@ function renderInspectorChart(d) {
   const chartGridColor = isLight ? 'rgba(203, 213, 225, 0.65)' : 'rgba(51, 65, 85, 0.25)';
 
   if (activeChartTab === 'price') {
-    const prices = hist.map((h) => h.close);
-    const ma20s = hist.map((h) => h.ma20);
-    const vols = hist.map((h) => h.volume_lot);
+    const prices = hist.map((h) => Number(h.close));
+    const ma20s = hist.map((h) => Number(h.ma20 || h.close));
+    const vols = hist.map((h) => Number(h.volume_lot || 0));
+    const allLows = hist.map((h) => Number(h.low || h.close));
+    const allHighs = hist.map((h) => Number(h.high || h.close));
+    const rawMin = Math.min(...allLows, ...ma20s.filter((v) => v > 0));
+    const rawMax = Math.max(...allHighs, ...ma20s);
+    const pricePad = Math.max(2, Math.round((rawMax - rawMin) * 0.08));
+
     const volColors = hist.map((h, i) => {
-      const prev = i > 0 ? hist[i - 1].close : h.open;
-      return h.close >= prev ? 'rgba(16, 185, 129, 0.45)' : 'rgba(239, 68, 68, 0.45)';
+      const o = Number(h.open || h.close);
+      const cl = Number(h.close);
+      const prev = i > 0 ? Number(hist[i - 1].close) : o;
+      const isBull = cl > o || (cl === o && cl >= prev);
+      return isBull ? 'rgba(16, 185, 129, 0.32)' : 'rgba(239, 68, 68, 0.32)';
     });
 
+    const candlestickPlugin = {
+      id: 'candlestickPlugin',
+      afterDatasetsDraw(chart) {
+        const {
+          ctx: c,
+          scales: { x: xScale, yPrice: yScale },
+        } = chart;
+        if (!xScale || !yScale) return;
+        const count = hist.length || 1;
+        const plotWidth = xScale.width || 300;
+        const bodyWidth = Math.max(4, Math.min(13, Math.floor((plotWidth / count) * 0.58)));
+
+        c.save();
+        hist.forEach((h, i) => {
+          const o = Number(h.open || h.close);
+          const hi = Number(h.high || Math.max(o, h.close));
+          const lo = Number(h.low || Math.min(o, h.close));
+          const cl = Number(h.close);
+          const prevCl = i > 0 ? Number(hist[i - 1].close) : o;
+          const isBull = cl > o || (cl === o && cl >= prevCl);
+
+          const candleColor = isBull ? '#10b981' : '#ef4444';
+          const x = xScale.getPixelForValue(i);
+          const yHigh = yScale.getPixelForValue(hi);
+          const yLow = yScale.getPixelForValue(lo);
+          const yOpen = yScale.getPixelForValue(o);
+          const yClose = yScale.getPixelForValue(cl);
+
+          // 1. Sumbu / Wick (High - Low)
+          c.beginPath();
+          c.strokeStyle = candleColor;
+          c.lineWidth = 1.4;
+          c.moveTo(x, yHigh);
+          c.lineTo(x, yLow);
+          c.stroke();
+
+          // 2. Body Candle (Open - Close)
+          const topY = Math.min(yOpen, yClose);
+          const botY = Math.max(yOpen, yClose);
+          const boxH = Math.max(2, botY - topY);
+
+          c.fillStyle = candleColor;
+          c.strokeStyle = candleColor;
+          c.lineWidth = 1;
+          c.fillRect(x - bodyWidth / 2, topY, bodyWidth, boxH);
+          c.strokeRect(x - bodyWidth / 2, topY, bodyWidth, boxH);
+        });
+        c.restore();
+      },
+    };
+
     chartInstance = new Chart(ctx, {
+      plugins: [candlestickPlugin],
       data: {
         labels,
         datasets: [
           {
             type: 'line',
-            label: 'Close Price',
+            label: 'Candle OHLC',
             data: prices,
             borderColor: '#10b981',
-            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-            borderWidth: 2,
-            pointRadius: 2,
-            tension: 0.25,
+            backgroundColor: '#10b981',
+            borderWidth: 0,
+            pointRadius: 0,
+            pointHoverRadius: 3,
             yAxisID: 'yPrice',
+            order: 1,
           },
           {
             type: 'line',
@@ -504,6 +566,7 @@ function renderInspectorChart(d) {
             pointRadius: 0,
             tension: 0.25,
             yAxisID: 'yPrice',
+            order: 2,
           },
           {
             type: 'bar',
@@ -511,6 +574,7 @@ function renderInspectorChart(d) {
             data: vols,
             backgroundColor: volColors,
             yAxisID: 'yVol',
+            order: 3,
           },
         ],
       },
@@ -520,18 +584,35 @@ function renderInspectorChart(d) {
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { labels: { color: chartSubColor, font: { size: 10 } } },
+          tooltip: {
+            callbacks: {
+              label(context) {
+                const idx = context.dataIndex;
+                const h = hist[idx] || {};
+                if (context.dataset.label === 'Candle OHLC') {
+                  return `O: ${fmtNumber(h.open)} | H: ${fmtNumber(h.high)} | L: ${fmtNumber(h.low)} | C: ${fmtNumber(h.close)}`;
+                }
+                if (context.dataset.label === 'MA20') {
+                  return `MA20: Rp ${fmtNumber(h.ma20)}`;
+                }
+                return `Vol: ${fmtNumber(h.volume_lot)} Lot (${h.vol_ratio || 1}x)`;
+              },
+            },
+          },
         },
         scales: {
           x: { ticks: { color: chartSubColor, font: { size: 9 } }, grid: { display: false } },
           yPrice: {
             position: 'right',
+            min: Math.max(0, rawMin - pricePad),
+            max: rawMax + pricePad,
             ticks: { color: chartTextColor, font: { size: 9 } },
             grid: { color: chartGridColor },
           },
           yVol: {
             position: 'left',
             display: false,
-            max: Math.max(...vols) * 3.2,
+            max: Math.max(...vols, 1) * 3.4,
           },
         },
       },
