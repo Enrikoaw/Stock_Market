@@ -818,6 +818,16 @@ def _round_idx_tick(price: float) -> int:
     return max(50, int(round(price / step) * step))
 
 
+def _tight_entry_zone(ref_high: float, width_pct: float = 0.01) -> tuple[int, int]:
+    """Menghasilkan rentang Zona Entry yang rapat (~1% atau 1-3 fraksi tick BEI) agar tidak membingungkan."""
+    e_high = _round_idx_tick(ref_high)
+    e_low = _round_idx_tick(e_high * (1.0 - width_pct))
+    if e_low >= e_high and e_high > 50:
+        step = 1 if e_high < 200 else 2 if e_high < 500 else 5 if e_high < 2000 else 10 if e_high < 5000 else 25
+        e_low = max(50, e_high - step)
+    return e_low, e_high
+
+
 def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
     """
     Mesin Analisis Ter-Vektorisasi Cepat untuk 15 s/d 950+ Saham IDX!
@@ -1124,8 +1134,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
 
         if trigger_type == "DISTRIBUTION_WARNING":
             action_bias = "AVOID / SELL ON STRENGTH"
-            entry_low = _round_idx_tick(low_10d * 0.96)
-            entry_high = _round_idx_tick(low_10d * 0.98)
+            entry_low, entry_high = _tight_entry_zone(low_10d * 0.98, 0.01)
             stop_loss = _round_idx_tick(entry_low * 0.96)
             tp1 = _round_idx_tick(close_price * 1.02)
             tp2 = _round_idx_tick(close_price * 1.04)
@@ -1135,8 +1144,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             )
         elif trigger_type == "MARKUP_BREAKOUT":
             action_bias = "BUY ON BREAKOUT / RETEST"
-            entry_low = _round_idx_tick(max(bandar_avg_5d, close_price * 0.985))
-            entry_high = _round_idx_tick(close_price)
+            entry_low, entry_high = _tight_entry_zone(close_price, 0.01)
             stop_loss = _round_idx_tick(min(entry_low * 0.96, ma20 * 0.985))
             tp1 = _round_idx_tick(close_price * 1.065)
             tp2 = _round_idx_tick(close_price * 1.135)
@@ -1146,8 +1154,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             )
         elif trigger_type in ("SILENT_ACCUMULATION", "BIG_ACCUMULATION"):
             action_bias = "BUY NEAR BANDAR AVG (SWING)"
-            entry_low = _round_idx_tick(min(close_price * 0.985, bandar_avg_5d * 0.995))
-            entry_high = _round_idx_tick(max(close_price, bandar_avg_5d * 1.01))
+            entry_low, entry_high = _tight_entry_zone(close_price, 0.01)
             stop_loss = _round_idx_tick(min(low_10d * 0.98, entry_low * 0.962))
             tp1 = _round_idx_tick(close_price * 1.06)
             tp2 = _round_idx_tick(close_price * 1.12)
@@ -1157,8 +1164,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             )
         else:
             action_bias = "BUY ON SUPPORT / WATCHLIST"
-            entry_low = _round_idx_tick(close_price * 0.98)
-            entry_high = _round_idx_tick(close_price)
+            entry_low, entry_high = _tight_entry_zone(close_price, 0.01)
             stop_loss = _round_idx_tick(entry_low * 0.96)
             tp1 = _round_idx_tick(close_price * 1.05)
             tp2 = _round_idx_tick(close_price * 1.09)

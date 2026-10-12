@@ -621,47 +621,1093 @@ function closeGuideModal() {
   document.getElementById('guideModal').classList.add('hidden');
 }
 
-// TradingView Advanced Chart Modal
-function openTradingViewModal() {
+// =====================================================================
+// INTERACTIVE TECHNICAL ANALYSIS & DRAWING STUDIO ENGINE (IDX REAL DATA)
+// =====================================================================
+const taState = {
+  ticker: 'BBCA',
+  period: '6mo',
+  candles: [],
+  tradingPlan: {},
+  sector: '',
+  viewStart: 0,
+  viewEnd: 0,
+  tool: 'pan', // pan, trendline, ray, hline, fib, rect, measure, brush
+  color: '#f59e0b',
+  indicators: {
+    candle: true,
+    ma20: true,
+    ma50: true,
+    ema9: false,
+    bb: false,
+    plan: true,
+  },
+  subPanel: 'vol', // vol, rsi, macd
+  drawings: [], // saved per ticker in localStorage
+  activeDrawing: null,
+  isDragging: false,
+  dragStartX: 0,
+  dragStartViewStart: 0,
+  dragStartViewEnd: 0,
+  hoverPos: null, // { x, y }
+  computed: {},
+  listenersAttached: false,
+};
+
+function _loadTADrawings(ticker) {
+  try {
+    const raw = localStorage.getItem(`smartflow_drawings_${ticker}`);
+    taState.drawings = raw ? JSON.parse(raw) : [];
+  } catch {
+    taState.drawings = [];
+  }
+}
+
+function _saveTADrawings() {
+  try {
+    localStorage.setItem(`smartflow_drawings_${taState.ticker}`, JSON.stringify(taState.drawings));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+function _computeTAIndicators(candles) {
+  const n = candles.length;
+  const closes = candles.map((c) => c.close);
+  const vols = candles.map((c) => c.volume_lot || 0);
+
+  const sma = (arr, len) => {
+    const out = new Array(arr.length).fill(null);
+    let sum = 0;
+    for (let i = 0; i < arr.length; i++) {
+      sum += arr[i];
+      if (i >= len) sum -= arr[i - len];
+      if (i >= len - 1) out[i] = sum / len;
+    }
+    return out;
+  };
+
+  const ema = (arr, len) => {
+    const out = new Array(arr.length).fill(null);
+    if (!arr.length) return out;
+    const k = 2 / (len + 1);
+    let prev = arr[0];
+    out[0] = prev;
+    for (let i = 1; i < arr.length; i++) {
+      prev = arr[i] * k + prev * (1 - k);
+      out[i] = prev;
+    }
+    return out;
+  };
+
+  const ma20 = sma(closes, 20);
+  const ma50 = sma(closes, 50);
+  const ema9 = ema(closes, 9);
+  const volMa20 = sma(vols, 20);
+
+  // Bollinger Bands (20, 2)
+  const bbUpper = new Array(n).fill(null);
+  const bbLower = new Array(n).fill(null);
+  for (let i = 19; i < n; i++) {
+    const mean = ma20[i];
+    let sq = 0;
+    for (let j = i - 19; j <= i; j++) {
+      const d = closes[j] - mean;
+      sq += d * d;
+    }
+    const sd = Math.sqrt(sq / 20);
+    bbUpper[i] = mean + 2 * sd;
+    bbLower[i] = mean - 2 * sd;
+  }
+
+  // RSI (14)
+  const rsi14 = new Array(n).fill(null);
+  if (n > 1) {
+    let avgGain = 0;
+    let avgLoss = 0;
+    const period = Math.min(14, n - 1);
+    for (let i = 1; i <= period; i++) {
+      const chg = closes[i] - closes[i - 1];
+      if (chg > 0) avgGain += chg;
+      else avgLoss -= chg;
+    }
+    avgGain /= period;
+    avgLoss /= period;
+    rsi14[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    for (let i = period + 1; i < n; i++) {
+      const chg = closes[i] - closes[i - 1];
+      const gain = chg > 0 ? chg : 0;
+      const loss = chg < 0 ? -chg : 0;
+      avgGain = (avgGain * (period - 1) + gain) / period;
+      avgLoss = (avgLoss * (period - 1) + loss) / period;
+      rsi14[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    }
+  }
+
+  // MACD (12, 26, 9)
+  const ema12 = ema(closes, 12);
+  const ema26 = ema(closes, 26);
+  const macdLine = closes.map((_, i) => (ema12[i] !== null && ema26[i] !== null ? ema12[i] - ema26[i] : 0));
+  const macdSignal = ema(macdLine, 9);
+  const macdHist = macdLine.map((v, i) => v - (macdSignal[i] || 0));
+
+  taState.computed = { ma20, ma50, ema9, volMa20, bbUpper, bbLower, rsi14, macdLine, macdSignal, macdHist };
+}
+
+async function openTradingViewModal() {
   const ticker = selectedTicker || (selectedStockDetail ? selectedStockDetail.ticker : 'BBCA');
   const cleanTicker = ticker.trim().toUpperCase();
+  taState.ticker = cleanTicker;
 
   const modal = document.getElementById('tradingViewModal');
   const modalTicker = document.getElementById('tvModalTicker');
   const modalLogo = document.getElementById('tvModalLogo');
+  const modalPrice = document.getElementById('tvModalPriceBadge');
+  const modalSector = document.getElementById('tvModalSector');
   const extLink = document.getElementById('tvModalExternalLink');
-  const container = document.getElementById('tradingViewWidgetContainer');
 
   if (modalTicker) modalTicker.textContent = cleanTicker;
   if (modalLogo) modalLogo.innerHTML = getStockLogoImg(cleanTicker, 'w-8 h-8');
   if (extLink) extLink.href = `https://id.tradingview.com/symbols/IDX-${cleanTicker}/`;
 
-  const isLight = document.documentElement.classList.contains('light');
-  const theme = isLight ? 'light' : 'dark';
-
-  // Embed TradingView official interactive iframe widget
-  if (container) {
-    const symbolParam = encodeURIComponent(`IDX:${cleanTicker}`);
-    container.innerHTML = `
-      <iframe
-        id="tradingview_iframe"
-        src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=${symbolParam}&interval=D&hidesidetoolbar=0&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=%5B%5D&theme=${theme}&style=1&timezone=Asia%2FJakarta&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%5D&locale=id&utm_source=localhost&utm_medium=widget&utm_campaign=chart&utm_term=${symbolParam}"
-        style="width: 100%; height: 100%; border: none;"
-        allowtransparency="true"
-        scrolling="no"
-        allowfullscreen="true"
-      ></iframe>
-    `;
+  if (selectedStockDetail && selectedStockDetail.ticker === cleanTicker) {
+    if (modalPrice) {
+      const sign = selectedStockDetail.pct_change >= 0 ? '+' : '';
+      modalPrice.textContent = `${fmtPrice(selectedStockDetail.close)} (${sign}${selectedStockDetail.pct_change}%)`;
+      modalPrice.className = `text-xs font-mono font-bold ${selectedStockDetail.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+    }
+    if (modalSector) {
+      modalSector.textContent = `${selectedStockDetail.sector} • ${selectedStockDetail.trigger_label}`;
+    }
+    taState.tradingPlan = selectedStockDetail.trading_plan || {};
+    taState.candles = (selectedStockDetail.history || []).map((h) => ({
+      date: h.date,
+      open: h.open,
+      high: h.high,
+      low: h.low,
+      close: h.close,
+      volume_lot: h.volume_lot || 0,
+    }));
   }
 
+  _loadTADrawings(cleanTicker);
   modal.classList.remove('hidden');
+  _initTACanvasEvents();
+
+  if (taState.candles.length) {
+    _computeTAIndicators(taState.candles);
+    taState.viewStart = 0;
+    taState.viewEnd = taState.candles.length - 1;
+    renderTAStudio();
+  }
+
+  await loadTACandlesFromServer(cleanTicker, taState.period);
+}
+
+async function loadTACandlesFromServer(ticker, period) {
+  const loader = document.getElementById('taLoadingOverlay');
+  if (loader) loader.classList.remove('hidden');
+  try {
+    const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}/candles?period=${encodeURIComponent(period)}&_t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.candles && data.candles.length) {
+        taState.candles = data.candles;
+        if (data.trading_plan && Object.keys(data.trading_plan).length) {
+          taState.tradingPlan = data.trading_plan;
+        }
+        _computeTAIndicators(taState.candles);
+        const total = taState.candles.length;
+        const visibleCount = Math.min(total, period === '1mo' ? 25 : period === '3mo' ? 65 : period === '6mo' ? 100 : 140);
+        taState.viewStart = Math.max(0, total - visibleCount);
+        taState.viewEnd = total - 1;
+        renderTAStudio();
+      }
+    }
+  } catch (err) {
+    console.warn('Gagal memuat candle historis:', err);
+  } finally {
+    if (loader) loader.classList.add('hidden');
+  }
 }
 
 function closeTradingViewModal() {
   const modal = document.getElementById('tradingViewModal');
-  const container = document.getElementById('tradingViewWidgetContainer');
   if (modal) modal.classList.add('hidden');
-  if (container) container.innerHTML = ''; // bersihkan iframe untuk menghemat memori
+}
+
+function setTAChartPeriod(period) {
+  taState.period = period;
+  ['1mo', '3mo', '6mo', '1y'].forEach((p) => {
+    const btn = document.getElementById(`taPeriod_${p}`);
+    if (!btn) return;
+    if (p === period) {
+      btn.className = 'px-2 py-1 rounded bg-emerald-600 text-white font-bold transition';
+    } else {
+      btn.className = 'px-2 py-1 rounded text-slate-400 hover:text-white transition';
+    }
+  });
+  loadTACandlesFromServer(taState.ticker, period);
+}
+
+function toggleTAIndicator(key) {
+  taState.indicators[key] = !taState.indicators[key];
+  const btn = document.getElementById(`taInd_${key}`);
+  if (btn) {
+    const active = taState.indicators[key];
+    if (key === 'candle') {
+      btn.textContent = active ? '🕯️ Candle' : '📈 Line';
+    }
+    btn.className = active
+      ? 'px-2 py-1 rounded bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-semibold transition'
+      : 'px-2 py-1 rounded text-slate-400 hover:text-white transition';
+  }
+  renderTAStudio();
+}
+
+function setTASubPanel(panel) {
+  taState.subPanel = panel;
+  ['vol', 'rsi', 'macd'].forEach((p) => {
+    const btn = document.getElementById(`taSub_${p}`);
+    if (!btn) return;
+    btn.className =
+      p === panel
+        ? 'px-2 py-1 rounded bg-emerald-600 text-white font-semibold transition'
+        : 'px-2 py-1 rounded text-slate-400 hover:text-white transition';
+  });
+  renderTAStudio();
+}
+
+function setTADrawTool(tool) {
+  taState.tool = tool;
+  taState.activeDrawing = null;
+  ['pan', 'trendline', 'ray', 'hline', 'fib', 'rect', 'measure', 'brush'].forEach((t) => {
+    const btn = document.getElementById(`taTool_${t}`);
+    if (!btn) return;
+    btn.className =
+      t === tool
+        ? 'px-2.5 py-1 rounded-md bg-emerald-600 text-white font-semibold transition flex items-center gap-1 shadow-sm'
+        : 'px-2.5 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition flex items-center gap-1';
+  });
+  const canvas = document.getElementById('taStudioCanvas');
+  if (canvas) {
+    canvas.style.cursor = tool === 'pan' ? 'grab' : 'crosshair';
+  }
+  renderTAStudio();
+}
+
+function setTADrawColor(color) {
+  taState.color = color;
+  const map = {
+    '#f59e0b': 'taColor_amber',
+    '#10b981': 'taColor_emerald',
+    '#38bdf8': 'taColor_sky',
+    '#f43f5e': 'taColor_rose',
+    '#f8fafc': 'taColor_white',
+  };
+  Object.entries(map).forEach(([c, id]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (c === color) {
+      el.classList.add('ring-2', 'ring-white', 'scale-110');
+      el.classList.remove('opacity-70');
+    } else {
+      el.classList.remove('ring-2', 'ring-white', 'scale-110');
+      el.classList.add('opacity-70');
+    }
+  });
+}
+
+function undoTADrawing() {
+  if (taState.drawings.length > 0) {
+    taState.drawings.pop();
+    _saveTADrawings();
+    renderTAStudio();
+  }
+}
+
+function clearTADrawings() {
+  taState.drawings = [];
+  taState.activeDrawing = null;
+  _saveTADrawings();
+  renderTAStudio();
+  showToast(`Semua tarikan garis pada ${taState.ticker} telah dihapus.`);
+}
+
+function zoomTAChart(factor) {
+  const total = taState.candles.length;
+  if (total < 5) return;
+  const curSpan = Math.max(5, taState.viewEnd - taState.viewStart + 1);
+  const newSpan = Math.min(total, Math.max(10, Math.round(curSpan / factor)));
+  const center = (taState.viewStart + taState.viewEnd) / 2;
+  let s = Math.round(center - newSpan / 2);
+  let e = s + newSpan - 1;
+  if (s < 0) {
+    s = 0;
+    e = Math.min(total - 1, newSpan - 1);
+  }
+  if (e >= total) {
+    e = total - 1;
+    s = Math.max(0, total - newSpan);
+  }
+  taState.viewStart = s;
+  taState.viewEnd = e;
+  renderTAStudio();
+}
+
+function resetTAZoom() {
+  const total = taState.candles.length;
+  if (!total) return;
+  const visible = Math.min(total, 95);
+  taState.viewStart = Math.max(0, total - visible);
+  taState.viewEnd = total - 1;
+  renderTAStudio();
+}
+
+function _getTALayout(canvas) {
+  const w = canvas.clientWidth || 900;
+  const h = canvas.clientHeight || 520;
+  const padLeft = 14;
+  const padRight = 84;
+  const padTop = 18;
+  const padBottom = 26;
+  const subGap = 18;
+  const plotW = Math.max(100, w - padLeft - padRight);
+  const totalPlotH = Math.max(150, h - padTop - padBottom - subGap);
+  const mainH = Math.round(totalPlotH * 0.73);
+  const subH = totalPlotH - mainH;
+  const mainTop = padTop;
+  const mainBottom = mainTop + mainH;
+  const subTop = mainBottom + subGap;
+  const subBottom = subTop + subH;
+
+  const sIdx = Math.max(0, Math.min(taState.candles.length - 1, taState.viewStart));
+  const eIdx = Math.max(sIdx, Math.min(taState.candles.length - 1, taState.viewEnd));
+  const count = Math.max(1, eIdx - sIdx + 1);
+
+  let minP = Infinity;
+  let maxP = -Infinity;
+  for (let i = sIdx; i <= eIdx; i++) {
+    const c = taState.candles[i];
+    if (!c) continue;
+    if (c.low < minP) minP = c.low;
+    if (c.high > maxP) maxP = c.high;
+    if (taState.indicators.bb && taState.computed.bbUpper && taState.computed.bbUpper[i] !== null) {
+      if (taState.computed.bbUpper[i] > maxP) maxP = taState.computed.bbUpper[i];
+      if (taState.computed.bbLower[i] < minP) minP = taState.computed.bbLower[i];
+    }
+  }
+  if (taState.indicators.plan && taState.tradingPlan) {
+    const p = taState.tradingPlan;
+    [p.stop_loss, p.entry_low, p.entry_high, p.target_1, p.target_2].forEach((val) => {
+      if (val && val > 0) {
+        if (val < minP * 0.82 || val > maxP * 1.22) return;
+        if (val < minP) minP = val;
+        if (val > maxP) maxP = val;
+      }
+    });
+  }
+  if (!isFinite(minP) || !isFinite(maxP) || minP === maxP) {
+    minP = (minP || 100) * 0.95;
+    maxP = (maxP || 100) * 1.05;
+  }
+  const marginP = (maxP - minP) * 0.08;
+  minP -= marginP;
+  maxP += marginP;
+
+  const idxToX = (idx) => padLeft + ((idx - sIdx + 0.5) / count) * plotW;
+  const xToIdx = (x) => sIdx + ((x - padLeft) / plotW) * count - 0.5;
+  const priceToY = (p) => mainBottom - ((p - minP) / (maxP - minP)) * mainH;
+  const yToPrice = (y) => minP + ((mainBottom - y) / mainH) * (maxP - minP);
+
+  return {
+    w,
+    h,
+    padLeft,
+    padRight,
+    padTop,
+    padBottom,
+    plotW,
+    mainTop,
+    mainBottom,
+    mainH,
+    subTop,
+    subBottom,
+    subH,
+    sIdx,
+    eIdx,
+    count,
+    minP,
+    maxP,
+    idxToX,
+    xToIdx,
+    priceToY,
+    yToPrice,
+  };
+}
+
+function _initTACanvasEvents() {
+  if (taState.listenersAttached) return;
+  const canvas = document.getElementById('taStudioCanvas');
+  if (!canvas) return;
+  taState.listenersAttached = true;
+
+  const getPos = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches && e.touches.length ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const onDown = (e) => {
+    if (!taState.candles.length) return;
+    const pos = getPos(e);
+    const layout = _getTALayout(canvas);
+    const idx = layout.xToIdx(pos.x);
+    const price = layout.yToPrice(pos.y);
+
+    if (taState.tool === 'pan') {
+      taState.isDragging = true;
+      taState.dragStartX = pos.x;
+      taState.dragStartViewStart = taState.viewStart;
+      taState.dragStartViewEnd = taState.viewEnd;
+      canvas.style.cursor = 'grabbing';
+      return;
+    }
+
+    if (taState.tool === 'hline') {
+      taState.drawings.push({
+        type: 'hline',
+        color: taState.color,
+        p1: { idx, price },
+        p2: { idx, price },
+      });
+      _saveTADrawings();
+      renderTAStudio();
+      return;
+    }
+
+    if (taState.tool === 'brush') {
+      taState.isDragging = true;
+      taState.activeDrawing = {
+        type: 'brush',
+        color: taState.color,
+        points: [{ idx, price }],
+      };
+      return;
+    }
+
+    // Two-point tools: trendline, ray, fib, rect, measure
+    taState.isDragging = true;
+    taState.activeDrawing = {
+      type: taState.tool,
+      color: taState.color,
+      p1: { idx, price },
+      p2: { idx, price },
+    };
+    renderTAStudio();
+  };
+
+  const onMove = (e) => {
+    if (!taState.candles.length) return;
+    const pos = getPos(e);
+    taState.hoverPos = pos;
+    const layout = _getTALayout(canvas);
+
+    if (taState.isDragging) {
+      if (e.cancelable) e.preventDefault();
+      if (taState.tool === 'pan') {
+        const dx = pos.x - taState.dragStartX;
+        const span = taState.dragStartViewEnd - taState.dragStartViewStart + 1;
+        const shiftBars = Math.round((-dx / layout.plotW) * span);
+        const total = taState.candles.length;
+        let ns = taState.dragStartViewStart + shiftBars;
+        let ne = taState.dragStartViewEnd + shiftBars;
+        if (ns < 0) {
+          ns = 0;
+          ne = Math.min(total - 1, span - 1);
+        }
+        if (ne >= total) {
+          ne = total - 1;
+          ns = Math.max(0, total - span);
+        }
+        taState.viewStart = ns;
+        taState.viewEnd = ne;
+      } else if (taState.activeDrawing) {
+        const idx = layout.xToIdx(pos.x);
+        const price = layout.yToPrice(pos.y);
+        if (taState.activeDrawing.type === 'brush') {
+          taState.activeDrawing.points.push({ idx, price });
+        } else {
+          taState.activeDrawing.p2 = { idx, price };
+        }
+      }
+    }
+    renderTAStudio();
+  };
+
+  const onUp = () => {
+    if (taState.tool === 'pan') {
+      canvas.style.cursor = 'grab';
+    }
+    if (taState.isDragging && taState.activeDrawing) {
+      taState.drawings.push(taState.activeDrawing);
+      taState.activeDrawing = null;
+      _saveTADrawings();
+    }
+    taState.isDragging = false;
+    renderTAStudio();
+  };
+
+  canvas.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', (e) => {
+    const modal = document.getElementById('tradingViewModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    const rect = canvas.getBoundingClientRect();
+    if (
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom
+    ) {
+      onMove(e);
+    }
+  });
+  window.addEventListener('mouseup', onUp);
+
+  canvas.addEventListener('touchstart', onDown, { passive: false });
+  canvas.addEventListener('touchmove', onMove, { passive: false });
+  canvas.addEventListener('touchend', onUp);
+
+  canvas.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      zoomTAChart(e.deltaY < 0 ? 1.18 : 0.85);
+    },
+    { passive: false }
+  );
+
+  window.addEventListener('resize', () => {
+    const modal = document.getElementById('tradingViewModal');
+    if (modal && !modal.classList.contains('hidden')) {
+      renderTAStudio();
+    }
+  });
+}
+
+function _drawSingleTAObject(ctx, d, layout) {
+  ctx.save();
+  ctx.strokeStyle = d.color || '#f59e0b';
+  ctx.fillStyle = d.color || '#f59e0b';
+  ctx.lineWidth = 2;
+
+  if (d.type === 'hline') {
+    const y = layout.priceToY(d.p1.price);
+    if (y >= layout.mainTop && y <= layout.mainBottom) {
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(layout.padLeft, y);
+      ctx.lineTo(layout.padLeft + layout.plotW, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Price tag on right axis
+      ctx.fillRect(layout.padLeft + layout.plotW + 2, y - 9, layout.padRight - 6, 18);
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 10px JetBrains Mono, monospace';
+      ctx.fillText(`S/R ${fmtNumber(d.p1.price)}`, layout.padLeft + layout.plotW + 5, y + 3);
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (d.type === 'brush' && d.points && d.points.length > 1) {
+    ctx.beginPath();
+    d.points.forEach((pt, i) => {
+      const x = layout.idxToX(pt.idx);
+      const y = layout.priceToY(pt.price);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  if (!d.p1 || !d.p2) {
+    ctx.restore();
+    return;
+  }
+
+  const x1 = layout.idxToX(d.p1.idx);
+  const y1 = layout.priceToY(d.p1.price);
+  const x2 = layout.idxToX(d.p2.idx);
+  const y2 = layout.priceToY(d.p2.price);
+
+  if (d.type === 'trendline' || d.type === 'ray') {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    if (d.type === 'ray' && Math.abs(x2 - x1) > 1) {
+      const slope = (y2 - y1) / (x2 - x1);
+      const targetX = x2 >= x1 ? layout.padLeft + layout.plotW : layout.padLeft;
+      const targetY = y1 + slope * (targetX - x1);
+      ctx.lineTo(targetX, targetY);
+    } else {
+      ctx.lineTo(x2, y2);
+    }
+    ctx.stroke();
+
+    // Anchor circles
+    [
+      [x1, y1],
+      [x2, y2],
+    ].forEach(([ax, ay]) => {
+      ctx.beginPath();
+      ctx.arc(ax, ay, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  } else if (d.type === 'rect') {
+    const rx = Math.min(x1, x2);
+    const ry = Math.min(y1, y2);
+    const rw = Math.abs(x2 - x1);
+    const rh = Math.abs(y2 - y1);
+    ctx.globalAlpha = 0.18;
+    ctx.fillRect(rx, ry, rw, rh);
+    ctx.globalAlpha = 0.85;
+    ctx.strokeRect(rx, ry, rw, rh);
+  } else if (d.type === 'measure') {
+    const rx = Math.min(x1, x2);
+    const ry = Math.min(y1, y2);
+    const rw = Math.abs(x2 - x1);
+    const rh = Math.abs(y2 - y1);
+    const diffP = d.p2.price - d.p1.price;
+    const pct = (diffP / Math.max(1, d.p1.price)) * 100;
+    const bars = Math.abs(Math.round(d.p2.idx - d.p1.idx));
+    const isUp = diffP >= 0;
+
+    ctx.fillStyle = isUp ? 'rgba(16, 185, 129, 0.18)' : 'rgba(244, 63, 94, 0.18)';
+    ctx.strokeStyle = isUp ? '#10b981' : '#f43f5e';
+    ctx.fillRect(rx, ry, rw, rh);
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(rx, ry, rw, rh);
+    ctx.setLineDash([]);
+
+    // Label pill
+    const lbl = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% (Rp ${diffP >= 0 ? '+' : ''}${fmtNumber(diffP)} | ${bars} Bar)`;
+    ctx.font = 'bold 11px JetBrains Mono, monospace';
+    const tw = ctx.measureText(lbl).width + 14;
+    const bx = Math.min(layout.padLeft + layout.plotW - tw, Math.max(layout.padLeft, (x1 + x2) / 2 - tw / 2));
+    const by = Math.max(layout.mainTop + 20, Math.min(y1, y2) - 8);
+    ctx.fillStyle = isUp ? '#065f46' : '#881337';
+    ctx.fillRect(bx, by - 16, tw, 22);
+    ctx.strokeRect(bx, by - 16, tw, 22);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(lbl, bx + 7, by - 1);
+  } else if (d.type === 'fib') {
+    const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+    const minX = Math.min(x1, x2);
+    const maxX = Math.max(x1, x2, minX + 120);
+    ctx.font = '10px JetBrains Mono, monospace';
+    levels.forEach((lv) => {
+      const p = d.p1.price + (d.p2.price - d.p1.price) * lv;
+      const y = layout.priceToY(p);
+      if (y < layout.mainTop || y > layout.mainBottom) return;
+      ctx.beginPath();
+      ctx.setLineDash([3, 3]);
+      ctx.moveTo(minX, y);
+      ctx.lineTo(maxX, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillText(`Fib ${(lv * 100).toFixed(1)}% (Rp ${fmtNumber(p)})`, minX + 4, y - 3);
+    });
+  }
+
+  ctx.restore();
+}
+
+function renderTAStudio() {
+  const canvas = document.getElementById('taStudioCanvas');
+  if (!canvas || !taState.candles.length) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 900;
+  const h = canvas.clientHeight || 520;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+
+  const ctx = canvas.getContext('2d');
+  ctx.save();
+  ctx.scale(dpr, dpr);
+
+  const layout = _getTALayout(canvas);
+
+  // Background
+  ctx.fillStyle = '#020617';
+  ctx.fillRect(0, 0, w, h);
+
+  // Horizontal price grid lines (Main Panel)
+  ctx.strokeStyle = 'rgba(51, 65, 85, 0.35)';
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.lineWidth = 1;
+  const gridSteps = 6;
+  for (let i = 0; i <= gridSteps; i++) {
+    const p = layout.minP + ((layout.maxP - layout.minP) * i) / gridSteps;
+    const y = layout.priceToY(p);
+    ctx.beginPath();
+    ctx.moveTo(layout.padLeft, y);
+    ctx.lineTo(layout.padLeft + layout.plotW, y);
+    ctx.stroke();
+    ctx.fillText(fmtNumber(p), layout.padLeft + layout.plotW + 6, y + 3);
+  }
+
+  // Vertical date grid lines
+  const stepX = Math.max(1, Math.floor(layout.count / 8));
+  for (let i = layout.sIdx; i <= layout.eIdx; i += stepX) {
+    const x = layout.idxToX(i);
+    ctx.beginPath();
+    ctx.moveTo(x, layout.mainTop);
+    ctx.lineTo(x, layout.subBottom);
+    ctx.stroke();
+    const dt = taState.candles[i]?.date || '';
+    ctx.fillText(dt.slice(5), x - 14, layout.subBottom + 14);
+  }
+
+  // Clip Main Panel
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(layout.padLeft, layout.mainTop, layout.plotW, layout.mainH);
+  ctx.clip();
+
+  // Bollinger Bands
+  if (taState.indicators.bb && taState.computed.bbUpper) {
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.07)';
+    ctx.beginPath();
+    let started = false;
+    for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+      const u = taState.computed.bbUpper[i];
+      if (u === null) continue;
+      const x = layout.idxToX(i);
+      const y = layout.priceToY(u);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else ctx.lineTo(x, y);
+    }
+    for (let i = layout.eIdx; i >= layout.sIdx; i--) {
+      const l = taState.computed.bbLower[i];
+      if (l === null) continue;
+      ctx.lineTo(layout.idxToX(i), layout.priceToY(l));
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    ['bbUpper', 'bbLower'].forEach((k) => {
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      let st = false;
+      for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+        const v = taState.computed[k][i];
+        if (v === null) continue;
+        const x = layout.idxToX(i);
+        const y = layout.priceToY(v);
+        if (!st) {
+          ctx.moveTo(x, y);
+          st = true;
+        } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    });
+  }
+
+  // Auto Trading Plan Overlay (Entry Zone, SL, TP1, TP2, Avg Bandar)
+  if (taState.indicators.plan && taState.tradingPlan) {
+    const p = taState.tradingPlan;
+    if (p.entry_low && p.entry_high) {
+      const yHigh = layout.priceToY(p.entry_high);
+      const yLow = layout.priceToY(p.entry_low);
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.13)';
+      ctx.fillRect(layout.padLeft, Math.min(yHigh, yLow), layout.plotW, Math.max(2, Math.abs(yLow - yHigh)));
+    }
+    const planLines = [
+      { price: p.target_2, label: `TP2 Rp ${fmtNumber(p.target_2)}`, color: '#2dd4bf' },
+      { price: p.target_1, label: `TP1 Rp ${fmtNumber(p.target_1)}`, color: '#10b981' },
+      { price: p.entry_high, label: `Entry Rp ${fmtNumber(p.entry_low)}-${fmtNumber(p.entry_high)}`, color: '#38bdf8' },
+      { price: p.bandar_avg_buy, label: `Avg Bandar Rp ${fmtNumber(p.bandar_avg_buy)}`, color: '#f59e0b' },
+      { price: p.stop_loss, label: `SL Rp ${fmtNumber(p.stop_loss)}`, color: '#f43f5e' },
+    ];
+    planLines.forEach((pl) => {
+      if (!pl.price || pl.price <= 0) return;
+      const y = layout.priceToY(pl.price);
+      if (y < layout.mainTop || y > layout.mainBottom) return;
+      ctx.strokeStyle = pl.color;
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(layout.padLeft, y);
+      ctx.lineTo(layout.padLeft + layout.plotW, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = pl.color;
+      ctx.font = 'bold 10px JetBrains Mono, monospace';
+      ctx.fillText(pl.label, layout.padLeft + 8, y - 4);
+    });
+  }
+
+  // Candlesticks or Line
+  const barW = Math.max(2, Math.min(18, (layout.plotW / layout.count) * 0.72));
+  if (taState.indicators.candle) {
+    for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+      const c = taState.candles[i];
+      if (!c) continue;
+      const x = layout.idxToX(i);
+      const yO = layout.priceToY(c.open);
+      const yC = layout.priceToY(c.close);
+      const yH = layout.priceToY(c.high);
+      const yL = layout.priceToY(c.low);
+      const isUp = c.close >= c.open;
+      const col = isUp ? '#10b981' : '#f43f5e';
+
+      ctx.strokeStyle = col;
+      ctx.fillStyle = col;
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(x, yH);
+      ctx.lineTo(x, yL);
+      ctx.stroke();
+
+      const bodyTop = Math.min(yO, yC);
+      const bodyH = Math.max(1.5, Math.abs(yC - yO));
+      ctx.fillRect(x - barW / 2, bodyTop, barW, bodyH);
+    }
+  } else {
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+      const c = taState.candles[i];
+      const x = layout.idxToX(i);
+      const y = layout.priceToY(c.close);
+      if (i === layout.sIdx) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // Moving Averages (MA20, MA50, EMA9)
+  const drawLineSeries = (arr, color, width = 1.6) => {
+    if (!arr) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    let started = false;
+    for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+      const val = arr[i];
+      if (val === null || val === undefined) continue;
+      const x = layout.idxToX(i);
+      const y = layout.priceToY(val);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  };
+
+  if (taState.indicators.ma20) drawLineSeries(taState.computed.ma20, '#3b82f6', 1.7);
+  if (taState.indicators.ma50) drawLineSeries(taState.computed.ma50, '#f59e0b', 1.7);
+  if (taState.indicators.ema9) drawLineSeries(taState.computed.ema9, '#c084fc', 1.5);
+
+  ctx.restore(); // end Main Panel clip
+
+  // User Drawings & Active Drawing
+  taState.drawings.forEach((d) => _drawSingleTAObject(ctx, d, layout));
+  if (taState.activeDrawing) {
+    _drawSingleTAObject(ctx, taState.activeDrawing, layout);
+  }
+
+  // Divider between Main and Sub Panel
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(layout.padLeft, layout.subTop - 6);
+  ctx.lineTo(layout.padLeft + layout.plotW, layout.subTop - 6);
+  ctx.stroke();
+
+  // Sub-Panel (Volume / RSI / MACD)
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(layout.padLeft, layout.subTop, layout.plotW, layout.subH);
+  ctx.clip();
+
+  if (taState.subPanel === 'vol') {
+    let maxV = 1;
+    for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+      const v = taState.candles[i]?.volume_lot || 0;
+      if (v > maxV) maxV = v;
+    }
+    for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+      const c = taState.candles[i];
+      const x = layout.idxToX(i);
+      const bh = ((c.volume_lot || 0) / maxV) * (layout.subH - 8);
+      ctx.fillStyle = c.close >= c.open ? 'rgba(16, 185, 129, 0.55)' : 'rgba(244, 68, 68, 0.55)';
+      ctx.fillRect(x - barW / 2, layout.subBottom - bh, barW, bh);
+    }
+    // Vol MA20 line
+    if (taState.computed.volMa20) {
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      let st = false;
+      for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+        const vm = taState.computed.volMa20[i];
+        if (vm === null) continue;
+        const x = layout.idxToX(i);
+        const y = layout.subBottom - (vm / maxV) * (layout.subH - 8);
+        if (!st) {
+          ctx.moveTo(x, y);
+          st = true;
+        } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10px JetBrains Mono, monospace';
+    ctx.fillText('Volume (Lot) + MA20', layout.padLeft + 6, layout.subTop + 12);
+  } else if (taState.subPanel === 'rsi') {
+    const y70 = layout.subBottom - (70 / 100) * layout.subH;
+    const y30 = layout.subBottom - (30 / 100) * layout.subH;
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.06)';
+    ctx.fillRect(layout.padLeft, y70, layout.plotW, y30 - y70);
+    ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(layout.padLeft, y70);
+    ctx.lineTo(layout.padLeft + layout.plotW, y70);
+    ctx.moveTo(layout.padLeft, y30);
+    ctx.lineTo(layout.padLeft + layout.plotW, y30);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    let st = false;
+    for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+      const r = taState.computed.rsi14?.[i];
+      if (r === null || r === undefined) continue;
+      const x = layout.idxToX(i);
+      const y = layout.subBottom - (r / 100) * layout.subH;
+      if (!st) {
+        ctx.moveTo(x, y);
+        st = true;
+      } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = '10px JetBrains Mono, monospace';
+    ctx.fillText('RSI (14) [70 / 30]', layout.padLeft + 6, layout.subTop + 12);
+  } else if (taState.subPanel === 'macd') {
+    let maxM = 1;
+    for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+      const m1 = Math.abs(taState.computed.macdLine?.[i] || 0);
+      const m2 = Math.abs(taState.computed.macdSignal?.[i] || 0);
+      const m3 = Math.abs(taState.computed.macdHist?.[i] || 0);
+      maxM = Math.max(maxM, m1, m2, m3);
+    }
+    const zeroY = layout.subTop + layout.subH / 2;
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    ctx.beginPath();
+    ctx.moveTo(layout.padLeft, zeroY);
+    ctx.lineTo(layout.padLeft + layout.plotW, zeroY);
+    ctx.stroke();
+
+    for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+      const hVal = taState.computed.macdHist?.[i] || 0;
+      const x = layout.idxToX(i);
+      const bh = (Math.abs(hVal) / maxM) * (layout.subH * 0.42);
+      ctx.fillStyle = hVal >= 0 ? 'rgba(16, 185, 129, 0.55)' : 'rgba(244, 63, 94, 0.55)';
+      ctx.fillRect(x - barW / 2, hVal >= 0 ? zeroY - bh : zeroY, barW, bh);
+    }
+
+    const drawMacdCurve = (arr, col) => {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (let i = layout.sIdx; i <= layout.eIdx; i++) {
+        const v = arr?.[i] || 0;
+        const x = layout.idxToX(i);
+        const y = zeroY - (v / maxM) * (layout.subH * 0.42);
+        if (i === layout.sIdx) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    };
+    drawMacdCurve(taState.computed.macdLine, '#38bdf8');
+    drawMacdCurve(taState.computed.macdSignal, '#f59e0b');
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = '10px JetBrains Mono, monospace';
+    ctx.fillText('MACD (12, 26, 9)', layout.padLeft + 6, layout.subTop + 12);
+  }
+  ctx.restore(); // end Sub-Panel clip
+
+  // Crosshair & Live OHLCV Info Update
+  let hoverIdx = layout.eIdx;
+  if (taState.hoverPos) {
+    const { x, y } = taState.hoverPos;
+    if (x >= layout.padLeft && x <= layout.padLeft + layout.plotW) {
+      hoverIdx = Math.max(layout.sIdx, Math.min(layout.eIdx, Math.round(layout.xToIdx(x))));
+      const snapX = layout.idxToX(hoverIdx);
+
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(snapX, layout.mainTop);
+      ctx.lineTo(snapX, layout.subBottom);
+      if (y >= layout.mainTop && y <= layout.mainBottom) {
+        ctx.moveTo(layout.padLeft, y);
+        ctx.lineTo(layout.padLeft + layout.plotW, y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (y >= layout.mainTop && y <= layout.mainBottom) {
+        const curP = layout.yToPrice(y);
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(layout.padLeft + layout.plotW + 2, y - 9, layout.padRight - 6, 18);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 10px JetBrains Mono, monospace';
+        ctx.fillText(fmtNumber(curP), layout.padLeft + layout.plotW + 6, y + 3);
+      }
+    }
+  }
+
+  const hc = taState.candles[hoverIdx];
+  const prevC = hoverIdx > 0 ? taState.candles[hoverIdx - 1].close : hc?.open || 1;
+  const chgPct = hc ? (((hc.close - prevC) / Math.max(1, prevC)) * 100).toFixed(2) : '0.00';
+  const infoBar = document.getElementById('taCrosshairInfo');
+  if (infoBar && hc) {
+    const ma20v = taState.computed.ma20?.[hoverIdx];
+    const ma50v = taState.computed.ma50?.[hoverIdx];
+    const rsiv = taState.computed.rsi14?.[hoverIdx];
+    infoBar.innerHTML = `
+      <span>📅 <b class="text-white">${hc.date}</b></span>
+      <span>O: <b class="text-slate-200">${fmtNumber(hc.open)}</b></span>
+      <span>H: <b class="text-emerald-400">${fmtNumber(hc.high)}</b></span>
+      <span>L: <b class="text-rose-400">${fmtNumber(hc.low)}</b></span>
+      <span>C: <b class="${hc.close >= prevC ? 'text-emerald-400' : 'text-rose-400'}">${fmtNumber(hc.close)} (${chgPct >= 0 ? '+' : ''}${chgPct}%)</b></span>
+      <span>Vol: <b class="text-amber-300">${fmtNumber(hc.volume_lot)} Lot</b></span>
+      <span class="text-blue-400">MA20: <b>${ma20v ? fmtNumber(ma20v) : '-'}</b></span>
+      <span class="text-amber-400">MA50: <b>${ma50v ? fmtNumber(ma50v) : '-'}</b></span>
+      <span class="text-sky-400">RSI(14): <b>${rsiv ? rsiv.toFixed(1) : '-'}</b></span>
+    `;
+  }
+
+  ctx.restore();
 }
 
 async function handleExcelUpload(fileList) {

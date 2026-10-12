@@ -73,7 +73,7 @@ def filter_smart_telegram_picks(
     2. Skor Smart Money tinggi (>= min_score).
     3. Belum terbang tinggi (-2.5% <= perubahan harga <= max_pct_change, default +2.5%).
     4. Likuid (Nilai transaksi harian >= Rp 500 Juta).
-    5. Jarak ke modal bandar tidak terlalu jauh (diff_bandar_avg_pct <= 8.0%).
+    5. Jarak ke modal bandar tidak boleh lebih dari 5% (diff_bandar_avg_pct <= 5.0%).
     """
     valid_triggers = {"BIG_ACCUMULATION", "SILENT_ACCUMULATION", "MARKUP_BREAKOUT", "FOREIGN_INFLOW"}
     candidates = []
@@ -103,7 +103,7 @@ def filter_smart_telegram_picks(
             continue
 
         diff_bandar = float(plan.get("diff_bandar_avg_pct", s.get("diff_bandar_avg_pct", 0)))
-        if diff_bandar > 8.0:
+        if diff_bandar > 5.0:
             continue
 
         candidates.append(s)
@@ -139,7 +139,7 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
     lines = [
         "🎯 <b>SMARTFLOW IDX — REKOMENDASI TERBAIK</b>",
         f"📅 <i>Sesi Bursa: {html.escape(date_str)}</i>",
-        "💡 <i>Kriteria: Akumulasi Smart Money & Belum Terbang (≤ 2.5%, Aman Modal)</i>",
+        "💡 <i>Kriteria: Akumulasi Smart Money, Belum Terbang (≤ 2.5%), & Avg Bandar ≤ 5%</i>",
         f"🔍 Ditemukan <b>{len(picks)} Saham Pilihan</b>:\n",
     ]
 

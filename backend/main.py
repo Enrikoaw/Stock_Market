@@ -458,6 +458,74 @@ def get_stock_detail(ticker: str) -> dict:
     return details_map[key]
 
 
+def _fetch_ticker_candles_blocking(ticker: str, period: str = "6mo") -> list[dict]:
+    import yfinance as yf
+
+    valid_periods = {"1mo": "1mo", "3mo": "3mo", "6mo": "6mo", "1y": "1y"}
+    yf_period = valid_periods.get(period, "6mo")
+    try:
+        t_obj = yf.Ticker(f"{ticker}.JK")
+        sub = t_obj.history(period=yf_period, interval="1d", auto_adjust=False)
+        if sub is not None and not sub.empty:
+            sub = sub.dropna(subset=["Close"]).copy()
+            sub = sub[sub["Close"] > 0].reset_index()
+            date_col = "Date" if "Date" in sub.columns else sub.columns[0]
+            sub["date"] = pd.to_datetime(sub[date_col]).dt.strftime("%Y-%m-%d")
+            candles = []
+            for _, row_b in sub.iterrows():
+                c_val = int(round(float(row_b["Close"])))
+                o_val = int(round(float(row_b.get("Open", c_val)) or c_val))
+                h_val = int(round(max(float(row_b.get("High", c_val)) or c_val, c_val, o_val)))
+                l_val = int(round(min(float(row_b.get("Low", c_val)) or c_val, c_val, o_val)))
+                vol_lot = int(round(max(0.0, float(row_b.get("Volume", 0) or 0)) / 100.0))
+                candles.append({
+                    "date": str(row_b["date"]),
+                    "open": o_val,
+                    "high": h_val,
+                    "low": l_val,
+                    "close": c_val,
+                    "volume_lot": vol_lot,
+                })
+            if candles:
+                return candles
+    except Exception as exc:
+        print(f"[CandlesAPI] Fallback ke history lokal untuk {ticker}: {exc}")
+    return []
+
+
+@app.get("/api/stock/{ticker}/candles")
+async def get_stock_candles(ticker: str, period: str = Query(default="6mo")) -> dict:
+    if STATE["analysis"] is None:
+        init_default_state()
+
+    key = ticker.strip().upper()
+    details_map = STATE["analysis"]["details"]
+    detail = details_map.get(key, {})
+
+    candles = await asyncio.to_thread(_fetch_ticker_candles_blocking, key, period)
+    if not candles and detail:
+        candles = [
+            {
+                "date": h["date"],
+                "open": h["open"],
+                "high": h["high"],
+                "low": h["low"],
+                "close": h["close"],
+                "volume_lot": h.get("volume_lot", 0),
+            }
+            for h in detail.get("history", [])
+        ]
+
+    return {
+        "ticker": key,
+        "sector": detail.get("sector", "IDX Emiten"),
+        "trigger_label": detail.get("trigger_label", ""),
+        "smart_money_score": detail.get("smart_money_score", 0),
+        "trading_plan": detail.get("trading_plan", {}),
+        "candles": candles,
+    }
+
+
 async def _run_full_sync_background() -> None:
     try:
         await asyncio.to_thread(_run_sync_job_blocking)
