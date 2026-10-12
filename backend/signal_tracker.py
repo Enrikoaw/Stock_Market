@@ -500,6 +500,14 @@ class SignalTracker:
         with self.engine.connect() as conn:
             rows = [dict(r) for r in conn.execute(q).mappings().all()]
         for r in rows:
+            e_high = float(r.get("entry_high") or 0)
+            e_low = float(r.get("entry_low") or 0)
+            if e_high > 0 and (e_high - e_low) / e_high > 0.015:
+                step = 1 if e_high < 200 else 2 if e_high < 500 else 5 if e_high < 2000 else 10 if e_high < 5000 else 25
+                tight_low = max(50, int(round((e_high * 0.99) / step) * step))
+                if tight_low >= e_high and e_high > 50:
+                    tight_low = max(50, int(e_high - step))
+                r["entry_low"] = float(tight_low)
             if r["status"] == "WATCHLIST" and r["entry_high"]:
                 r["dist_to_entry_pct"] = round((r["last_close"] - r["entry_high"]) / r["entry_high"] * 100.0, 2)
         return rows
