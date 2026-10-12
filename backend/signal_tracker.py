@@ -248,23 +248,24 @@ class SignalTracker:
             ).scalars().all()
             return [str(t).upper() for t in rows]
 
-    def sync_active_signals_live(self) -> dict:
-        """Tarik harga & candle intraday/live terbaru secara cepat (< 3 detik) untuk saham yang aktif di Watchlist & Running, lalu evaluasi."""
+    def sync_active_signals_live(self, extra_tickers: list[str] | None = None) -> dict:
+        """Tarik harga & candle intraday/live terbaru secara cepat (< 3 detik) untuk saham yang aktif di Watchlist & Running (+ top screener), lalu evaluasi."""
         active_tickers = self.get_active_tickers()
-        if not active_tickers:
+        combined_tickers = list(dict.fromkeys(active_tickers + [t.upper() for t in (extra_tickers or []) if t]))
+        if not combined_tickers:
             return {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "tickers_checked": 0}
 
         try:
             import yfinance as yf
-            symbols = [f"{t}.JK" for t in active_tickers]
-            raw = yf.download(symbols, period="5d", progress=False, auto_adjust=False)
+            symbols = [f"{t}.JK" for t in combined_tickers]
+            raw = yf.download(symbols, period="5d", progress=False, auto_adjust=False, threads=True)
             if raw is None or raw.empty:
                 return {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "tickers_checked": 0}
 
             is_multi = isinstance(raw.columns, pd.MultiIndex)
             live_details = {}
 
-            for ticker in active_tickers:
+            for ticker in combined_tickers:
                 sym = f"{ticker}.JK"
                 try:
                     if is_multi:

@@ -10,6 +10,7 @@ let selectedTicker = null;
 let selectedStockDetail = null;
 let activeChartTab = 'price';
 let chartInstance = null;
+let isSyncingFast = false;
 
 // Formatters
 const fmtNumber = (n) => new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
@@ -128,10 +129,11 @@ async function loadScreenerData(preserveSelection = false) {
     min_score: minScore,
     sort_by: sortBy,
     search,
+    _t: Date.now(),
   });
 
   try {
-    const res = await fetch(`/api/screener?${params.toString()}`);
+    const res = await fetch(`/api/screener?${params.toString()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Gagal mengambil data screener');
     const data = await res.json();
 
@@ -315,7 +317,7 @@ async function selectStock(ticker, scrollToTradingPlan = false) {
   if (activeRow) activeRow.classList.add('selected-row');
 
   try {
-    const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}`);
+    const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}?_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`Gagal memuat detail ${ticker}`);
     selectedStockDetail = await res.json();
     renderInspectorPanel(selectedStockDetail);
@@ -715,21 +717,24 @@ async function handleLoadLocalPath() {
 }
 
 async function syncFastMarketData() {
+  if (isSyncingFast) return;
+  isSyncingFast = true;
   const btn = document.getElementById('btnSyncFast');
   if (btn) {
     btn.disabled = true;
     btn.textContent = '⏳ Memeriksa...';
   }
   try {
-    showToast('⚡ Mengevaluasi harga live Watchlist & Running...');
-    const res = await fetch('/api/sync-fast', { method: 'POST' });
+    showToast('⚡ Mengevaluasi harga live Screener, Watchlist & Running...');
+    const res = await fetch('/api/sync-fast', { method: 'POST', cache: 'no-store' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Gagal sync cepat');
-    showToast(data.message || '⚡ Status Watchlist & Running berhasil diperbarui!');
-    await Promise.all([loadScreenerData(false), loadTracker()]);
+    showToast(data.message || '⚡ Status Screener, Watchlist & Running berhasil diperbarui!');
+    await Promise.all([loadScreenerData(true), loadTracker()]);
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
+    isSyncingFast = false;
     if (btn) {
       btn.disabled = false;
       btn.textContent = '⚡ Sync Cepat (< 2s)';
@@ -745,7 +750,7 @@ async function syncLiveMarketData() {
   }
   try {
     showToast('🚀 Memulai unduh paralel 844 saham di background (~30s)...');
-    const res = await fetch('/api/sync-live', { method: 'POST' });
+    const res = await fetch('/api/sync-live', { method: 'POST', cache: 'no-store' });
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Gagal sinkronisasi live data');
@@ -757,7 +762,7 @@ async function syncLiveMarketData() {
     const pollInterval = setInterval(async () => {
       pollCount++;
       try {
-        const hRes = await fetch('/api/health');
+        const hRes = await fetch(`/api/health?_t=${Date.now()}`, { cache: 'no-store' });
         const hData = await hRes.json();
         if (!hData.is_syncing || pollCount >= 20) {
           clearInterval(pollInterval);
@@ -765,7 +770,7 @@ async function syncLiveMarketData() {
             btn.disabled = false;
             btn.textContent = '🔄 Full Sync IDX';
           }
-          await Promise.all([loadScreenerData(false), loadTracker()]);
+          await Promise.all([loadScreenerData(true), loadTracker()]);
           showToast('✅ Pembaruan seluruh 844 saham IDX selesai!', 'success');
         }
       } catch {
@@ -786,11 +791,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 1. Tampilkan data awal secepat mungkin
   await Promise.all([loadScreenerData(false), loadTracker()]);
 
-  // 2. Otomatis tarik harga live terbaru dari bursa di latar belakang saat web pertama dibuka!
+  // 2. Otomatis tarik harga live & riwayat chart terbaru dari bursa di latar belakang saat web pertama dibuka!
   // Pengguna tidak perlu lagi mengklik tombol sync manual.
   (async () => {
     try {
-      await fetch('/api/sync-fast', { method: 'POST' });
+      await fetch('/api/sync-fast', { method: 'POST', cache: 'no-store' });
       await Promise.all([loadScreenerData(true), loadTracker()]);
     } catch (e) {
       console.debug('Initial auto-sync background:', e);
@@ -871,7 +876,7 @@ function initLiveMarketAutoSync() {
   if (keepAliveTimerId) clearInterval(keepAliveTimerId);
   keepAliveTimerId = setInterval(() => {
     if (isIDXMarketOpenNow()) {
-      fetch('/api/health').catch(() => {});
+      fetch(`/api/health?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => {});
     }
   }, 5 * 60 * 1000);
 
@@ -882,7 +887,7 @@ function initLiveMarketAutoSync() {
     if (isIDXMarketOpenNow() && !isSyncingFast) {
       try {
         // Otomatis tarik harga live saham Watchlist/Running & update Screener
-        await fetch('/api/sync-fast', { method: 'POST' }).catch(() => {});
+        await fetch('/api/sync-fast', { method: 'POST', cache: 'no-store' }).catch(() => {});
         await Promise.all([
           loadScreenerData(true),
           loadTracker(),
@@ -918,8 +923,8 @@ const pctClass = (v) => (v === null || v === undefined ? 'text-slate-400' : v >=
 async function loadTracker() {
   try {
     const [statsRes, sigRes] = await Promise.all([
-      fetch('/api/tracker/stats'),
-      fetch(`/api/tracker/signals?status=${encodeURIComponent(trackerTab)}&sort_by=${encodeURIComponent(trackerSortBy)}`),
+      fetch(`/api/tracker/stats?_t=${Date.now()}`, { cache: 'no-store' }),
+      fetch(`/api/tracker/signals?status=${encodeURIComponent(trackerTab)}&sort_by=${encodeURIComponent(trackerSortBy)}&_t=${Date.now()}`, { cache: 'no-store' }),
     ]);
     if (!statsRes.ok || !sigRes.ok) return;
     const statsData = await statsRes.json();

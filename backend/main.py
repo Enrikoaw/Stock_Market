@@ -103,22 +103,32 @@ class LocalPathRequest(BaseModel):
 
 def _run_fast_sync_job_blocking() -> dict:
     """Sync kilat (< 2-3 detik) khusus untuk evaluasi live Watchlist & Running (Entry, TP, SL),
-    sekaligus memperbarui harga & change saham aktif di tabel Screener & Inspector!"""
-    tracker_res = TRACKER.sync_active_signals_live()
+    sekaligus memperbarui harga, persentase, & chart history saham aktif di Screener & Inspector!"""
+    if STATE["analysis"] is None:
+        init_default_state()
+
+    extra_tickers: list[str] = []
+    if STATE["analysis"] and "stocks" in STATE["analysis"]:
+        # Sertakan Top 40 saham dengan Smart Money Score tertinggi agar halaman utama Screener selalu live
+        top_stocks = sorted(
+            STATE["analysis"]["stocks"],
+            key=lambda x: (x.get("smart_money_score", 0), x.get("vol_ratio", 0)),
+            reverse=True,
+        )[:40]
+        extra_tickers = [s["ticker"] for s in top_stocks if "ticker" in s]
+
+    tracker_res = TRACKER.sync_active_signals_live(extra_tickers=extra_tickers)
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["last_tracker_run"] = now_str
     STATE["last_sync_time"] = now_str
 
-    if STATE["analysis"] is None:
-        init_default_state()
-
-    # Perbarui harga live saham di tabel Screener & Inspector jika ada data quotes terbaru
+    # Perbarui harga live & riwayat chart saham di tabel Screener & Inspector
     live_details = tracker_res.get("live_details", {})
     if live_details and STATE["analysis"]:
         analysis = STATE["analysis"]
         stocks = analysis.get("stocks", [])
         details_map = analysis.get("details", {})
-        latest_date = None
+        latest_date = analysis.get("kpis", {}).get("latest_date")
 
         for ticker, ld in live_details.items():
             hist = ld.get("history", [])
@@ -126,10 +136,13 @@ def _run_fast_sync_job_blocking() -> dict:
                 continue
             last_bar = hist[-1]
             c_price = int(round(float(last_bar.get("close", 0))))
+            if c_price <= 0:
+                continue
             prev_price = float(hist[-2]["close"]) if len(hist) > 1 else float(last_bar.get("open", c_price))
             pct_chg = round((c_price - prev_price) / max(prev_price, 1) * 100.0, 2)
             b_date = str(last_bar.get("date", ""))
-            if b_date:
+            vol_lot = int(round(float(last_bar.get("volume", 0)) / 100.0))
+            if b_date and (not latest_date or b_date > latest_date):
                 latest_date = b_date
 
             # Update di stocks summary (untuk tabel screener)
@@ -139,22 +152,63 @@ def _run_fast_sync_job_blocking() -> dict:
                     s["pct_change"] = pct_chg
                     if b_date:
                         s["date"] = b_date
+                    if vol_lot > 0:
+                        s["volume_lot"] = vol_lot
 
-            # Update di details map (untuk panel inspector)
+            # Update di details map (untuk panel inspector & grafik)
             if ticker in details_map:
                 d = details_map[ticker]
                 d["close"] = c_price
                 d["pct_change"] = pct_chg
                 if b_date:
                     d["date"] = b_date
+                if vol_lot > 0:
+                    d["volume_lot"] = vol_lot
+
+                # Perbarui atau tambahkan candle terbaru ke d["history"] agar grafik langsung terupdate
+                d_hist = d.get("history") or []
+                existing_by_date = {str(h.get("date")): h for h in d_hist}
+                for bar in hist:
+                    b_dt = str(bar.get("date", ""))
+                    if not b_dt:
+                        continue
+                    b_c = int(round(float(bar.get("close", 0))))
+                    if b_c <= 0:
+                        continue
+                    b_o = int(round(float(bar.get("open", b_c))))
+                    b_h = int(round(float(bar.get("high", b_c))))
+                    b_l = int(round(float(bar.get("low", b_c))))
+                    b_v = int(round(float(bar.get("volume", 0)) / 100.0))
+                    if b_dt in existing_by_date:
+                        th = existing_by_date[b_dt]
+                        th["open"] = b_o
+                        th["high"] = b_h
+                        th["low"] = b_l
+                        th["close"] = b_c
+                        if b_v > 0:
+                            th["volume_lot"] = b_v
+                    elif not d_hist or b_dt > str(d_hist[-1].get("date", "")):
+                        prev_h = d_hist[-1] if d_hist else {}
+                        new_h = dict(prev_h)
+                        new_h.update({
+                            "date": b_dt,
+                            "open": b_o,
+                            "high": b_h,
+                            "low": b_l,
+                            "close": b_c,
+                            "volume_lot": b_v if b_v > 0 else prev_h.get("volume_lot", 0),
+                        })
+                        d_hist.append(new_h)
+                        existing_by_date[b_dt] = new_h
 
         if latest_date and "kpis" in analysis:
             analysis["kpis"]["latest_date"] = latest_date
+            STATE["source_name"] = f"Live IDX Real-Time ({latest_date})"
 
     return {
         "status": "success",
         "tracker_res": tracker_res,
-        "message": f"⚡ Sync Cepat selesai! {tracker_res.get('tickers_checked', 0)} saham aktif diperbarui harganya & dievaluasi.",
+        "message": f"⚡ Sync Cepat selesai! {tracker_res.get('tickers_checked', 0)} saham utama & watchlist diperbarui.",
         "source_name": STATE["source_name"],
         "last_sync_time": STATE["last_sync_time"],
         "kpis": STATE["analysis"]["kpis"] if STATE["analysis"] else {},
@@ -185,43 +239,72 @@ def _run_sync_job_blocking() -> dict:
     return analysis
 
 
-def is_idx_market_open_now() -> bool:
-    """Mengecek apakah bursa saham BEI/IDX saat ini sedang berlangsung (09:00 - 16:05 WIB, Senin-Jumat)."""
+def _get_now_wib() -> datetime:
     try:
         from zoneinfo import ZoneInfo
-        wib = ZoneInfo("Asia/Jakarta")
-        now = datetime.now(wib)
+        return datetime.now(ZoneInfo("Asia/Jakarta"))
     except Exception:
-        # Fallback manual UTC+7 jika zoneinfo belum terpasang
         from datetime import timezone, timedelta
-        wib_tz = timezone(timedelta(hours=7))
-        now = datetime.now(wib_tz)
+        return datetime.now(timezone(timedelta(hours=7)))
 
+
+def is_idx_market_open_now() -> bool:
+    """Mengecek apakah bursa saham BEI/IDX saat ini sedang berlangsung (09:00 - 16:10 WIB, Senin-Jumat)."""
+    now = _get_now_wib()
     if now.weekday() >= 5:  # Sabtu / Minggu
         return False
-    t = now.time()
     from datetime import time as dtime
-    return dtime(9, 0) <= t <= dtime(16, 10)
+    return dtime(9, 0) <= now.time() <= dtime(16, 10)
+
+
+def _expected_latest_trading_date() -> str:
+    """Mengembalikan tanggal hari bursa terakhir yang seharusnya sudah memiliki data (YYYY-MM-DD)."""
+    from datetime import time as dtime, timedelta
+    now = _get_now_wib()
+    cur = now.date()
+    if cur.weekday() < 5 and now.time() < dtime(9, 5):
+        cur -= timedelta(days=1)
+    while cur.weekday() >= 5:
+        cur -= timedelta(days=1)
+    return cur.strftime("%Y-%m-%d")
+
+
+def _is_cache_stale() -> bool:
+    """Mengecek apakah tanggal data di STATE['analysis'] tertinggal dari tanggal bursa terakhir."""
+    if not STATE.get("analysis") or "kpis" not in STATE["analysis"]:
+        return True
+    latest_dt = str(STATE["analysis"]["kpis"].get("latest_date", ""))
+    expected_dt = _expected_latest_trading_date()
+    return bool(not latest_dt or latest_dt < expected_dt)
 
 
 async def _background_market_session_worker() -> None:
     """
-    Worker Otomatis Jam Bursa:
-    - Selama jam bursa aktif (09:00 - 16:05 WIB, Senin-Jumat): Otomatis memantau harga realtime
-      dan mengevaluasi status Watchlist -> Running -> TP/SL setiap 90 detik.
-    - Saat bursa tutup (setelah 16:05 WIB / Hari Libur): Mode pasif & hemat resource,
-      hanya menampilkan data candle final hari tersebut.
+    Worker Otomatis Jam Bursa & Penjaga Kesegaran Data Startup:
+    - Saat server pertama kali menyala (atau bangun dari tidur): jika tanggal cache tertinggal dari
+      hari bursa terakhir, otomatis melakukan Fast Sync (< 3s) diikuti Full Sync seluruh 844 saham!
+    - Selama jam bursa aktif (09:00 - 16:10 WIB, Senin-Jumat): Otomatis memantau harga realtime,
+      memperbarui tabel Screener, grafik Inspector, & status Watchlist/Running setiap 90 detik,
+      serta menyimpan pembaruan penuh ke CSV setiap ~15 menit.
     """
     print("[MarketWorker] Background Market Session Worker aktif.")
+    loop_count = 0
     while True:
+        loop_count += 1
         try:
-            if is_idx_market_open_now():
-                active_tickers = TRACKER.get_active_tickers()
-                if active_tickers:
-                    res = await asyncio.to_thread(TRACKER.sync_active_signals_live)
-                    if any(res.get(k, 0) > 0 for k in ("entered", "win", "loss", "expired", "timeout")):
-                        print(f"[MarketLive] Perubahan status sinyal terdeteksi: {res}")
-                        STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            market_open = is_idx_market_open_now()
+            cache_stale = _is_cache_stale()
+
+            if market_open or cache_stale or loop_count == 1:
+                # 1. Tarik harga live cepat untuk saham-saham teratas Screener & Watchlist/Running
+                await asyncio.to_thread(_run_fast_sync_job_blocking)
+
+                # 2. Jika tanggal cache masih tertinggal (atau setiap 15 menit saat jam bursa),
+                #    jalankan Full Sync 844 saham di background agar file CSV cache tersimpan permanen.
+                if (cache_stale or (market_open and loop_count % 10 == 0)) and not STATE["is_syncing"]:
+                    print(f"[MarketWorker] Memulai Full Sync otomatis (cache_stale={cache_stale}, market_open={market_open})...")
+                    STATE["is_syncing"] = True
+                    asyncio.create_task(_run_full_sync_background())
         except Exception as exc:
             print(f"[MarketWorker] Error: {exc}")
 
@@ -240,7 +323,7 @@ async def lifespan(app_instance: FastAPI):
 app = FastAPI(
     title="SmartFlow IDX - On-Demand Smart Money Stock Screener API",
     description="API Backend On-Demand untuk deteksi pergerakan Smart Money dari seluruh saham IDX",
-    version="4.1.0",
+    version="4.2.0",
     lifespan=lifespan,
 )
 
@@ -251,6 +334,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_no_cache_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 def init_default_state() -> None:
