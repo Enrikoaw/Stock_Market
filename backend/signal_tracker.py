@@ -168,8 +168,17 @@ class SignalTracker:
         e_low, e_high = sorted([float(plan["entry_low"]), float(plan["entry_high"])])
         sl = float(plan["stop_loss"])
         target = float(plan["target_2"] if self.tp_level == 2 else plan["target_1"])
-        if not (sl < e_low and target > e_high):
-            return False, f"{ticker}: trading plan tidak valid (SL harus di bawah entry & TP di atas entry)."
+        # Filter Tambahan: Jarak harga ke modal rata-rata bandar tidak boleh lebih dari +5.0%
+        diff_bandar = stock.get("diff_bandar_avg_pct")
+        if diff_bandar is None and "diff_bandar_avg_pct" in plan:
+            diff_bandar = plan.get("diff_bandar_avg_pct")
+        if diff_bandar is not None:
+            try:
+                diff_val = float(diff_bandar)
+                if diff_val > 5.0:
+                    return False, f"{ticker}: Jarak harga ke modal bandar ({diff_val:+.1f}%) melebihi batas toleransi aman (maks +5.0%)."
+            except (ValueError, TypeError):
+                pass
 
         with self._lock, self.engine.begin() as conn:
             active = conn.execute(
