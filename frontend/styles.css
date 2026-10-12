@@ -1,12 +1,12 @@
-/* SmartFlow IDX - Dual Theme Engine (Dark & Light Mode) */
+/* SmartFlow IDX - Premium Glassmorphism UI & Dual Theme Engine (v14.0) */
 
 :root {
-  --bg-primary: #0b0f19;
-  --bg-card: #111827;
-  --bg-card-hover: #1f293d;
-  --border-subtle: #1e293b;
-  --text-primary: #f3f4f6;
-  --text-secondary: #9ca3af;
+  --bg-primary: #060a12;
+  --bg-card: rgba(15, 23, 42, 0.45);
+  --bg-card-hover: rgba(30, 41, 59, 0.55);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
   --emerald: #10b981;
   --amber: #f59e0b;
   --blue: #3b82f6;
@@ -34,94 +34,123 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: rgba(6, 10, 18, 0.6);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+  background: rgba(148, 163, 184, 0.4);
 }
 
+/* Primary Glassmorphism Panel */
 .glass-panel {
-  background: #111827;
-  border: 1px solid #1f293d;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
-  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.42), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+/*KPI Cards with Translucent Gradient & Ambient Hover Glow */
 .kpi-card {
-  background: #111827;
-  border: 1px solid #1f293d;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.35) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   position: relative;
   overflow: hidden;
 }
 .kpi-card:hover {
   transform: translateY(-2px);
-  border-color: #374151;
-  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.55), 0 0 20px rgba(16, 185, 129, 0.08);
 }
 .kpi-card.active-filter {
-  border-color: #10b981;
-  box-shadow: 0 0 0 1px #10b981;
+  border-color: rgba(16, 185, 129, 0.65);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.5), 0 8px 28px -4px rgba(16, 185, 129, 0.22);
 }
 
+/* Screener Table Rows: Transparent with Silky Hover */
 .stock-row {
-  transition: background-color 0.15s ease;
+  background: transparent;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease;
   cursor: pointer;
 }
 .stock-row:hover {
-  background-color: rgba(30, 41, 59, 0.65);
+  background-color: rgba(255, 255, 255, 0.05);
 }
 .stock-row.selected-row {
-  background-color: rgba(16, 185, 129, 0.12);
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.16) 0%, rgba(16, 185, 129, 0.03) 100%);
   border-left: 3px solid #10b981;
 }
 
-/* Trigger Badges (Dark Mode Default) */
+/* Trigger Badges (Refined Glass & Subtle Glow) */
 .badge-markup {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.15);
+  transition: all 0.2s ease;
+}
+.badge-markup:hover {
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.3);
 }
 .badge-big-accum {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.14);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.15);
+  transition: all 0.2s ease;
+}
+.badge-big-accum:hover {
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.3);
 }
 .badge-silent-accum {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.14);
+  color: #93c5fd;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.12);
+  transition: all 0.2s ease;
+}
+.badge-silent-accum:hover {
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.28);
 }
 .badge-foreign {
-  background: rgba(139, 92, 246, 0.15);
-  color: #a78bfa;
-  border: 1px solid rgba(139, 92, 246, 0.4);
+  background: rgba(139, 92, 246, 0.14);
+  color: #c4b5fd;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.12);
+  transition: all 0.2s ease;
+}
+.badge-foreign:hover {
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.28);
 }
 .badge-dist {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.14);
+  transition: all 0.2s ease;
 }
 .badge-neutral {
-  background: rgba(100, 116, 139, 0.15);
-  color: #94a3b8;
-  border: 1px solid rgba(100, 116, 139, 0.35);
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .dropzone-active {
@@ -129,40 +158,41 @@ body {
   background: rgba(16, 185, 129, 0.08) !important;
 }
 
-/* Signal Tracker tabs */
+/* Signal Tracker Glass Tabs */
 .tracker-tab {
-  padding: 5px 14px;
+  padding: 6px 14px;
   border-radius: 10px;
   font-size: 11px;
   font-weight: 600;
   color: #94a3b8;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(51, 65, 85, 0.8);
-  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: inline-flex;
   align-items: center;
 }
 .tracker-tab:hover {
   color: #ffffff;
-  background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(100, 116, 139, 0.8);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 .tracker-tab.active {
   color: #ffffff;
-  background: linear-gradient(135deg, #059669, #0d9488);
-  border-color: #10b981;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+  background: linear-gradient(135deg, rgba(5, 150, 105, 0.85), rgba(13, 148, 136, 0.85));
+  border-color: rgba(52, 211, 153, 0.5);
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.32);
 }
 .tracker-tab .tab-count {
   margin-left: 6px;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 9999px;
   font-size: 10px;
   font-family: 'JetBrains Mono', monospace;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.3);
 }
 .tracker-tab.active .tab-count {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
 }
 
@@ -178,12 +208,18 @@ html.light body {
   color: #0f172a !important;
 }
 
+html.light .ambient-bg-orbs {
+  opacity: 0.25 !important;
+}
+
 /* 1. Semuanya yang bernuansa gelap (slate-950, slate-900) berganti putih bersih */
 html.light .glass-panel,
 html.light .modal-box,
 html.light [class*="bg-slate-950"],
 html.light [class*="bg-slate-900"] {
-  background-color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06) !important;
 }
 
 html.light [class*="bg-slate-800"] {
@@ -191,7 +227,7 @@ html.light [class*="bg-slate-800"] {
 }
 
 html.light header {
-  background: rgba(255, 255, 255, 0.96) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
   border-bottom: 1px solid #e2e8f0 !important;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06) !important;
 }
@@ -199,8 +235,10 @@ html.light header {
 /* 2. Semua garis border gelap berganti border halus abu-abu terang */
 html.light [class*="border-slate-800"],
 html.light [class*="border-slate-700"],
+html.light [class*="border-white"],
 html.light .divide-slate-800 > :not([hidden]) ~ :not([hidden]),
-html.light .divide-slate-800\/70 > :not([hidden]) ~ :not([hidden]) {
+html.light .divide-slate-800\/70 > :not([hidden]) ~ :not([hidden]),
+html.light .divide-white\/5 > :not([hidden]) ~ :not([hidden]) {
   border-color: #e2e8f0 !important;
 }
 
@@ -233,13 +271,12 @@ html.light th {
 }
 
 html.light tbody tr:hover,
-html.light .stock-row:hover,
-html.light tr.hover\:bg-slate-800\/40:hover {
+html.light .stock-row:hover {
   background-color: #f1f5f9 !important;
 }
 
 html.light .stock-row.selected-row {
-  background-color: #ecfdf5 !important;
+  background: #ecfdf5 !important;
   border-left: 3px solid #10b981 !important;
 }
 
@@ -347,12 +384,10 @@ html.light .badge-neutral {
    RESPONSIVE MOBILE ENHANCEMENTS (Fix overlapping & squished tables)
    ===================================================================== */
 @media (max-width: 640px) {
-  /* Prevent horizontal overflow on mobile body */
   body {
     font-size: 13px;
   }
 
-  /* Table styling for touch / small screens: min-width ensures no column collision */
   table {
     min-width: 680px;
   }
@@ -362,17 +397,14 @@ html.light .badge-neutral {
     min-width: 820px;
   }
 
-  /* KPI Cards on Mobile: clean compact spacing */
   .kpi-card {
     padding: 0.85rem !important;
   }
 
-  /* Stat metric badges wrap smoothly without clipping */
   #tsWinRate {
     font-size: 11px;
   }
 
-  /* Sticky Header on mobile: tighter padding */
   header {
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
@@ -381,7 +413,6 @@ html.light .badge-neutral {
   }
 }
 
-/* Smooth horizontal scroll container with indicator shadow */
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
 }

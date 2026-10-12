@@ -253,7 +253,7 @@ function renderScreenerTable(stocks) {
         <tr
           id="row-${s.ticker}"
           onclick="selectStock('${s.ticker}')"
-          class="stock-row ${isSelected ? 'selected-row' : ''}"
+          class="stock-row hover:bg-white/[0.05] transition-colors ${isSelected ? 'selected-row' : ''}"
         >
           <!-- Ticker & Logo -->
           <td class="py-3 pl-4 pr-2">
@@ -267,7 +267,7 @@ function renderScreenerTable(stocks) {
           </td>
 
           <!-- Price -->
-          <td class="py-3 px-2 text-right font-mono font-bold text-slate-100 text-xs">
+          <td class="py-3 px-2 text-right font-mono font-bold text-white text-xs">
             ${fmtPrice(s.close)}
           </td>
 
@@ -278,7 +278,7 @@ function renderScreenerTable(stocks) {
 
           <!-- Volume Spike Badge -->
           <td class="py-3 px-2 text-center font-mono">
-            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/35' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">
+            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-amber-500/15 text-amber-300 border border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
               ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
             </span>
           </td>
@@ -287,7 +287,7 @@ function renderScreenerTable(stocks) {
           <td class="py-3 px-2 text-right">
             <div class="flex items-center justify-end gap-2.5">
               <span class="font-mono font-extrabold text-xs text-white">${s.smart_money_score}</span>
-              <div class="w-20 bg-slate-800 h-2 rounded-full overflow-hidden">
+              <div class="w-20 bg-white/[0.08] h-2 rounded-full overflow-hidden">
                 <div class="h-full bg-gradient-to-r from-emerald-400 to-teal-300 rounded-full" style="width: ${s.smart_money_score}%"></div>
               </div>
             </div>
@@ -384,9 +384,9 @@ function renderInspectorPanel(d) {
   if (biasEl) {
     biasEl.textContent = plan.action_bias;
     if (d.trigger_type === 'DISTRIBUTION_WARNING') {
-      biasEl.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30';
+      biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-400/35 shadow-[0_0_12px_rgba(244,63,94,0.2)]';
     } else {
-      biasEl.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/35 shadow-[0_0_12px_rgba(16,185,129,0.2)]';
     }
   }
 
@@ -413,19 +413,19 @@ function renderInspectorPanel(d) {
     .map((item) => {
       const icon =
         item.status === 'pass'
-          ? '<span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">✓</span>'
+          ? '<span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 flex items-center justify-center font-bold text-xs">✓</span>'
           : item.status === 'warn'
-          ? '<span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs">!</span>'
-          : '<span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-xs">✕</span>';
+          ? '<span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-400/30 flex items-center justify-center font-bold text-xs">!</span>'
+          : '<span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-400/30 flex items-center justify-center font-bold text-xs">✕</span>';
 
       return `
-        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-1">
+        <div class="p-2.5 rounded-xl glass-subcard hover:border-white/15 transition space-y-1">
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2">
               ${icon}
-              <span class="text-xs font-semibold text-slate-200">${item.title}</span>
+              <span class="text-xs font-semibold text-white">${item.title}</span>
             </div>
-            <span class="font-mono text-[11px] font-semibold text-emerald-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">${item.metric}</span>
+            <span class="font-mono text-[11px] font-semibold text-emerald-300 bg-white/[0.06] px-2 py-0.5 rounded-md border border-white/10">${item.metric}</span>
           </div>
           <p class="text-[11px] text-slate-400 pl-7 leading-relaxed">${item.detail}</p>
         </div>
@@ -446,9 +446,9 @@ function switchChartTab(tabName) {
   Object.entries(tabs).forEach(([key, id]) => {
     const btn = document.getElementById(id);
     if (key === tabName) {
-      btn.className = 'px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 text-white transition';
+      btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 text-white shadow-[0_0_12px_rgba(16,185,129,0.3)] transition';
     } else {
-      btn.className = 'px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-400 hover:text-white transition';
+      btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-white transition';
     }
   });
   if (selectedStockDetail) {
@@ -1170,7 +1170,7 @@ function renderTrackerStats(data) {
         .map(([type, b]) => {
           const wr = b.win_rate;
           return `
-          <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+          <div class="glass-subcard rounded-xl p-3 hover:border-white/15 transition">
             <div class="flex items-center justify-between">
               <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(type)}">${b.label}</span>
               <span class="font-mono font-bold ${wr === null ? 'text-slate-400' : wr >= 50 ? 'text-emerald-400' : 'text-rose-400'}">${wr === null ? '-' : wr + '%'}</span>
@@ -1182,7 +1182,7 @@ function renderTrackerStats(data) {
           </div>`;
         })
         .join('')
-    : '<div class="text-slate-500 text-[11px]">Belum ada data.</div>';
+    : '<div class="text-slate-400 text-[11px]">Belum ada data.</div>';
 
   // Tab counts
   const counts = { ALL: s.total, WATCHLIST: s.watchlist, RUNNING: s.running, WIN: s.win, LOSS: s.loss, EXPIRED: s.expired, TIMEOUT: s.timeout };
@@ -1197,7 +1197,7 @@ function renderTrackerStats(data) {
 function renderTrackerTable(rows) {
   const tbody = document.getElementById('trackerTableBody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-500">
+    tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">
       Belum ada sinyal pada kategori ini. Sinyal akumulasi dengan score tinggi akan otomatis tercatat setelah sinkronisasi data real.
     </td></tr>`;
     return;
@@ -1208,13 +1208,13 @@ function renderTrackerTable(rows) {
       const statusCls = TRACKER_STATUS_STYLE[r.status] || TRACKER_STATUS_STYLE.EXPIRED;
       const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT'].includes(r.status);
       const exitOrLast = isClosed && r.exit_price
-        ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-500">${r.exit_date || ''}</div>`
-        : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-500">last</div>`;
+        ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-400">${r.exit_date || ''}</div>`
+        : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-400">last</div>`;
       const entryCell = r.entry_price
-        ? `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-500">${r.entry_date || ''}</div>`
+        ? `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-400">${r.entry_date || ''}</div>`
         : r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined
-        ? `<span class="text-slate-500">-</span><div class="text-[10px] text-blue-300">jarak ${fmtPctOrDash(r.dist_to_entry_pct)}</div>`
-        : '<span class="text-slate-500">-</span>';
+        ? `<span class="text-slate-400">-</span><div class="text-[10px] text-blue-300">jarak ${fmtPctOrDash(r.dist_to_entry_pct)}</div>`
+        : '<span class="text-slate-400">-</span>';
       const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' ? null : r.pnl_pct;
 
       // Desain P/L Cell & Badge Terbang Tinggi
@@ -1239,7 +1239,7 @@ function renderTrackerTable(rows) {
         } else if (pnl !== null) {
           pnlContent = `
             <div class="font-bold text-rose-400 font-mono text-xs">${fmtPctOrDash(pnl)}</div>
-            <div class="text-[10px] text-slate-500">floating loss</div>`;
+            <div class="text-[10px] text-slate-400">floating loss</div>`;
         }
       } else if (r.status === 'WIN') {
         pnlContent = `
@@ -1253,7 +1253,7 @@ function renderTrackerTable(rows) {
           <div class="font-bold text-rose-400 font-mono text-xs">${fmtPctOrDash(pnl)}</div>
           <div class="text-[10px] text-rose-500/80 font-medium">stop loss</div>`;
       } else {
-        pnlContent = `<span class="text-slate-500">-</span>`;
+        pnlContent = `<span class="text-slate-400">-</span>`;
       }
 
       const noteText = String(r.note || '');
@@ -1261,10 +1261,10 @@ function renderTrackerTable(rows) {
       const hasPullbackSafe = noteText.startsWith('Koreksi sehat');
 
       const rowHighlight = hasDistWarning
-        ? 'hover:bg-rose-950/40 bg-rose-950/20 border-l-4 border-rose-500'
+        ? 'hover:bg-rose-500/10 bg-rose-500/[0.06] border-l-4 border-rose-500 transition-colors'
         : isHighFlyer
-          ? 'hover:bg-slate-800/60 bg-emerald-950/20 border-l-4 border-emerald-400'
-          : 'hover:bg-slate-800/40 transition-colors';
+          ? 'hover:bg-white/[0.06] bg-emerald-500/[0.06] border-l-4 border-emerald-400 transition-colors'
+          : 'hover:bg-white/[0.05] transition-colors';
 
       return `
       <tr class="${rowHighlight}">
@@ -1290,7 +1290,7 @@ function renderTrackerTable(rows) {
         </td>
 
         <!-- Tanggal Sinyal -->
-        <td class="py-3 px-2 font-mono text-slate-300 text-xs">${r.signal_date}</td>
+        <td class="py-3 px-2 font-mono text-slate-400 text-xs">${r.signal_date}</td>
 
         <!-- Zona Entry -->
         <td class="py-3 px-2 text-right font-mono text-emerald-400 font-bold text-xs">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
@@ -1310,23 +1310,23 @@ function renderTrackerTable(rows) {
         </td>
 
         <!-- Entry Price -->
-        <td class="py-3 px-2 text-right font-mono text-slate-100 font-semibold text-xs">${entryCell}</td>
+        <td class="py-3 px-2 text-right font-mono text-white font-semibold text-xs">${entryCell}</td>
 
         <!-- Last Price -->
-        <td class="py-3 px-2 text-right font-mono text-slate-100 font-semibold text-xs">${exitOrLast}</td>
+        <td class="py-3 px-2 text-right font-mono text-white font-semibold text-xs">${exitOrLast}</td>
 
         <!-- P/L Badge (Pill Hijau / Merah Matching Image) -->
         <td class="py-3 px-2 text-right font-mono">
           ${pnl !== null ? `
-            <span class="inline-block px-2.5 py-1 rounded-full text-xs font-black font-mono ${pnl >= 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/60 shadow-sm shadow-emerald-500/20' : 'bg-rose-500/20 text-rose-300 border border-rose-400/60 shadow-sm shadow-rose-500/20'}">
+            <span class="inline-block px-2.5 py-1 rounded-full text-xs font-black font-mono ${pnl >= 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]' : 'bg-rose-500/20 text-rose-300 border border-rose-400/50 shadow-[0_0_12px_rgba(244,63,94,0.2)]'}">
               ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%
             </span>
-          ` : '<span class="text-slate-500">-</span>'}
+          ` : '<span class="text-slate-400">-</span>'}
         </td>
 
         <!-- Action / Delete -->
         <td class="py-3 pl-2 pr-4 text-right">
-          <button onclick="deleteSignal(${r.id})" class="text-slate-500 hover:text-rose-400 text-base font-bold transition px-1" title="Hapus sinyal">&times;</button>
+          <button onclick="deleteSignal(${r.id})" class="text-slate-400 hover:text-rose-400 text-base font-bold transition px-1" title="Hapus sinyal">&times;</button>
         </td>
       </tr>`;
     })
