@@ -782,8 +782,20 @@ async function syncLiveMarketData() {
 }
 
 // Event Listeners Setup
-document.addEventListener('DOMContentLoaded', () => {
-  loadScreenerData(false);
+document.addEventListener('DOMContentLoaded', async () => {
+  // 1. Tampilkan data awal secepat mungkin
+  await Promise.all([loadScreenerData(false), loadTracker()]);
+
+  // 2. Otomatis tarik harga live terbaru dari bursa di latar belakang saat web pertama dibuka!
+  // Pengguna tidak perlu lagi mengklik tombol sync manual.
+  (async () => {
+    try {
+      await fetch('/api/sync-fast', { method: 'POST' });
+      await Promise.all([loadScreenerData(true), loadTracker()]);
+    } catch (e) {
+      console.debug('Initial auto-sync background:', e);
+    }
+  })();
 
   ['filterTrigger', 'filterVolRatio', 'filterMinScore', 'filterSortBy'].forEach((id) => {
     document.getElementById(id).addEventListener('change', () => loadScreenerData(true));
