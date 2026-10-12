@@ -165,6 +165,10 @@ class SignalTracker:
         if not plan:
             return False, f"{ticker}: trading plan tidak tersedia."
 
+        score_val = int(stock.get("smart_money_score", 0))
+        if score_val < self.min_score:
+            return False, f"{ticker}: Smart Money Score ({score_val}) belum memenuhi syarat minimal ({self.min_score}+)."
+
         e_low, e_high = sorted([float(plan["entry_low"]), float(plan["entry_high"])])
         sl = float(plan["stop_loss"])
         target = float(plan["target_2"] if self.tp_level == 2 else plan["target_1"])
@@ -203,7 +207,7 @@ class SignalTracker:
                     sector=str(stock.get("sector", ""))[:200],
                     trigger_type=str(stock.get("trigger_type", "")),
                     trigger_label=str(stock.get("trigger_label", "")),
-                    score=int(stock.get("smart_money_score", 0)),
+                    score=score_val,
                     source=source,
                     signal_date=signal_date,
                     signal_close=float(stock.get("close", 0)),
@@ -315,7 +319,11 @@ class SignalTracker:
             return {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "tickers_checked": 0, "error": str(exc), "live_details": {}}
 
     def prune_over_bandar_signals(self, details: dict[str, dict]) -> int:
-        """Hapus otomatis sinyal di Watchlist (maupun sinyal lama) yang jarak Avg Bandarnya > 5.0%."""
+        """
+        1. Hapus otomatis sinyal yang Smart Money Score < 70 atau jarak Avg Bandar > 5.0%.
+        2. Sinkronkan 100% angka Zona Entry, Stop Loss (SL), Target (TP1/TP2), dan Score
+           pada Watchlist, Running, Win, & Loss agar sama persis dengan Auto Trading Plan!
+        """
         if not details:
             return 0
         removed = 0
@@ -326,6 +334,13 @@ class SignalTracker:
                 d = details.get(row["ticker"])
                 if not d:
                     continue
+                # Pastikan ini adalah dict detail analisis penuh (memiliki trading_plan & smart_money_score)
+                if "trading_plan" not in d or "smart_money_score" not in d:
+                    continue
+
+                cur_score = int(d.get("smart_money_score") or 0)
+                row_score = int(row.get("score") or 0)
+
                 diff_b = d.get("diff_bandar_avg_pct")
                 if diff_b is None and isinstance(d.get("trading_plan"), dict):
                     diff_b = d["trading_plan"].get("diff_bandar_avg_pct")
@@ -334,13 +349,63 @@ class SignalTracker:
                 except (ValueError, TypeError):
                     diff_val = 0.0
 
-                bandar_avg = float(d.get("bandar_avg_buy") or 0)
-                sig_close = float(row.get("signal_close") or 0)
-                sig_diff_val = ((sig_close - bandar_avg) / bandar_avg * 100.0) if bandar_avg > 0 and sig_close > 0 else 0.0
-
-                # Jika di Watchlist dan jarak Avg Bandar > 5%, atau sinyal lama yang saat dicatat sudah > 5%
-                if diff_val > 5.0 or sig_diff_val > 5.0:
+                # Filter ketat: Skor wajib >= 70 dan Avg Bandar wajib <= 5.0%
+                if cur_score < self.min_score or row_score < self.min_score or diff_val > 5.0:
                     ids_to_delete.append(int(row["id"]))
+                    continue
+
+                # Sinkronkan Zona Entry, SL, TP, dan Score dengan Auto Trading Plan aktif
+                plan = d.get("trading_plan") or {}
+                if not plan:
+                    continue
+                p_low, p_high = sorted([float(plan["entry_low"]), float(plan["entry_high"])])
+                p_sl = float(plan["stop_loss"])
+                p_tp = float(plan["target_2"] if self.tp_level == 2 else plan["target_1"])
+                p_tp2 = float(plan.get("target_2", p_tp))
+                cur_close = float(d.get("close") or row.get("last_close") or 0)
+
+                upd: dict[str, Any] = {}
+                if float(row.get("entry_low") or 0) != p_low:
+                    upd["entry_low"] = p_low
+                if float(row.get("entry_high") or 0) != p_high:
+                    upd["entry_high"] = p_high
+                if float(row.get("stop_loss") or 0) != p_sl:
+                    upd["stop_loss"] = p_sl
+                if float(row.get("target") or 0) != p_tp:
+                    upd["target"] = p_tp
+                if float(row.get("target_2") or 0) != p_tp2:
+                    upd["target_2"] = p_tp2
+                if row_score != cur_score:
+                    upd["score"] = cur_score
+                if d.get("trigger_type") and row.get("trigger_type") != d.get("trigger_type"):
+                    upd["trigger_type"] = str(d["trigger_type"])
+                    upd["trigger_label"] = str(d.get("trigger_label", d["trigger_type"]))
+                if d.get("sector") and row.get("sector") != d.get("sector"):
+                    upd["sector"] = str(d["sector"])[:200]
+                if cur_close > 0 and float(row.get("last_close") or 0) != cur_close:
+                    upd["last_close"] = cur_close
+
+                # Jika sudah di RUNNING, WIN, atau LOSS, sesuaikan entry/exit/pnl dengan Trading Plan terbaru
+                st = row.get("status")
+                if st in ("RUNNING", "WIN", "LOSS"):
+                    ep = float(row.get("entry_price") or p_high)
+                    if ep < p_low or ep > p_high:
+                        ep = p_high
+                        upd["entry_price"] = ep
+                    if st == "RUNNING" and ep > 0 and cur_close > 0:
+                        new_pnl = round((cur_close - ep) / ep * 100.0, 2)
+                        if float(row.get("pnl_pct") or 0) != new_pnl:
+                            upd["pnl_pct"] = new_pnl
+                    elif st == "WIN" and ep > 0:
+                        upd["exit_price"] = p_tp
+                        upd["pnl_pct"] = round((p_tp - ep) / ep * 100.0, 2)
+                    elif st == "LOSS" and ep > 0:
+                        upd["exit_price"] = p_sl
+                        upd["pnl_pct"] = round((p_sl - ep) / ep * 100.0, 2)
+
+                if upd:
+                    upd["updated_at"] = _now_str()
+                    conn.execute(update(signals_table).where(signals_table.c.id == row["id"]).values(**upd))
 
             if ids_to_delete:
                 res = conn.execute(delete(signals_table).where(signals_table.c.id.in_(ids_to_delete)))
