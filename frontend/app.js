@@ -870,7 +870,7 @@ function initLiveMarketAutoSync() {
     if (isIDXMarketOpenNow() && !isSyncingFast) {
       try {
         // Otomatis tarik harga live saham Watchlist/Running & update Screener
-        await fetch('/api/market/fast-sync', { method: 'POST' }).catch(() => {});
+        await fetch('/api/sync-fast', { method: 'POST' }).catch(() => {});
         await Promise.all([
           loadScreenerData(true),
           loadTracker(),

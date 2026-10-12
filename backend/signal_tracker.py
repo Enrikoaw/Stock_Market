@@ -298,10 +298,11 @@ class SignalTracker:
 
             changes = self.evaluate(live_details)
             changes["tickers_checked"] = len(live_details)
+            changes["live_details"] = live_details
             return changes
         except Exception as exc:
             print(f"[TrackerLive] Error saat sync live: {exc}")
-            return {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "tickers_checked": 0, "error": str(exc)}
+            return {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "tickers_checked": 0, "error": str(exc), "live_details": {}}
 
     # ------------------------------------------------------------- evaluate
     def evaluate(self, details: dict[str, dict]) -> dict:

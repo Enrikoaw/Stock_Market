@@ -102,22 +102,63 @@ class LocalPathRequest(BaseModel):
 
 
 def _run_fast_sync_job_blocking() -> dict:
-    """Sync kilat (< 2-3 detik) khusus untuk evaluasi live Watchlist & Running (Entry, TP, SL)."""
+    """Sync kilat (< 2-3 detik) khusus untuk evaluasi live Watchlist & Running (Entry, TP, SL),
+    sekaligus memperbarui harga & change saham aktif di tabel Screener & Inspector!"""
     tracker_res = TRACKER.sync_active_signals_live()
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["last_tracker_run"] = now_str
+    STATE["last_sync_time"] = now_str
 
     if STATE["analysis"] is None:
         init_default_state()
 
+    # Perbarui harga live saham di tabel Screener & Inspector jika ada data quotes terbaru
+    live_details = tracker_res.get("live_details", {})
+    if live_details and STATE["analysis"]:
+        analysis = STATE["analysis"]
+        stocks = analysis.get("stocks", [])
+        details_map = analysis.get("details", {})
+        latest_date = None
+
+        for ticker, ld in live_details.items():
+            hist = ld.get("history", [])
+            if not hist:
+                continue
+            last_bar = hist[-1]
+            c_price = int(round(float(last_bar.get("close", 0))))
+            prev_price = float(hist[-2]["close"]) if len(hist) > 1 else float(last_bar.get("open", c_price))
+            pct_chg = round((c_price - prev_price) / max(prev_price, 1) * 100.0, 2)
+            b_date = str(last_bar.get("date", ""))
+            if b_date:
+                latest_date = b_date
+
+            # Update di stocks summary (untuk tabel screener)
+            for s in stocks:
+                if s["ticker"] == ticker:
+                    s["close"] = c_price
+                    s["pct_change"] = pct_chg
+                    if b_date:
+                        s["date"] = b_date
+
+            # Update di details map (untuk panel inspector)
+            if ticker in details_map:
+                d = details_map[ticker]
+                d["close"] = c_price
+                d["pct_change"] = pct_chg
+                if b_date:
+                    d["date"] = b_date
+
+        if latest_date and "kpis" in analysis:
+            analysis["kpis"]["latest_date"] = latest_date
+
     return {
         "status": "success",
         "tracker_res": tracker_res,
-        "message": f"⚡ Sync Cepat selesai! {tracker_res.get('tickers_checked', 0)} saham aktif dievaluasi (Status: RUNNING/TP/SL ter-update).",
+        "message": f"⚡ Sync Cepat selesai! {tracker_res.get('tickers_checked', 0)} saham aktif diperbarui harganya & dievaluasi.",
         "source_name": STATE["source_name"],
         "last_sync_time": STATE["last_sync_time"],
-        "kpis": STATE["analysis"]["kpis"],
-        "stocks": STATE["analysis"]["stocks"],
+        "kpis": STATE["analysis"]["kpis"] if STATE["analysis"] else {},
+        "stocks": STATE["analysis"]["stocks"] if STATE["analysis"] else [],
     }
 
 
