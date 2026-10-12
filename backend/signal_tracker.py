@@ -320,9 +320,16 @@ class SignalTracker:
 
     def prune_over_bandar_signals(self, details: dict[str, dict]) -> int:
         """
-        1. Hapus otomatis sinyal yang Smart Money Score < 70 atau jarak Avg Bandar > 5.0%.
-        2. Sinkronkan 100% angka Zona Entry, Stop Loss (SL), Target (TP1/TP2), dan Score
-           pada Watchlist, Running, Win, & Loss agar sama persis dengan Auto Trading Plan!
+        Solusi Proteksi Pintar (Watchlist vs Running/Win/Loss):
+        1. Pintu Masuk Awal wajib Score >= 70 & Avg Bandar <= 5.0%.
+        2. Jika masih di WATCHLIST:
+           - Otomatis batalkan/hapus jika skor anjlok parah (<= 35) atau muncul DISTRIBUTION_WARNING (bandar guyur),
+             atau jika harga sudah lari > 5.0% di atas Avg Bandar sebelum terbeli.
+           - PERTAHANKAN di Watchlist jika skor turun moderat (36-69) karena koreksi sehat volume sepi (menjemput Zona Entry).
+        3. Jika sudah di RUNNING, WIN, atau LOSS:
+           - Kunci posisi (JANGAN dihapus otomatis saat besoknya skor berfluktuasi atau harga naik > 5% menuju TP).
+           - Jika saat RUNNING tiba-tiba skor anjlok (<= 35) atau muncul DISTRIBUTION_WARNING, pasang peringatan
+             '⚠️ AWAS DISTRIBUSI BANDAR' pada catatan posisi (Early Exit Warning).
         """
         if not details:
             return 0
@@ -334,12 +341,14 @@ class SignalTracker:
                 d = details.get(row["ticker"])
                 if not d:
                     continue
-                # Pastikan ini adalah dict detail analisis penuh (memiliki trading_plan & smart_money_score)
                 if "trading_plan" not in d or "smart_money_score" not in d:
                     continue
 
+                st = str(row.get("status") or "WATCHLIST")
                 cur_score = int(d.get("smart_money_score") or 0)
                 row_score = int(row.get("score") or 0)
+                cur_trigger = str(d.get("trigger_type") or "")
+                is_dist_warning = cur_score <= 35 or cur_trigger == "DISTRIBUTION_WARNING"
 
                 diff_b = d.get("diff_bandar_avg_pct")
                 if diff_b is None and isinstance(d.get("trading_plan"), dict):
@@ -349,59 +358,86 @@ class SignalTracker:
                 except (ValueError, TypeError):
                     diff_val = 0.0
 
-                # Filter ketat: Skor wajib >= 70 dan Avg Bandar wajib <= 5.0%
-                if cur_score < self.min_score or row_score < self.min_score or diff_val > 5.0:
+                # 1. Sinyal yang dari awal skornya < 70 tidak valid
+                if row_score < self.min_score:
                     ids_to_delete.append(int(row["id"]))
                     continue
 
-                # Sinkronkan Zona Entry, SL, TP, dan Score dengan Auto Trading Plan aktif
+                # 2. Aturan khusus WATCHLIST (belum terbeli):
+                #    Batalkan jika bandar guyur (is_dist_warning) atau harga sudah kabur > 5% di atas modal bandar
+                if st == "WATCHLIST":
+                    if is_dist_warning or diff_val > 5.0:
+                        ids_to_delete.append(int(row["id"]))
+                        continue
+
+                # 3. Sinkronkan Zona Entry, SL, TP dengan Auto Trading Plan (kecuali bila berubah jadi DISTRIBUTION_WARNING saat RUNNING)
                 plan = d.get("trading_plan") or {}
                 if not plan:
                     continue
-                p_low, p_high = sorted([float(plan["entry_low"]), float(plan["entry_high"])])
-                p_sl = float(plan["stop_loss"])
-                p_tp = float(plan["target_2"] if self.tp_level == 2 else plan["target_1"])
-                p_tp2 = float(plan.get("target_2", p_tp))
-                cur_close = float(d.get("close") or row.get("last_close") or 0)
 
                 upd: dict[str, Any] = {}
-                if float(row.get("entry_low") or 0) != p_low:
-                    upd["entry_low"] = p_low
-                if float(row.get("entry_high") or 0) != p_high:
-                    upd["entry_high"] = p_high
-                if float(row.get("stop_loss") or 0) != p_sl:
-                    upd["stop_loss"] = p_sl
-                if float(row.get("target") or 0) != p_tp:
-                    upd["target"] = p_tp
-                if float(row.get("target_2") or 0) != p_tp2:
-                    upd["target_2"] = p_tp2
-                if row_score != cur_score:
-                    upd["score"] = cur_score
-                if d.get("trigger_type") and row.get("trigger_type") != d.get("trigger_type"):
-                    upd["trigger_type"] = str(d["trigger_type"])
-                    upd["trigger_label"] = str(d.get("trigger_label", d["trigger_type"]))
-                if d.get("sector") and row.get("sector") != d.get("sector"):
-                    upd["sector"] = str(d["sector"])[:200]
+                cur_close = float(d.get("close") or row.get("last_close") or 0)
                 if cur_close > 0 and float(row.get("last_close") or 0) != cur_close:
                     upd["last_close"] = cur_close
+                if d.get("sector") and row.get("sector") != d.get("sector"):
+                    upd["sector"] = str(d["sector"])[:200]
 
-                # Jika sudah di RUNNING, WIN, atau LOSS, sesuaikan entry/exit/pnl dengan Trading Plan terbaru
-                st = row.get("status")
-                if st in ("RUNNING", "WIN", "LOSS"):
-                    ep = float(row.get("entry_price") or p_high)
-                    if ep < p_low or ep > p_high:
-                        ep = p_high
-                        upd["entry_price"] = ep
-                    if st == "RUNNING" and ep > 0 and cur_close > 0:
-                        new_pnl = round((cur_close - ep) / ep * 100.0, 2)
-                        if float(row.get("pnl_pct") or 0) != new_pnl:
-                            upd["pnl_pct"] = new_pnl
-                    elif st == "WIN" and ep > 0:
-                        upd["exit_price"] = p_tp
-                        upd["pnl_pct"] = round((p_tp - ep) / ep * 100.0, 2)
-                    elif st == "LOSS" and ep > 0:
-                        upd["exit_price"] = p_sl
-                        upd["pnl_pct"] = round((p_sl - ep) / ep * 100.0, 2)
+                if not is_dist_warning:
+                    p_low, p_high = sorted([float(plan["entry_low"]), float(plan["entry_high"])])
+                    p_sl = float(plan["stop_loss"])
+                    p_tp = float(plan["target_2"] if self.tp_level == 2 else plan["target_1"])
+                    p_tp2 = float(plan.get("target_2", p_tp))
+
+                    if float(row.get("entry_low") or 0) != p_low:
+                        upd["entry_low"] = p_low
+                    if float(row.get("entry_high") or 0) != p_high:
+                        upd["entry_high"] = p_high
+                    if float(row.get("stop_loss") or 0) != p_sl:
+                        upd["stop_loss"] = p_sl
+                    if float(row.get("target") or 0) != p_tp:
+                        upd["target"] = p_tp
+                    if float(row.get("target_2") or 0) != p_tp2:
+                        upd["target_2"] = p_tp2
+                    if cur_score >= self.min_score and row_score != cur_score:
+                        upd["score"] = cur_score
+                    if d.get("trigger_type") in TRACKABLE_TRIGGERS and row.get("trigger_type") != d.get("trigger_type"):
+                        upd["trigger_type"] = str(d["trigger_type"])
+                        upd["trigger_label"] = str(d.get("trigger_label", d["trigger_type"]))
+
+                    if st in ("RUNNING", "WIN", "LOSS"):
+                        ep = float(row.get("entry_price") or p_high)
+                        if ep < p_low or ep > p_high:
+                            ep = p_high
+                            upd["entry_price"] = ep
+                        if st == "RUNNING" and ep > 0 and cur_close > 0:
+                            new_pnl = round((cur_close - ep) / ep * 100.0, 2)
+                            if float(row.get("pnl_pct") or 0) != new_pnl:
+                                upd["pnl_pct"] = new_pnl
+                        elif st == "WIN" and ep > 0:
+                            upd["exit_price"] = p_tp
+                            upd["pnl_pct"] = round((p_tp - ep) / ep * 100.0, 2)
+                        elif st == "LOSS" and ep > 0:
+                            upd["exit_price"] = p_sl
+                            upd["pnl_pct"] = round((p_sl - ep) / ep * 100.0, 2)
+
+                # 4. Solusi 2: Peringatan Dini (Early Exit Warning) bila saham RUNNING mendadak didistribusi bandar
+                if st == "RUNNING" and is_dist_warning:
+                    ep = float(row.get("entry_price") or row.get("entry_high") or cur_close or 1)
+                    new_pnl = round((cur_close - ep) / ep * 100.0, 2) if ep > 0 and cur_close > 0 else 0.0
+                    upd["pnl_pct"] = new_pnl
+                    warn_note = (
+                        f"⚠️ AWAS DISTRIBUSI BANDAR (Skor turun ke {cur_score}) — "
+                        f"Pertimbangkan Early Exit / Ketatkan Stop Loss! (P/L {new_pnl:+.2f}%)"
+                    )
+                    if row.get("note") != warn_note:
+                        upd["note"] = warn_note
+                elif st == "WATCHLIST" and cur_score < self.min_score and not is_dist_warning:
+                    pullback_note = (
+                        f"Koreksi sehat volume sepi (Skor harian: {cur_score}, Akumulasi 5H aman) — "
+                        "tetap antre di Zona Entry."
+                    )
+                    if row.get("note") != pullback_note:
+                        upd["note"] = pullback_note
 
                 if upd:
                     upd["updated_at"] = _now_str()
@@ -458,6 +494,15 @@ class SignalTracker:
                 r["last_close"] = float(hist[-1]["close"])
                 if r["status"] == "RUNNING" and r.get("entry_price"):
                     r["pnl_pct"] = round((r["last_close"] - r["entry_price"]) / r["entry_price"] * 100.0, 2)
+                    # Pertahankan peringatan distribusi bila terdeteksi pada analisis terbaru
+                    if "smart_money_score" in d:
+                        c_score = int(d.get("smart_money_score") or 0)
+                        c_trig = str(d.get("trigger_type") or "")
+                        if c_score <= 35 or c_trig == "DISTRIBUTION_WARNING":
+                            r["note"] = (
+                                f"⚠️ AWAS DISTRIBUSI BANDAR (Skor turun ke {c_score}) — "
+                                f"Pertimbangkan Early Exit / Ketatkan Stop Loss! (P/L {r['pnl_pct']:+.2f}%)"
+                            )
 
                 r["updated_at"] = _now_str()
                 values = {k: v for k, v in r.items() if k != "id"}

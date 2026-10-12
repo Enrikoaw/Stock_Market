@@ -1175,9 +1175,15 @@ function renderTrackerTable(rows) {
         pnlContent = `<span class="text-slate-500">-</span>`;
       }
 
-      const rowHighlight = isHighFlyer
-        ? 'hover:bg-slate-800/60 bg-emerald-950/20 border-l-4 border-emerald-400'
-        : 'hover:bg-slate-800/40 transition-colors';
+      const noteText = String(r.note || '');
+      const hasDistWarning = noteText.startsWith('⚠️');
+      const hasPullbackSafe = noteText.startsWith('Koreksi sehat');
+
+      const rowHighlight = hasDistWarning
+        ? 'hover:bg-rose-950/40 bg-rose-950/20 border-l-4 border-rose-500'
+        : isHighFlyer
+          ? 'hover:bg-slate-800/60 bg-emerald-950/20 border-l-4 border-emerald-400'
+          : 'hover:bg-slate-800/40 transition-colors';
 
       return `
       <tr class="${rowHighlight}">
@@ -1189,6 +1195,7 @@ function renderTrackerTable(rows) {
               <div class="font-mono font-black text-sm text-white group-hover:text-emerald-300 flex items-center gap-1.5 transition">
                 <span>${r.ticker}</span>
                 ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
+                ${hasDistWarning ? `<span class="text-xs animate-pulse" title="${noteText}">⚠️</span>` : ''}
               </div>
               <div class="text-[10px] text-slate-400 group-hover:text-slate-300 truncate max-w-[140px] mt-0.5">${r.sector || (r.source === 'AUTO' ? '🤖 Auto Sinyal' : '👤 Watchlist Manual')}</div>
             </div>
@@ -1214,9 +1221,11 @@ function renderTrackerTable(rows) {
 
         <!-- Status Pill Glowing (Matching Image) -->
         <td class="py-3 px-2 text-center">
-          <span class="inline-block px-3 py-1 rounded-full border text-[11px] font-black tracking-wide ${statusCls}">
+          <span class="inline-block px-3 py-1 rounded-full border text-[11px] font-black tracking-wide ${statusCls}" title="${noteText}">
             ${r.status === 'RUNNING' ? 'Running' : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : r.status}
           </span>
+          ${hasDistWarning ? `<div class="mt-1 text-[9px] font-extrabold text-rose-300 bg-rose-500/20 border border-rose-500/40 rounded px-1.5 py-0.5 animate-pulse" title="${noteText}">⚠️ AWAS DISTRIBUSI</div>` : ''}
+          ${hasPullbackSafe ? `<div class="mt-1 text-[9px] font-bold text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 rounded px-1.5 py-0.5" title="${noteText}">🛡️ Koreksi Sehat (5H Utuh)</div>` : ''}
         </td>
 
         <!-- Entry Price -->

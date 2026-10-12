@@ -1038,6 +1038,33 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             round(min(100.0, max(5.0, vsa_score + bandar_score + ticket_score + foreign_score + structure_score)))
         )
 
+        # Solusi Penstabil Skor (5-Day Accumulation Memory vs High-Volume Distribution Penalty)
+        prev_max_3d_score = (
+            int(last5.iloc[:-1].tail(3)["Daily_SM_Score"].max()) if len(last5) >= 2 else smart_money_score
+        )
+        is_no_supply_pullback = (
+            len(last5) >= 2
+            and prev_max_3d_score >= 70
+            and -3.5 <= pct_change < 0.0
+            and vol_ratio <= 0.85
+            and top3_bsr >= 0.95
+            and cum_5d_bdr_pct >= 5.0
+            and -2.5 <= diff_bandar_avg_pct <= 5.0
+        )
+        is_heavy_distribution = (
+            pct_change <= -1.5
+            and vol_ratio >= 1.20
+            and (top3_bsr < 0.80 or bdr_pct <= -8.0 or cum_5d_bdr_pct <= -6.0)
+        )
+
+        if is_heavy_distribution:
+            # Guyuran bandar volume besar -> paksa skor turun ke zona bahaya (<= 25)
+            smart_money_score = min(smart_money_score, 25)
+        elif is_no_supply_pullback and smart_money_score < 68:
+            # Koreksi sehat volume sepi (No-Supply Pullback) saat barang bandar 5H masih utuh -> tahan di zona sehat
+            vsa_score = round(max(vsa_score, 12.0), 1)
+            smart_money_score = max(smart_money_score, min(68, int(round(prev_max_3d_score * 0.88))))
+
         avg_abs_pct_3d = float(last5.tail(3)["Pct_Change"].abs().mean())
 
         if top3_bsr < 0.80 or bdr_pct <= -8.0 or cum_5d_bdr_pct <= -6.0:
