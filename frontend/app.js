@@ -160,18 +160,137 @@ async function loadScreenerData(preserveSelection = false) {
   }
 }
 
+function renderKpiSparkline(svgId, gradId, series, colorHex) {
+  const svgEl = document.getElementById(svgId);
+  if (!svgEl || !Array.isArray(series) || series.length === 0) return;
+
+  const pts = series.length === 1 ? [series[0], series[0]] : series.slice(-10);
+  const minVal = Math.min(...pts);
+  const maxVal = Math.max(...pts);
+  const span = Math.max(maxVal - minVal, 1e-5);
+
+  const xStart = 4;
+  const xEnd = 76;
+  const yBottom = 25;
+  const yTop = 5;
+
+  const coords = pts.map((val, idx) => {
+    const x = +(xStart + (idx / Math.max(pts.length - 1, 1)) * (xEnd - xStart)).toFixed(1);
+    const norm = maxVal === minVal ? 0.5 : (val - minVal) / span;
+    const y = +(yBottom - norm * (yBottom - yTop)).toFixed(1);
+    return { x, y };
+  });
+
+  const lineCmds = coords.map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x} ${pt.y}`).join(' ');
+  const firstPt = coords[0];
+  const lastPt = coords[coords.length - 1];
+  const areaCmds = `${lineCmds} L${lastPt.x} 29 L${firstPt.x} 29 Z`;
+
+  svgEl.innerHTML = `
+    <defs>
+      <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${colorHex}" stop-opacity="0.30"/>
+        <stop offset="100%" stop-color="${colorHex}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <path d="${areaCmds}" fill="url(#${gradId})"/>
+    <path d="${lineCmds}" stroke="${colorHex}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${lastPt.x}" cy="${lastPt.y}" r="2.2" fill="${colorHex}"/>
+  `;
+}
+
+function renderKpiDeltaBadge(deltaId, labelId, pctChange, diffVal, prevVal, invertColor = false, isFloatDiff = false) {
+  const deltaEl = document.getElementById(deltaId);
+  const labelEl = document.getElementById(labelId);
+  if (!deltaEl) return '#10b981';
+
+  const numDiff = Number(diffVal || 0);
+  const absPct = Math.abs(Number(pctChange || 0)).toFixed(1);
+  const arrow = numDiff > 0 ? '↑' : numDiff < 0 ? '↓' : '•';
+  const fmtDiff = isFloatDiff
+    ? `${numDiff > 0 ? '+' : ''}${numDiff.toFixed(1)}`
+    : `${numDiff > 0 ? '+' : ''}${Math.round(numDiff)}`;
+
+  // Warna positif (hijau) vs negatif (merah). Untuk Distribution Warning, kenaikan distribusi = merah (waspada)
+  const isPositiveGood = invertColor ? numDiff < 0 : numDiff > 0;
+  const isNegativeBad = invertColor ? numDiff > 0 : numDiff < 0;
+
+  let textCls = 'text-slate-400';
+  let strokeHex = '#94a3b8';
+  if (isPositiveGood) {
+    textCls = 'text-emerald-400';
+    strokeHex = '#10b981';
+  } else if (isNegativeBad) {
+    textCls = 'text-rose-400';
+    strokeHex = '#f43f5e';
+  }
+
+  deltaEl.className = `font-bold ${textCls} flex items-center gap-0.5`;
+  deltaEl.textContent = `${arrow} ${absPct}% (${fmtDiff})`;
+
+  if (labelEl) {
+    labelEl.textContent = prevVal !== undefined && prevVal !== null ? `vs kemarin (${prevVal})` : 'vs kemarin';
+  }
+  return strokeHex;
+}
+
 function updateKPICards(kpis, currentTrigger) {
   if (!kpis) return;
   const elTotal = document.getElementById('kpiTotalEmiten');
   if (elTotal) elTotal.textContent = kpis.total_emiten;
   const elAvg = document.getElementById('kpiAvgScore');
-  if (elAvg) elAvg.textContent = `Avg: ${kpis.avg_smart_money_score}`;
+  if (elAvg) elAvg.textContent = `Avg Skor: ${kpis.avg_smart_money_score}`;
   const elMarkup = document.getElementById('kpiMarkupCount');
   if (elMarkup) elMarkup.textContent = kpis.markup_triggers;
   const elAccum = document.getElementById('kpiAccumCount');
   if (elAccum) elAccum.textContent = kpis.accum_triggers;
   const elDist = document.getElementById('kpiDistCount');
   if (elDist) elDist.textContent = kpis.distribution_warnings;
+
+  // Update real vs kemarin badges & 10-day sparklines
+  const c1Hex = renderKpiDeltaBadge(
+    'kpiAllDelta',
+    'kpiAllVsLabel',
+    kpis.avg_score_pct_change,
+    kpis.avg_score_diff,
+    kpis.prev_avg_smart_money_score !== undefined ? `Skor ${kpis.prev_avg_smart_money_score}` : null,
+    false,
+    true
+  );
+  renderKpiSparkline('kpiAllSpark', 'sparkGrad1', kpis.trend_avg_score, c1Hex);
+
+  const c2Hex = renderKpiDeltaBadge(
+    'kpiMarkupDelta',
+    'kpiMarkupVsLabel',
+    kpis.markup_pct_change,
+    kpis.markup_diff,
+    kpis.prev_markup_triggers,
+    false,
+    false
+  );
+  renderKpiSparkline('kpiMarkupSpark', 'sparkGrad2', kpis.trend_markup, c2Hex);
+
+  const c3Hex = renderKpiDeltaBadge(
+    'kpiAccumDelta',
+    'kpiAccumVsLabel',
+    kpis.accum_pct_change,
+    kpis.accum_diff,
+    kpis.prev_accum_triggers,
+    false,
+    false
+  );
+  renderKpiSparkline('kpiAccumSpark', 'sparkGrad3', kpis.trend_accum, c3Hex);
+
+  const c4Hex = renderKpiDeltaBadge(
+    'kpiDistDelta',
+    'kpiDistVsLabel',
+    kpis.dist_pct_change,
+    kpis.dist_diff,
+    kpis.prev_distribution_warnings,
+    true,
+    false
+  );
+  renderKpiSparkline('kpiDistSpark', 'sparkGrad4', kpis.trend_dist, c4Hex);
 
   // Highlight active KPI card
   const mapCard = {

@@ -158,16 +158,16 @@
             <p class="text-xs font-medium text-slate-300">Total Emiten</p>
             <div class="flex items-baseline gap-2 mt-0.5">
               <span id="kpiTotalEmiten" class="text-2xl sm:text-3xl font-extrabold font-sans text-white tracking-tight">844</span>
-              <span id="kpiAvgScore" class="hidden text-[10px] font-mono text-slate-400">Avg: -</span>
+              <span id="kpiAvgScore" class="text-[10px] font-mono text-sky-300 bg-sky-500/10 border border-sky-400/20 px-1.5 py-0.5 rounded-md">Avg: -</span>
             </div>
           </div>
         </div>
         <div class="mt-4 flex items-end justify-between">
           <div class="flex items-center gap-1.5 text-xs">
-            <span class="font-bold text-emerald-400 flex items-center gap-0.5">&uarr; 2.4%</span>
-            <span class="text-slate-400 text-[11px]">vs kemarin</span>
+            <span id="kpiAllDelta" class="font-bold text-emerald-400 flex items-center gap-0.5">-</span>
+            <span id="kpiAllVsLabel" class="text-slate-400 text-[11px]">vs kemarin</span>
           </div>
-          <svg class="w-20 h-8 overflow-visible" viewBox="0 0 80 30" fill="none">
+          <svg id="kpiAllSpark" class="w-20 h-8 overflow-visible" viewBox="0 0 80 30" fill="none">
             <defs>
               <linearGradient id="sparkGrad1" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#10b981" stop-opacity="0.28"/>
@@ -199,10 +199,10 @@
         </div>
         <div class="mt-4 flex items-end justify-between">
           <div class="flex items-center gap-1.5 text-xs">
-            <span class="font-bold text-emerald-400 flex items-center gap-0.5">&uarr; 5.2%</span>
-            <span class="text-slate-400 text-[11px]">vs kemarin</span>
+            <span id="kpiMarkupDelta" class="font-bold text-emerald-400 flex items-center gap-0.5">-</span>
+            <span id="kpiMarkupVsLabel" class="text-slate-400 text-[11px]">vs kemarin</span>
           </div>
-          <svg class="w-20 h-8 overflow-visible" viewBox="0 0 80 30" fill="none">
+          <svg id="kpiMarkupSpark" class="w-20 h-8 overflow-visible" viewBox="0 0 80 30" fill="none">
             <defs>
               <linearGradient id="sparkGrad2" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#10b981" stop-opacity="0.28"/>
@@ -234,10 +234,10 @@
         </div>
         <div class="mt-4 flex items-end justify-between">
           <div class="flex items-center gap-1.5 text-xs">
-            <span class="font-bold text-emerald-400 flex items-center gap-0.5">&uarr; 4.3%</span>
-            <span class="text-slate-400 text-[11px]">vs kemarin</span>
+            <span id="kpiAccumDelta" class="font-bold text-emerald-400 flex items-center gap-0.5">-</span>
+            <span id="kpiAccumVsLabel" class="text-slate-400 text-[11px]">vs kemarin</span>
           </div>
-          <svg class="w-20 h-8 overflow-visible" viewBox="0 0 80 30" fill="none">
+          <svg id="kpiAccumSpark" class="w-20 h-8 overflow-visible" viewBox="0 0 80 30" fill="none">
             <defs>
               <linearGradient id="sparkGrad3" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#10b981" stop-opacity="0.28"/>
@@ -267,10 +267,10 @@
         </div>
         <div class="mt-4 flex items-end justify-between">
           <div class="flex items-center gap-1.5 text-xs">
-            <span class="font-bold text-rose-400 flex items-center gap-0.5">&darr; 1.8%</span>
-            <span class="text-slate-400 text-[11px]">vs kemarin</span>
+            <span id="kpiDistDelta" class="font-bold text-rose-400 flex items-center gap-0.5">-</span>
+            <span id="kpiDistVsLabel" class="text-slate-400 text-[11px]">vs kemarin</span>
           </div>
-          <svg class="w-16 h-8 overflow-visible" viewBox="0 0 64 30" fill="none">
+          <svg id="kpiDistSpark" class="w-20 h-8 overflow-visible" viewBox="0 0 80 30" fill="none">
             <defs>
               <linearGradient id="sparkGrad4" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.28"/>
@@ -951,6 +951,6 @@
   </div>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=26.0"></script>
+  <script src="/static/app.js?v=27.0"></script>
 </body>
 </html>

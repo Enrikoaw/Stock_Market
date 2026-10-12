@@ -1290,17 +1290,237 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
 
     stocks_result.sort(key=lambda x: (x["smart_money_score"], x["vol_ratio"]), reverse=True)
 
+    total_emiten_now = len(stocks_result)
+    markup_now = sum(1 for s in stocks_result if s["trigger_type"] == "MARKUP_BREAKOUT")
+    accum_now = sum(
+        1 for s in stocks_result if s["trigger_type"] in ("BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW")
+    )
+    dist_now = sum(1 for s in stocks_result if s["trigger_type"] == "DISTRIBUTION_WARNING")
+    avg_score_now = round(
+        float(np.mean([s["smart_money_score"] for s in stocks_result])) if stocks_result else 0.0, 1
+    )
+
+    # Hitung data historis real (Hari Ini vs Kemarin & Tren 10 Hari Bursa) secara ter-vektorisasi
+    trend_avg_score: list[float] = [avg_score_now]
+    trend_markup: list[int] = [markup_now]
+    trend_accum: list[int] = [accum_now]
+    trend_dist: list[int] = [dist_now]
+    prev_total_emiten = total_emiten_now
+    prev_avg_score = avg_score_now
+    prev_markup = markup_now
+    prev_accum = accum_now
+    prev_dist = dist_now
+
+    if is_multi_day and len(df) > 0:
+        close_p = np.round(df["Close"]).astype(int)
+        pct_c = df["Pct_Change"].round(2)
+        vol_r = df["Volume_Ratio"].round(2)
+        cr = df["Closing_Range"].round(2)
+        t3_bsr = df["Top3_BSR"].round(2)
+        bdr_p = df["Broker_Dominance_Pct"].round(2)
+        c5_net = (
+            df.groupby("Ticker")["Net_Top3_Lot"]
+            .transform(lambda s: s.rolling(5, min_periods=1).sum())
+            .round()
+            .astype(int)
+        )
+        c5_vol = np.maximum(
+            1,
+            df.groupby("Ticker")["Volume_Lot"]
+            .transform(lambda s: s.rolling(5, min_periods=1).sum())
+            .round()
+            .astype(int),
+        )
+        c5_bdr_p = ((c5_net / c5_vol) * 100.0).round(2)
+
+        w_arr = np.maximum(df["Top3_Buy_Lot"].astype(float), 1.0)
+        wb_arr = w_arr * df["Bandar_Avg_Buy"].astype(float)
+        df["_w_tmp"] = w_arr
+        df["_wb_tmp"] = wb_arr
+        b_avg_5d = np.round(
+            df.groupby("Ticker")["_wb_tmp"].transform(lambda s: s.rolling(5, min_periods=1).sum())
+            / df.groupby("Ticker")["_w_tmp"].transform(lambda s: s.rolling(5, min_periods=1).sum())
+        ).astype(int)
+        diff_b_pct = (((close_p - b_avg_5d) / np.maximum(b_avg_5d, 1)) * 100.0).round(2)
+
+        t_ratio = df["Ticket_Ratio"].round(2)
+        nf_pct = df["Net_Foreign_Pct"].round(2)
+        c5_for = (
+            df.groupby("Ticker")["Net_Foreign_IDR"]
+            .transform(lambda s: s.rolling(5, min_periods=1).sum())
+            .round()
+            .astype(int)
+        )
+        ma20_i = np.round(df["MA20"]).astype(int)
+        h10_i = np.round(df["High_10D"]).astype(int)
+
+        vsa_s = np.select(
+            [vol_r >= 2.5, vol_r >= 1.8, vol_r >= 1.3, vol_r >= 1.0],
+            [16.0, 13.0, 9.5, 6.0],
+            default=3.0,
+        )
+        vsa_s += np.select(
+            [(cr >= 0.75) & (pct_c >= 0), cr >= 0.60, cr >= 0.45],
+            [9.0, 6.5, 4.0],
+            default=-3.0,
+        )
+        vsa_s = np.clip(vsa_s, 0.0, 25.0).round(1)
+
+        bdr_s = np.select(
+            [t3_bsr >= 2.0, t3_bsr >= 1.5, t3_bsr >= 1.25, t3_bsr >= 1.0],
+            [18.0, 15.0, 11.5, 6.5],
+            default=1.5,
+        )
+        bdr_s += np.select(
+            [c5_bdr_p >= 14.0, c5_bdr_p >= 8.0, c5_bdr_p >= 3.0, c5_bdr_p > 0],
+            [12.0, 9.5, 6.0, 3.5],
+            default=0.0,
+        )
+        bdr_s = np.clip(bdr_s, 0.0, 30.0).round(1)
+
+        tkt_s = np.select(
+            [t_ratio >= 1.65, t_ratio >= 1.35, t_ratio >= 1.15, t_ratio >= 0.95],
+            [15.0, 12.5, 9.5, 6.0],
+            default=2.0,
+        )
+
+        for_s = np.select(
+            [nf_pct >= 20.0, nf_pct >= 12.0, nf_pct >= 5.0, nf_pct >= 0.0, nf_pct <= -15.0],
+            [15.0, 12.5, 10.0, 7.0, 1.0],
+            default=3.5,
+        )
+        for_s = np.where((c5_for > 0) & (for_s < 15.0), np.minimum(15.0, for_s + 1.5), for_s).round(1)
+
+        str_s = 5.0 + np.where(close_p >= ma20_i, 5.0, 0.0)
+        str_s += np.select(
+            [
+                (close_p >= h10_i * 0.995) & (pct_c > 1.0),
+                (diff_b_pct >= -1.5) & (diff_b_pct <= 3.5),
+                pct_c < -1.5,
+            ],
+            [5.0, 4.5, -3.0],
+            default=0.0,
+        )
+        str_s = np.clip(str_s, 0.0, 15.0).round(1)
+
+        sm_s = np.clip(np.round(vsa_s + bdr_s + tkt_s + for_s + str_s), 5, 100).astype(int)
+        row_num = df.groupby("Ticker").cumcount() + 1
+        prev_max_3d = (
+            df.groupby("Ticker")["Daily_SM_Score"]
+            .transform(lambda s: s.shift(1).rolling(3, min_periods=1).max())
+            .fillna(pd.Series(sm_s, index=df.index))
+            .astype(int)
+        )
+        is_nsp = (
+            (row_num >= 2)
+            & (prev_max_3d >= 70)
+            & (pct_c >= -3.5)
+            & (pct_c < 0.0)
+            & (vol_r <= 0.85)
+            & (t3_bsr >= 0.95)
+            & (c5_bdr_p >= 5.0)
+            & (diff_b_pct >= -2.5)
+            & (diff_b_pct <= 5.0)
+        )
+        is_hd = (pct_c <= -1.5) & (vol_r >= 1.20) & ((t3_bsr < 0.80) | (bdr_p <= -8.0) | (c5_bdr_p <= -6.0))
+        sm_s = np.where(
+            is_hd,
+            np.minimum(sm_s, 25),
+            np.where(
+                is_nsp & (sm_s < 68),
+                np.maximum(sm_s, np.minimum(68, np.round(prev_max_3d * 0.88).astype(int))),
+                sm_s,
+            ),
+        )
+        avg_abs_3d = df.groupby("Ticker")["Pct_Change"].transform(lambda s: s.abs().rolling(3, min_periods=1).mean())
+
+        trig_vec = np.select(
+            [
+                (t3_bsr < 0.80) | (bdr_p <= -8.0) | (c5_bdr_p <= -6.0),
+                (sm_s >= 76) & (vol_r >= 1.75) & (pct_c >= 1.6) & (cr >= 0.68) & (t3_bsr >= 1.25),
+                (sm_s >= 65) & (avg_abs_3d <= 1.25) & ((t3_bsr >= 1.35) | (c5_bdr_p >= 8.0)) & (t_ratio >= 1.18),
+                (sm_s >= 68) & ((t3_bsr >= 1.42) | (bdr_p >= 10.5)),
+                (sm_s >= 64) & (nf_pct >= 13.0) & (c5_for > 0),
+            ],
+            [
+                "DISTRIBUTION_WARNING",
+                "MARKUP_BREAKOUT",
+                "SILENT_ACCUMULATION",
+                "BIG_ACCUMULATION",
+                "FOREIGN_INFLOW",
+            ],
+            default="NEUTRAL_FLOW",
+        )
+
+        df["_sm_s_hist"] = sm_s
+        df["_trig_hist"] = trig_vec
+        df["_rev_idx"] = df.groupby("Ticker").cumcount(ascending=False)
+
+        max_rev = min(9, int(df["_rev_idx"].max()))
+        t_avg_list: list[float] = []
+        t_mkp_list: list[int] = []
+        t_acc_list: list[int] = []
+        t_dst_list: list[int] = []
+
+        for r_idx in range(max_rev, 0, -1):
+            sub = df[df["_rev_idx"] == r_idx]
+            if len(sub) == 0:
+                continue
+            r_avg = round(float(sub["_sm_s_hist"].mean()), 1)
+            r_mkp = int((sub["_trig_hist"] == "MARKUP_BREAKOUT").sum())
+            r_acc = int(sub["_trig_hist"].isin(["BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW"]).sum())
+            r_dst = int((sub["_trig_hist"] == "DISTRIBUTION_WARNING").sum())
+            t_avg_list.append(r_avg)
+            t_mkp_list.append(r_mkp)
+            t_acc_list.append(r_acc)
+            t_dst_list.append(r_dst)
+            if r_idx == 1:
+                prev_total_emiten = int(len(sub))
+                prev_avg_score = r_avg
+                prev_markup = r_mkp
+                prev_accum = r_acc
+                prev_dist = r_dst
+
+        t_avg_list.append(avg_score_now)
+        t_mkp_list.append(markup_now)
+        t_acc_list.append(accum_now)
+        t_dst_list.append(dist_now)
+
+        trend_avg_score = t_avg_list
+        trend_markup = t_mkp_list
+        trend_accum = t_acc_list
+        trend_dist = t_dst_list
+
+    def _calc_pct(curr: float, prev: float) -> float:
+        if prev > 0:
+            return round(((curr - prev) / prev) * 100.0, 1)
+        return 100.0 if curr > 0 else 0.0
+
     kpis = {
-        "total_emiten": len(stocks_result),
-        "markup_triggers": sum(1 for s in stocks_result if s["trigger_type"] == "MARKUP_BREAKOUT"),
-        "accum_triggers": sum(
-            1 for s in stocks_result if s["trigger_type"] in ("BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW")
-        ),
-        "distribution_warnings": sum(1 for s in stocks_result if s["trigger_type"] == "DISTRIBUTION_WARNING"),
-        "avg_smart_money_score": round(
-            float(np.mean([s["smart_money_score"] for s in stocks_result])) if stocks_result else 0.0, 1
-        ),
+        "total_emiten": total_emiten_now,
+        "markup_triggers": markup_now,
+        "accum_triggers": accum_now,
+        "distribution_warnings": dist_now,
+        "avg_smart_money_score": avg_score_now,
         "latest_date": max((s["date"] for s in stocks_result), default="2026-10-08"),
+        # Data perbandingan real Hari Ini vs Kemarin & Tren Sparkline 10 Hari
+        "prev_total_emiten": prev_total_emiten,
+        "prev_avg_smart_money_score": prev_avg_score,
+        "prev_markup_triggers": prev_markup,
+        "prev_accum_triggers": prev_accum,
+        "prev_distribution_warnings": prev_dist,
+        "avg_score_diff": round(avg_score_now - prev_avg_score, 1),
+        "avg_score_pct_change": _calc_pct(avg_score_now, prev_avg_score),
+        "markup_diff": markup_now - prev_markup,
+        "markup_pct_change": _calc_pct(markup_now, prev_markup),
+        "accum_diff": accum_now - prev_accum,
+        "accum_pct_change": _calc_pct(accum_now, prev_accum),
+        "dist_diff": dist_now - prev_dist,
+        "dist_pct_change": _calc_pct(dist_now, prev_dist),
+        "trend_avg_score": trend_avg_score,
+        "trend_markup": trend_markup,
+        "trend_accum": trend_accum,
+        "trend_dist": trend_dist,
     }
 
     return {
