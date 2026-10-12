@@ -1,0 +1,92 @@
+name: IDX Market Autopilot (Wake-Up Render & Auto-Sync BEI)
+
+on:
+  schedule:
+    # 1. Ping & Bangunkan Server Render setiap 14 menit selama Jam Bursa BEI (08:45 - 16:45 WIB, Senin - Jumat)
+    - cron: '*/14 1-9 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keep_alive_and_sync:
+    name: Bangunkan Render & Sinkronisasi Bursa BEI
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Bangunkan Server Render & Picu Fast Sync Intraday
+        env:
+          CUSTOM_RENDER_URL: ${{ vars.RENDER_URL || secrets.RENDER_URL || '' }}
+        run: |
+          echo "Membangunkan server Render pada jam bursa BEI..."
+          URLS=()
+          if [ -n "$CUSTOM_RENDER_URL" ]; then
+            URLS+=("${CUSTOM_RENDER_URL%/}")
+          fi
+          URLS+=(
+            "https://smartflow-idx-screener.onrender.com"
+            "https://stock-market.onrender.com"
+            "https://stock-market-screener.onrender.com"
+          )
+          for BASE_URL in "${URLS[@]}"; do
+            echo "Menghubungi $BASE_URL/api/health ..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 45 "$BASE_URL/api/health" || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Server aktif di $BASE_URL (HTTP 200). Memicu /api/sync-fast..."
+              curl -s -X POST --max-time 45 "$BASE_URL/api/sync-fast" || true
+              break
+            fi
+          done
+
+      - name: 2. Cek Apakah Waktu Full Sync Database (Pagi 09:15, Siang 12:15, Penutupan 16:25 WIB, atau Manual)
+        id: check_sync_time
+        run: |
+          HOUR_WIB=$(TZ=Asia/Jakarta date +%H)
+          MIN_WIB=$(TZ=Asia/Jakarta date +%M)
+          echo "Waktu Jakarta saat ini: ${HOUR_WIB}:${MIN_WIB} WIB"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_sync=true" >> $GITHUB_OUTPUT
+          elif [ "$HOUR_WIB" = "09" ] && [ "$MIN_WIB" -lt "20" ]; then
+            echo "should_sync=true" >> $GITHUB_OUTPUT
+          elif [ "$HOUR_WIB" = "12" ] && [ "$MIN_WIB" -lt "20" ]; then
+            echo "should_sync=true" >> $GITHUB_OUTPUT
+          elif [ "$HOUR_WIB" = "16" ] && [ "$MIN_WIB" -ge "15" ] && [ "$MIN_WIB" -lt "35" ]; then
+            echo "should_sync=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_sync=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 3. Checkout Repository (Saat Jadwal Full Sync)
+        if: steps.check_sync_time.outputs.should_sync == 'true'
+        uses: actions/checkout@v4
+
+      - name: 4. Setup Python 3.11
+        if: steps.check_sync_time.outputs.should_sync == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 5. Install Dependencies
+        if: steps.check_sync_time.outputs.should_sync == 'true'
+        run: pip install -r requirements.txt
+
+      - name: 6. Tarik Harga Terbaru 844 Saham BEI & Evaluasi Watchlist/Running/TP/SL
+        if: steps.check_sync_time.outputs.should_sync == 'true'
+        run: python backend/auto_market_sync.py
+
+      - name: 7. Simpan Permanen Data Harga & Tracker ke GitHub (Auto-Deploy ke Render)
+        if: steps.check_sync_time.outputs.should_sync == 'true'
+        run: |
+          git config user.name "SmartFlow Market Bot"
+          git config user.email "bot@smartflow-idx.local"
+          git add data/real_idx_market_latest.csv data/tracker.db
+          if ! git diff --cached --quiet; then
+            NOW_WIB=$(TZ=Asia/Jakarta date '+%Y-%m-%d %H:%M WIB')
+            git commit -m "chore(market-sync): auto-update IDX market data & tracker ($NOW_WIB)"
+            git pull --rebase origin main || true
+            git push origin main
+            echo "✅ Data terbaru berhasil disimpan ke GitHub & dikirim ke Render!"
+          else
+            echo "ℹ️ Tidak ada perubahan data pasar baru."
+          fi
