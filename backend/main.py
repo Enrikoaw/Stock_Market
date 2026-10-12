@@ -691,6 +691,8 @@ def download_excel_template(mode: Literal["sample", "blank"] = Query(default="sa
 
 @app.get("/api/tracker/stats")
 def tracker_stats() -> dict:
+    if STATE.get("analysis") and "details" in STATE["analysis"]:
+        TRACKER.prune_over_bandar_signals(STATE["analysis"]["details"])
     return {
         "config": TRACKER.config(),
         "stats": TRACKER.stats(),
@@ -704,6 +706,8 @@ def tracker_signals(
     status: str = Query(default="ALL"),
     sort_by: str = Query(default="id_desc", description="Urutkan sinyal: pnl_desc, pnl_asc, score_desc, date_desc, ticker_asc"),
 ) -> dict:
+    if STATE.get("analysis") and "details" in STATE["analysis"]:
+        TRACKER.prune_over_bandar_signals(STATE["analysis"]["details"])
     rows = TRACKER.list_signals(status=status, sort_by=sort_by)
     return {"count": len(rows), "signals": rows}
 

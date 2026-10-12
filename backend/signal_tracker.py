@@ -314,9 +314,43 @@ class SignalTracker:
             print(f"[TrackerLive] Error saat sync live: {exc}")
             return {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "tickers_checked": 0, "error": str(exc), "live_details": {}}
 
+    def prune_over_bandar_signals(self, details: dict[str, dict]) -> int:
+        """Hapus otomatis sinyal di Watchlist (maupun sinyal lama) yang jarak Avg Bandarnya > 5.0%."""
+        if not details:
+            return 0
+        removed = 0
+        with self._lock, self.engine.begin() as conn:
+            rows = conn.execute(select(signals_table)).mappings().all()
+            ids_to_delete: list[int] = []
+            for row in rows:
+                d = details.get(row["ticker"])
+                if not d:
+                    continue
+                diff_b = d.get("diff_bandar_avg_pct")
+                if diff_b is None and isinstance(d.get("trading_plan"), dict):
+                    diff_b = d["trading_plan"].get("diff_bandar_avg_pct")
+                try:
+                    diff_val = float(diff_b) if diff_b is not None else 0.0
+                except (ValueError, TypeError):
+                    diff_val = 0.0
+
+                bandar_avg = float(d.get("bandar_avg_buy") or 0)
+                sig_close = float(row.get("signal_close") or 0)
+                sig_diff_val = ((sig_close - bandar_avg) / bandar_avg * 100.0) if bandar_avg > 0 and sig_close > 0 else 0.0
+
+                # Jika di Watchlist dan jarak Avg Bandar > 5%, atau sinyal lama yang saat dicatat sudah > 5%
+                if diff_val > 5.0 or sig_diff_val > 5.0:
+                    ids_to_delete.append(int(row["id"]))
+
+            if ids_to_delete:
+                res = conn.execute(delete(signals_table).where(signals_table.c.id.in_(ids_to_delete)))
+                removed = res.rowcount or len(ids_to_delete)
+        return removed
+
     # ------------------------------------------------------------- evaluate
     def evaluate(self, details: dict[str, dict]) -> dict:
         """Proses candle harian (termasuk live intraday candle) untuk setiap sinyal aktif."""
+        self.prune_over_bandar_signals(details)
         today_str = now_wib().strftime("%Y-%m-%d")
         changes = {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0}
 
