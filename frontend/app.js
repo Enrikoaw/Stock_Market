@@ -363,12 +363,6 @@ function renderTodayCandidates(stocks) {
       riskBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-400/30">Risiko Sedang</span>';
     }
 
-    // Probabilitas Win vs Loss (Data Teruji 6 Bulan)
-    const tp1Win = s.trading_plan && s.trading_plan.tp1_win_prob
-      ? Math.round(s.trading_plan.tp1_win_prob)
-      : Math.min(85, Math.max(35, Math.round(50 + (s.smart_money_score - 40) * 0.65 + (s.vol_ratio >= 2 ? 3 : 0))));
-    const tp1Loss = 100 - tp1Win;
-
     return `
       <div class="p-5 rounded-2xl glass-panel border border-white/[0.08] hover:border-emerald-400/40 transition shadow-lg flex flex-col justify-between gap-4">
         
@@ -418,14 +412,11 @@ function renderTodayCandidates(stocks) {
           </p>
         </div>
 
-        <!-- Skenario Trading Sederhana dengan Probabilitas Win vs Loss -->
+        <!-- Skenario Trading Sederhana -->
         <div class="p-3 rounded-xl glass-subcard border border-white/[0.06] space-y-2 text-xs">
           <div class="flex items-center justify-between text-[10px]">
             <span class="font-bold text-slate-400 uppercase tracking-wider">Skenario Terukur:</span>
-            <span class="font-mono font-bold text-emerald-400 flex items-center gap-1">
-              <span>🎯</span>
-              <span>Probabilitas: ${tp1Win}% Win / ${tp1Loss}% Loss</span>
-            </span>
+            <span class="text-slate-400 font-medium">Bukan Perintah Beli</span>
           </div>
           <div class="grid grid-cols-3 gap-1.5 text-center font-mono">
             <div class="p-1.5 rounded-lg bg-blue-500/10 border border-blue-400/20">
@@ -439,12 +430,6 @@ function renderTodayCandidates(stocks) {
             <div class="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-400/20">
               <div class="text-[10px] text-emerald-300 font-sans font-semibold">Target 1 (TP1)</div>
               <div class="text-emerald-300 font-bold text-[11px] mt-0.5">${fmtNumber(target1)} (+${tpPct}%)</div>
-              <div class="text-[9px] font-bold text-emerald-400 mt-1 font-mono flex items-center justify-center gap-0.5" title="Probabilitas Sukses Capai TP1">
-                <span>${tp1Win}% Win</span>
-              </div>
-              <div class="w-full bg-rose-500/30 rounded-full h-1 mt-0.5 overflow-hidden flex">
-                <div class="bg-emerald-400 h-full" style="width: ${tp1Win}%"></div>
-              </div>
             </div>
           </div>
         </div>
@@ -1162,41 +1147,12 @@ function renderInspectorPanel(d) {
   const tgtEl = document.getElementById('planTargets');
   if (tgtEl && plan) tgtEl.textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct}%)`;
 
-  // Probabilitas Win vs Loss Teruji 6 Bulan
-  const tp1Win = plan && plan.tp1_win_prob
-    ? Math.round(plan.tp1_win_prob)
-    : Math.min(85, Math.max(35, Math.round(50 + (d.smart_money_score - 40) * 0.65 + (d.vol_ratio >= 2 ? 3 : 0))));
-  const tp1Loss = 100 - tp1Win;
-  const tp2Win = plan && plan.tp2_win_prob ? Math.round(plan.tp2_win_prob) : Math.round(tp1Win * 0.76);
-  const tp2Loss = 100 - tp2Win;
-
-  const probBadgeEl = document.getElementById('planProbBadge');
-  if (probBadgeEl) probBadgeEl.textContent = `${tp1Win}% Win / ${tp1Loss}% Loss`;
-
-  const barWinEl = document.getElementById('planProbBarWin');
-  const barLossEl = document.getElementById('planProbBarLoss');
-  if (barWinEl) barWinEl.style.width = `${tp1Win}%`;
-  if (barLossEl) barLossEl.style.width = `${tp1Loss}%`;
-
-  const subTP1 = document.getElementById('planProbSubTP1');
-  const subTP2 = document.getElementById('planProbSubTP2');
-  const subSL = document.getElementById('planProbSubSL');
-  if (subTP1) subTP1.textContent = `🎯 TP1: ${tp1Win}% Win`;
-  if (subTP2) subTP2.textContent = `🚀 TP2: ${tp2Win}% Win`;
-  if (subSL) subSL.textContent = `🛑 SL: ${tp1Loss}% Loss`;
-
-  const tgt1Wr = document.getElementById('planTarget1Winrate');
-  if (tgt1Wr) tgt1Wr.textContent = `Win: ${tp1Win}%`;
-
   const tgt2El = document.getElementById('planTarget2');
-  const tgt2Wr = document.getElementById('planTarget2Winrate');
   if (tgt2El && plan) {
     if (plan.target_2 && plan.target_2 > 0) {
       tgt2El.textContent = `${fmtNumber(plan.target_2)} (+${plan.target_2_pct}%)`;
-      if (tgt2Wr) tgt2Wr.textContent = `(Win: ${tp2Win}%)`;
     } else {
       tgt2El.textContent = '-';
-      if (tgt2Wr) tgt2Wr.textContent = '';
     }
   }
   const pr = document.getElementById('planRationale');
