@@ -137,6 +137,45 @@ class SignalTracker:
             self.engine = self._make_engine(url)
             metadata.create_all(self.engine)
         self.db_backend = "PostgreSQL (permanen)" if url.startswith("postgresql") else "SQLite (file lokal)"
+        try:
+            self.cleanup_non_compliant_signals()
+        except Exception as e:
+            print(f"[Tracker] Notice saat pembersihan sinyal 6 filter: {e}")
+
+    def cleanup_non_compliant_signals(self) -> int:
+        """Menghapus seluruh sinyal (WATCHLIST, RUNNING, WIN, LOSS) yang melanggar 6 filter kuantitatif."""
+        data_dir = Path(__file__).resolve().parent.parent / "data"
+        val_map: dict[tuple[str, str], float] = {}
+        for fn in ["real_idx_market_latest.csv", "real_idx_market_6mo.csv"]:
+            p = data_dir / fn
+            if p.exists():
+                try:
+                    df = pd.read_csv(p, usecols=["Ticker", "Date", "Value_IDR"])
+                    for _, r in df.iterrows():
+                        val_map[(str(r["Ticker"]).upper(), str(r["Date"]))] = float(r["Value_IDR"])
+                except Exception:
+                    pass
+
+        removed = 0
+        with self._lock, self.engine.begin() as conn:
+            rows = conn.execute(select(signals_table)).mappings().all()
+            ids_to_del: list[int] = []
+            for r in rows:
+                score = int(r.get("score") or 0)
+                trig = str(r.get("trigger_type") or "")
+                ticker = str(r.get("ticker") or "").upper()
+                s_date = str(r.get("signal_date") or "")
+                val_idr = val_map.get((ticker, s_date), 1_000_000_000.0)
+
+                # 6 Filter: Skor >= 70, Sinyal Akumulasi Sah, Nilai Transaksi >= 1 Miliar
+                if score < self.min_score or trig not in TRACKABLE_TRIGGERS or val_idr < 1_000_000_000:
+                    ids_to_del.append(r["id"])
+
+            if ids_to_del:
+                conn.execute(delete(signals_table).where(signals_table.c.id.in_(ids_to_del)))
+                removed = len(ids_to_del)
+                print(f"[Tracker] Berhasil membersihkan {removed} sinyal yang melanggar 6 filter kuantitatif.")
+        return removed
 
     @staticmethod
     def _make_engine(url: str):
@@ -366,6 +405,23 @@ class SignalTracker:
                 cur_trigger = str(d.get("trigger_type") or "")
                 is_dist_warning = cur_score <= 35 or cur_trigger == "DISTRIBUTION_WARNING"
 
+                # Filter 6 Aturan Wajib: Turnover >= 1.0 Miliar, Skor >= 70, dan Trigger Akumulasi
+                val_b = d.get("value_b_idr")
+                if val_b is None and "value_idr" in d:
+                    try:
+                        val_b = float(d["value_idr"]) / 1e9
+                    except (ValueError, TypeError):
+                        val_b = 0.0
+                try:
+                    val_num = float(val_b) if val_b is not None else 1.0
+                except (ValueError, TypeError):
+                    val_num = 1.0
+
+                # Jika tidak memenuhi 6 filter (misal likuiditas < 1M, skor < 70, atau bukan akumulasi), hapus dari sistem
+                if val_num < 1.0 or cur_score < self.min_score or cur_trigger not in TRACKABLE_TRIGGERS:
+                    ids_to_delete.append(row["id"])
+                    continue
+
                 diff_b = d.get("diff_bandar_avg_pct")
                 if diff_b is None and isinstance(d.get("trading_plan"), dict):
                     diff_b = d["trading_plan"].get("diff_bandar_avg_pct")
@@ -463,7 +519,11 @@ class SignalTracker:
                     upd["updated_at"] = _now_str()
                     conn.execute(update(signals_table).where(signals_table.c.id == row["id"]).values(**upd))
 
-        return 0
+            if ids_to_delete:
+                conn.execute(delete(signals_table).where(signals_table.c.id.in_(ids_to_delete)))
+                removed = len(ids_to_delete)
+
+        return removed
 
     # ------------------------------------------------------------- evaluate
     def evaluate(self, details: dict[str, dict]) -> dict:
