@@ -49,6 +49,7 @@ from screener_engine import (
 )
 
 BASE_DIR = BACKEND_DIR.parent
+DATA_DIR = BASE_DIR / "data"
 FRONTEND_DIR = BASE_DIR / "frontend"
 USER_EXCEL_DIR = BASE_DIR / "data" / "user_excel"
 REAL_CACHE_CSV = BASE_DIR / "data" / "real_idx_market_latest.csv"
@@ -609,6 +610,11 @@ async def sync_live_idx_market_data() -> dict:
 def get_backtest_summary() -> dict:
     """Mengembalikan ringkasan hasil backtesting walk-forward historis tanpa look-ahead bias."""
     try:
+        report_6m = DATA_DIR / "backtest_6m_report.json"
+        if report_6m.exists():
+            import json
+            with open(report_6m, "r", encoding="utf-8") as f:
+                return json.load(f)
         if REAL_CACHE_CSV.exists():
             df_cache = pd.read_csv(REAL_CACHE_CSV)
             from backend.backtest_engine import run_historical_backtest

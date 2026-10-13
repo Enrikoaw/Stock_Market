@@ -288,19 +288,21 @@ def fetch_real_idx_market_data(
     del all_records
     gc.collect()
 
+    max_tail = 150 if download_period in ("6mo", "1y", "2y") else 90
+
     if is_incremental and output_csv_path is not None and output_csv_path.exists():
         try:
             old_cache = pd.read_csv(output_csv_path)
             result_df = pd.concat([old_cache, new_batch_df], ignore_index=True)
             result_df = result_df.drop_duplicates(subset=["Ticker", "Date"], keep="last")
-            # Batasi riwayat maksimum 90 candle per ticker agar stabil untuk MA20, MA50 & ATR14
-            result_df = result_df.groupby("Ticker", group_keys=False).tail(90)
+            # Batasi riwayat maksimum 90-150 candle per ticker agar stabil untuk MA20, MA50 & ATR14
+            result_df = result_df.groupby("Ticker", group_keys=False).tail(max_tail)
             result_df = result_df.sort_values(by=["Ticker", "Date"]).reset_index(drop=True)
             del old_cache
         except Exception:
             result_df = new_batch_df
     else:
-        result_df = new_batch_df.groupby("Ticker", group_keys=False).tail(90).reset_index(drop=True)
+        result_df = new_batch_df.groupby("Ticker", group_keys=False).tail(max_tail).reset_index(drop=True)
 
     del new_batch_df
     gc.collect()
