@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from backend.screener_engine import compute_quantitative_dataframe
+from backend.screener_engine import compute_quantitative_dataframe, _round_idx_tick
 
 
 @dataclass
@@ -115,10 +115,12 @@ def run_historical_backtest(
             entry_high = close_p
             entry_low = round(close_p * 0.99)
             sl_dist = max(entry_low * 0.025, min(entry_low * 0.075, 1.75 * atr14))
-            stop_loss = round(entry_low - sl_dist)
+            stop_loss = _round_idx_tick(entry_low - sl_dist)
             risk = max(1.0, entry_high - stop_loss)
-            tp1 = round(entry_high + 2.0 * risk)
-            tp2 = round(entry_high + 3.5 * risk)
+            tp1 = _round_idx_tick(entry_high * 1.04)
+            tp2 = _round_idx_tick(entry_high * 1.07)
+            if tp2 <= tp1:
+                tp2 = _round_idx_tick(tp1 + (2 if entry_high >= 200 else 1))
 
             # Klasifikasikan ke bucket (Semua wajib lolos skor >= 70)
             if score >= 80:
@@ -190,6 +192,15 @@ def run_historical_backtest(
                 elif hit_tp:
                     status = "WIN"
                     exit_price = max(bar["open"], tp1)
+                    if not hit_tp2:
+                        for rem_date in future_dates[b_idx + 1 : max_holding_bars]:
+                            if rem_date in ticker_prices:
+                                rem_bar = ticker_prices[rem_date]
+                                if rem_bar["high"] >= tp2:
+                                    hit_tp2 = True
+                                    break
+                                if rem_bar["low"] <= entry_price:
+                                    break
                     break
                 elif hit_sl:
                     status = "LOSS"

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=37.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=38.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -616,13 +616,13 @@
                 <div id="planStopLoss" class="font-mono font-bold text-white text-[11px] mt-0.5">-</div>
               </div>
               <div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-400/20">
-                <div class="text-[10px] text-emerald-300 font-semibold">Target 1 (TP1)</div>
+                <div class="text-[10px] text-emerald-300 font-semibold">Target 1 (TP1 +4%)</div>
                 <div id="planTargets" class="font-mono font-bold text-white text-[11px] mt-0.5">-</div>
               </div>
             </div>
 
             <div class="text-[11px] text-slate-300 flex items-center justify-between bg-white/[0.02] p-2 rounded-lg border border-white/5">
-              <span>Target 2: <span id="planTarget2" class="font-mono text-white font-semibold">-</span></span>
+              <span>Target 2 (TP2 +7%): <span id="planTarget2" class="font-mono text-emerald-300 font-semibold">-</span></span>
               <span id="planRationale" class="text-slate-300 truncate max-w-[180px]">-</span>
             </div>
 
@@ -784,35 +784,35 @@
             </button>
           </div>
 
-          <!-- KESIMPULAN PROBABILITAS SISTEM ANALISA (HASIL UJI 6 BULAN - 6 FILTER KETAT) -->
+          <!-- KESIMPULAN PROBABILITAS SISTEM ANALISA (HASIL UJI 6 BULAN - 6 FILTER & TAKE PROFIT CEPAT) -->
           <div class="p-3 sm:p-3.5 rounded-xl bg-slate-950/70 border border-emerald-500/30 space-y-2.5">
             <div class="flex flex-wrap items-center justify-between gap-1.5 text-xs">
               <div class="flex items-center gap-1.5 font-bold text-white">
                 <span class="text-sm">🎯</span>
-                <span>Kesimpulan Probabilitas Sistem Analisa (6 Filter)</span>
+                <span>Kesimpulan Probabilitas Sistem Analisa (6 Filter &amp; Take Profit Cepat)</span>
               </div>
               <div class="flex items-center gap-2 font-mono font-bold text-xs">
-                <span class="text-emerald-400">25,5% WIN</span>
+                <span class="text-emerald-400">57,6% WIN</span>
                 <span class="text-slate-500">vs</span>
-                <span class="text-rose-400">74,5% LOSS</span>
+                <span class="text-rose-400">42,4% LOSS</span>
               </div>
             </div>
 
-            <!-- Visual Bar Win (25.5%) vs Loss (74.5%) -->
-            <div class="w-full bg-rose-500/30 rounded-full h-3 overflow-hidden flex shadow-inner" title="Rasio Probabilitas Win (25,5%) vs Loss (74,5%)">
-              <div class="bg-gradient-to-r from-emerald-500 to-emerald-400 h-full flex items-center justify-center text-[9px] font-mono font-bold text-slate-950" style="width: 25.5%">25,5% WIN</div>
-              <div class="bg-gradient-to-r from-rose-500 to-rose-600 h-full flex items-center justify-center text-[9px] font-mono font-bold text-white" style="width: 74.5%">74,5% LOSS</div>
+            <!-- Visual Bar Win (57.6%) vs Loss (42.4%) -->
+            <div class="w-full bg-rose-500/30 rounded-full h-3 overflow-hidden flex shadow-inner" title="Rasio Probabilitas Win (57,6%) vs Loss (42,4%)">
+              <div class="bg-gradient-to-r from-emerald-500 to-emerald-400 h-full flex items-center justify-center text-[9px] font-mono font-bold text-slate-950" style="width: 57.6%">57,6% WIN</div>
+              <div class="bg-gradient-to-r from-rose-500 to-rose-600 h-full flex items-center justify-center text-[9px] font-mono font-bold text-white" style="width: 42.4%">42,4% LOSS</div>
             </div>
 
             <!-- Penjelasan Mengapa Sistem Menang Secara Statistik -->
             <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300 bg-white/[0.02] p-2 rounded-lg border border-white/5">
               <div class="flex items-center gap-1.5">
-                <span class="text-emerald-400 font-bold">💡 Keunggulan Matematis:</span>
-                <span>Rata-rata Menang <strong class="text-emerald-300 font-mono">+15,55%</strong> vs Batas Rugi Disiplin <strong class="text-rose-300 font-mono">-7,39%</strong></span>
+                <span class="text-emerald-400 font-bold">💡 Keunggulan Matematis Cuan Cepat:</span>
+                <span>Win Rate melonjak ke <strong class="text-emerald-300 font-mono">57,6%</strong> dengan rata-rata untung <strong class="text-emerald-300 font-mono">+4,96%</strong> (TP1) &amp; <strong class="text-teal-300 font-mono">1.591 trade</strong> tembus TP2 (+7%).</span>
               </div>
               <div class="flex items-center gap-1.5 font-mono text-[10px]">
-                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">Risk/Reward = 1 : 2,10</span>
-                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 font-bold">Hold: ~7 Hari</span>
+                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">Target Cepat: +4% &amp; +7%</span>
+                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 font-bold">Hold: ~4,6 Hari</span>
               </div>
             </div>
           </div>
@@ -820,24 +820,24 @@
           <!-- 4 Metrik Kunci Uji 6 Bulan (6 Filter Wajib) -->
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
             <div class="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-              <div class="text-[10px] text-slate-400 font-medium">Win Rate Target 1 (TP1)</div>
-              <div class="text-base sm:text-lg font-black font-mono text-emerald-400 mt-0.5">25,5%</div>
-              <div class="text-[10px] text-emerald-300/80">723 trade (avg +15,55%)</div>
+              <div class="text-[10px] text-slate-400 font-medium">Win Rate Target 1 (TP1 +4%)</div>
+              <div class="text-base sm:text-lg font-black font-mono text-emerald-400 mt-0.5">57,6%</div>
+              <div class="text-[10px] text-emerald-300/80">2.391 trade (avg +4,96%)</div>
             </div>
             <div class="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-              <div class="text-[10px] text-slate-400 font-medium">Target 2 (TP2 Extended)</div>
-              <div class="text-base sm:text-lg font-black font-mono text-teal-300 mt-0.5">135</div>
-              <div class="text-[10px] text-teal-300/80">Trade tembus multi-target</div>
+              <div class="text-[10px] text-slate-400 font-medium">Target 2 (TP2 +7%)</div>
+              <div class="text-base sm:text-lg font-black font-mono text-teal-300 mt-0.5">1.591</div>
+              <div class="text-[10px] text-teal-300/80">32,2% trade tembus TP2</div>
             </div>
             <div class="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
               <div class="text-[10px] text-slate-400 font-medium">Batas Rugi Terjaga (SL)</div>
-              <div class="text-base sm:text-lg font-black font-mono text-rose-300 mt-0.5">-7,39%</div>
+              <div class="text-base sm:text-lg font-black font-mono text-rose-300 mt-0.5">-7,19%</div>
               <div class="text-[10px] text-slate-400">Disiplin Cut Loss ATR14</div>
             </div>
             <div class="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-              <div class="text-[10px] text-slate-400 font-medium">Rasio Risk / Reward</div>
-              <div class="text-base sm:text-lg font-black font-mono text-amber-300 mt-0.5">1 : 2,10</div>
-              <div class="text-[10px] text-amber-300/80">1 Win menutup >2 Loss</div>
+              <div class="text-[10px] text-slate-400 font-medium">Perputaran Modal (Hold)</div>
+              <div class="text-base sm:text-lg font-black font-mono text-amber-300 mt-0.5">~4,6 Hari</div>
+              <div class="text-[10px] text-amber-300/80">Modal berputar cepat</div>
             </div>
           </div>
         </div>
@@ -1242,17 +1242,17 @@
           <!-- Kesimpulan Win vs Loss (6 Filter Wajib) -->
           <div class="p-2.5 rounded-lg bg-slate-950/60 border border-emerald-500/20 space-y-1.5 my-2">
             <div class="flex items-center justify-between text-[11px] font-bold">
-              <span class="text-white">Probabilitas Keseluruhan Sistem (6 Filter):</span>
-              <span class="font-mono text-emerald-400">25,5% Win / 74,5% Loss</span>
+              <span class="text-white">Probabilitas Keseluruhan Sistem (6 Filter &amp; Take Profit Cepat):</span>
+              <span class="font-mono text-emerald-400">57,6% Win / 42,4% Loss</span>
             </div>
             <div class="w-full bg-rose-500/30 rounded-full h-2 overflow-hidden flex">
-              <div class="bg-emerald-400 h-full" style="width: 25.5%"></div>
-              <div class="bg-rose-500 h-full" style="width: 74.5%"></div>
+              <div class="bg-emerald-400 h-full" style="width: 57.6%"></div>
+              <div class="bg-rose-500 h-full" style="width: 42.4%"></div>
             </div>
             <div class="flex items-center justify-between text-[10px] text-slate-300">
-              <span class="text-emerald-300 font-mono">Avg Win: +15,55%</span>
-              <span class="text-amber-300 font-mono">Risk/Reward: 1 : 2,10</span>
-              <span class="text-rose-300 font-mono">Avg Loss: -7,39%</span>
+              <span class="text-emerald-300 font-mono">Avg Win TP1: +4,96%</span>
+              <span class="text-teal-300 font-mono">TP2 (+7%): 1.591 Trade</span>
+              <span class="text-rose-300 font-mono">Avg Loss SL: -7,19%</span>
             </div>
           </div>
 
@@ -1262,28 +1262,28 @@
                 <tr class="text-slate-400 border-b border-white/10 font-sans">
                   <th class="py-1">Kelompok Skor</th>
                   <th class="py-1 text-center">Trade Masuk</th>
-                  <th class="py-1 text-center">Win Rate (TP)</th>
+                  <th class="py-1 text-center">Win Rate (TP1 +4%)</th>
                   <th class="py-1 text-right">Avg Win</th>
                   <th class="py-1 text-right">Avg Loss</th>
-                  <th class="py-1 text-right">Risk/Reward</th>
+                  <th class="py-1 text-right">Avg Hold</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-white/[0.05] text-slate-200">
                 <tr>
                   <td class="py-1.5 text-white font-sans font-bold">Skor 80 - 100 (High Conviction)</td>
                   <td class="py-1.5 text-center">2.266</td>
-                  <td class="py-1.5 text-center text-emerald-400 font-bold">24,5% (TP1)</td>
-                  <td class="py-1.5 text-right text-emerald-400">+14,68%</td>
-                  <td class="py-1.5 text-right text-rose-400">-7,28%</td>
-                  <td class="py-1.5 text-right text-amber-300">1 : 2,02</td>
+                  <td class="py-1.5 text-center text-emerald-400 font-bold">56,0% (TP1)</td>
+                  <td class="py-1.5 text-right text-emerald-400">+4,81%</td>
+                  <td class="py-1.5 text-right text-rose-400">-7,02%</td>
+                  <td class="py-1.5 text-right text-amber-300">4,7 Hari</td>
                 </tr>
                 <tr>
                   <td class="py-1.5 text-white font-sans font-bold">Skor 70 - 79 (Strong Accum)</td>
                   <td class="py-1.5 text-center">2.682</td>
-                  <td class="py-1.5 text-center text-emerald-400 font-bold">26,4% (TP1)</td>
-                  <td class="py-1.5 text-right text-emerald-400">+16,26%</td>
-                  <td class="py-1.5 text-right text-rose-400">-7,50%</td>
-                  <td class="py-1.5 text-right text-amber-300">1 : 2,17</td>
+                  <td class="py-1.5 text-center text-emerald-400 font-bold">59,0% (TP1)</td>
+                  <td class="py-1.5 text-right text-emerald-400">+5,09%</td>
+                  <td class="py-1.5 text-right text-rose-400">-7,34%</td>
+                  <td class="py-1.5 text-right text-amber-300">4,6 Hari</td>
                 </tr>
                 <tr>
                   <td class="py-1.5 text-slate-500 font-sans italic">Skor &lt; 70 (Ditolak Sistem)</td>
@@ -1446,6 +1446,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=37.0"></script>
+  <script src="/static/app.js?v=38.0"></script>
 </body>
 </html>

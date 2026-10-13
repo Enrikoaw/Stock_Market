@@ -65,14 +65,14 @@ def filter_smart_telegram_picks(
     max_picks: int = 3,
     max_pct_change: float = 2.5,
     min_score: int = 70,
-    min_value_b_idr: float = 0.5,
+    min_value_b_idr: float = 1.0,
 ) -> list[dict]:
     """
     Menyaring saham-saham pilihan yang paling ideal untuk modal terbatas (misal 10 Juta):
     1. Sinyal Akumulasi Smart Money (Big Accum, Silent Accum, Breakout, Foreign Inflow).
     2. Skor Smart Money tinggi (>= min_score).
     3. Belum terbang tinggi (-2.5% <= perubahan harga <= max_pct_change, default +2.5%).
-    4. Likuid (Nilai transaksi harian >= Rp 500 Juta).
+    4. Likuid (Nilai transaksi harian >= Rp 1.0 Miliar - Filter 6).
     5. Jarak ke modal bandar tidak boleh lebih dari 5% (diff_bandar_avg_pct <= 5.0%).
     """
     valid_triggers = {"BIG_ACCUMULATION", "SILENT_ACCUMULATION", "MARKUP_BREAKOUT", "FOREIGN_INFLOW"}
@@ -139,7 +139,7 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
     lines = [
         "🎯 <b>SMARTFLOW IDX — RADAR AKUMULASI & VSA</b>",
         f"📅 <i>Sesi Bursa: {html.escape(date_str)}</i>",
-        "💡 <i>Kriteria: Sinyal VSA & Akumulasi Volume, Belum Terbang (≤ 2.5%), & Jarak VWAP 5H ≤ 5%</i>",
+        "💡 <i>Kriteria: 6 Filter Kuantitatif (Turnover ≥ 1M, Akumulasi, Belum Terbang ≤ 2.5%, Jarak VWAP ≤ 5%)</i>",
         f"🔍 Ditemukan <b>{len(picks)} Saham Pilihan</b>:\n",
     ]
 
@@ -177,11 +177,11 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
             f"💰 <b>Harga:</b> Rp {close:,} (<b>{pct_sign}{pct:.2f}%</b>) | <b>VSA Score:</b> {score}/100\n"
             f"⚡ <b>Sinyal:</b> {trigger_lbl} | <b>Closing Range:</b> {cr}%\n"
             f"📊 <b>Vol Spike:</b> {vol_ratio:.1f}x MA20 | <b>Nilai Transaksi:</b> Rp {val_b:.2f}M\n\n"
-            f"🎯 <b>TRADING PLAN (Probabilitas Teruji):</b>\n"
+            f"🎯 <b>TRADING PLAN (Take Profit Cepat):</b>\n"
             f"• <b>Zona Entry:</b> <code>Rp {e_low:,} – {e_high:,}</code>\n"
             f"• <b>Stop Loss (SL):</b> <code>Rp {sl:,} ({sl_pct:.1f}%)</code>\n"
-            f"• <b>Target TP1:</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code> ➜ <b>{tp1_win}% Win / {tp1_loss}% Loss</b>\n"
-            f"• <b>Target TP2:</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code> ➜ <b>{tp2_win}% Win</b>\n"
+            f"• <b>Target TP1 (+4%):</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code> ➜ <b>{tp1_win}% Win / {tp1_loss}% Loss</b>\n"
+            f"• <b>Target TP2 (+7%):</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code> ➜ <b>{tp2_win}% Win</b>\n"
             f"• <b>VWAP 5 Hari:</b> Rp {vwap_5d:,} (Jarak: {diff_vwap:+.1f}%)\n"
         )
         lines.append(card)
@@ -191,6 +191,7 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
         "💡 <b>Panduan Modal 10 Juta:</b>\n"
         "• Pilih maksimal 2 saham, porsi Rp 3–5 juta per saham.\n"
         "• Pasang Buy Limit di Zona Entry saat koreksi.\n"
+        "• Take Profit Cepat: TP1 di +4% (Amankan modal), TP2 di +7% (Realisasi profit penuh).\n"
         "• Wajib pasang Automatic Stop Loss di aplikasi sekuritas."
     )
 

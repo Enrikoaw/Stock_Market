@@ -139,8 +139,38 @@ class SignalTracker:
         self.db_backend = "PostgreSQL (permanen)" if url.startswith("postgresql") else "SQLite (file lokal)"
         try:
             self.cleanup_non_compliant_signals()
+            self.sync_targets_quick_profit()
         except Exception as e:
-            print(f"[Tracker] Notice saat pembersihan sinyal 6 filter: {e}")
+            print(f"[Tracker] Notice saat pembersihan sinyal 6 filter / sync TP: {e}")
+
+    def sync_targets_quick_profit(self) -> int:
+        """Menyesuaikan target price posisi aktif (WATCHLIST & RUNNING) ke formula Quick Profit TP1 (+4%) dan TP2 (+7%)."""
+        from backend.screener_engine import _round_idx_tick
+        updated = 0
+        with self._lock, self.engine.begin() as conn:
+            rows = conn.execute(
+                select(signals_table).where(signals_table.c.status.in_(ACTIVE_STATUSES))
+            ).mappings().all()
+            for r in rows:
+                e_high = float(r.get("entry_high") or r.get("entry_price") or r.get("signal_close") or 0)
+                if e_high <= 0:
+                    continue
+                new_tp1 = _round_idx_tick(e_high * 1.04)
+                new_tp2 = _round_idx_tick(e_high * 1.07)
+                if new_tp2 <= new_tp1:
+                    new_tp2 = _round_idx_tick(new_tp1 + (2 if e_high >= 200 else 1))
+                cur_tp1 = float(r.get("target") or 0)
+                cur_tp2 = float(r.get("target_2") or 0)
+                if cur_tp1 != new_tp1 or cur_tp2 != new_tp2:
+                    conn.execute(
+                        update(signals_table)
+                        .where(signals_table.c.id == r["id"])
+                        .values(target=new_tp1, target_2=new_tp2, updated_at=_now_str())
+                    )
+                    updated += 1
+        if updated > 0:
+            print(f"[Tracker] Berhasil memperbarui {updated} sinyal aktif ke target TP1 (+4%) & TP2 (+7%).")
+        return updated
 
     def cleanup_non_compliant_signals(self) -> int:
         """Menghapus seluruh sinyal (WATCHLIST, RUNNING, WIN, LOSS) yang melanggar 6 filter kuantitatif."""
