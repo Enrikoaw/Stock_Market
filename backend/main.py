@@ -605,6 +605,19 @@ async def sync_live_idx_market_data() -> dict:
     }
 
 
+@app.get("/api/backtest/summary")
+def get_backtest_summary() -> dict:
+    """Mengembalikan ringkasan hasil backtesting walk-forward historis tanpa look-ahead bias."""
+    try:
+        if REAL_CACHE_CSV.exists():
+            df_cache = pd.read_csv(REAL_CACHE_CSV)
+            from backend.backtest_engine import run_historical_backtest
+            return run_historical_backtest(df_cache)
+        return {"error": "Cache data pasar belum tersedia."}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gagal menjalankan backtest: {exc}") from exc
+
+
 @app.post("/api/upload")
 async def upload_excel_files(
     files: Optional[list[UploadFile]] = File(default=None),

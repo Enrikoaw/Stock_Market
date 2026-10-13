@@ -828,19 +828,23 @@ def _tight_entry_zone(ref_high: float, width_pct: float = 0.01) -> tuple[int, in
     return e_low, e_high
 
 
-def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
+def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Mesin Analisis Ter-Vektorisasi Cepat untuk 15 s/d 950+ Saham IDX!
-    Menghitung seluruh indikator 5 Pilar Smart Money secara paralel di level DataFrame.
+    Mesin Analisis Kuantitatif Ter-Vektorisasi Lengkap SmartFlow IDX (v4.0).
+    5 Pilar Kuantitatif Murni (100 Poin Maksimum):
+    1. Volume Spike & VSA (25 Poin)
+    2. Tren & Struktur MA20/MA50 (20 Poin)
+    3. Kompresi Volatilitas / Squeeze (15 Poin)
+    4. Likuiditas & Turnover Riil (15 Poin)
+    5. Posisi Harga vs 5-Day VWAP (25 Poin)
+    Trading Plan Adaptif Berbasis ATR(14) dengan Risk/Reward 1:2 (TP1) & 1:3 (TP2).
     """
     df = normalize_columns(raw_df) if "Has_Broker_Summary" not in raw_df.columns else raw_df.copy()
     df = df.sort_values(["Ticker", "Date"]).reset_index(drop=True)
 
-    # Hitung jumlah hari per saham
     counts_per_ticker = df.groupby("Ticker")["Date"].transform("count")
     is_multi_day = (counts_per_ticker > 1).any()
 
-    # Prev_Close & Pct_Change secara vektorisasi
     shifted_close = df.groupby("Ticker")["Close"].shift(1)
     if "Prev_Close" in df.columns:
         df["Prev_Close"] = shifted_close.fillna(df["Prev_Close"]).fillna(df["Open"])
@@ -852,17 +856,19 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
     df["Closing_Range"] = np.where(
         (df["High"] - df["Low"]) > 0,
         (df["Close"] - df["Low"]) / (df["High"] - df["Low"]),
-        np.where(df["Pct_Change"] >= 0, 0.7, 0.3),
+        np.where(df["Pct_Change"] >= 0, 0.70, 0.30),
     )
 
     df["Ticket_Size"] = df["Volume_Lot"] / np.maximum(df["Frequency"], 1.0)
     df["Val_Per_Tx"] = df["Value_IDR"] / np.maximum(df["Frequency"], 1.0)
     median_val_per_tx = max(1_000_000.0, float(df["Val_Per_Tx"].median()))
 
+    # 1. Moving Averages & Range Resisten
     if is_multi_day:
         df["Vol_MA20"] = df.groupby("Ticker")["Volume_Lot"].transform(lambda s: s.rolling(20, min_periods=1).mean())
-        df["Volume_Ratio"] = df["Volume_Lot"] / np.maximum(df["Vol_MA20"], 1.0)
+        df["Volume_Ratio"] = (df["Volume_Lot"] / np.maximum(df["Vol_MA20"], 1.0)).round(2)
         df["MA20"] = df.groupby("Ticker")["Close"].transform(lambda s: s.rolling(20, min_periods=1).mean())
+        df["MA50"] = df.groupby("Ticker")["Close"].transform(lambda s: s.rolling(50, min_periods=1).mean())
         df["High_10D"] = (
             df.groupby("Ticker")["High"]
             .transform(lambda s: s.shift(1).rolling(10, min_periods=1).max())
@@ -870,7 +876,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         )
         df["Low_10D"] = df.groupby("Ticker")["Low"].transform(lambda s: s.rolling(10, min_periods=1).min())
         df["Ticket_MA20"] = df.groupby("Ticker")["Ticket_Size"].transform(lambda s: s.rolling(20, min_periods=1).mean())
-        df["Ticket_Ratio"] = df["Ticket_Size"] / np.maximum(df["Ticket_MA20"], 0.1)
+        df["Ticket_Ratio"] = (df["Ticket_Size"] / np.maximum(df["Ticket_MA20"], 0.1)).round(2)
     else:
         est_vol_ratio = np.clip(
             (df["Val_Per_Tx"] / median_val_per_tx) * 0.65 + (df["Pct_Change"].abs() * 0.18) + 0.6,
@@ -880,38 +886,176 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         df["Vol_MA20"] = (df["Volume_Lot"] / np.maximum(est_vol_ratio, 0.1)).round()
         df["Volume_Ratio"] = est_vol_ratio.round(2)
         df["MA20"] = df["Prev_Close"]
+        df["MA50"] = df["Prev_Close"]
         df["High_10D"] = df["High"]
         df["Low_10D"] = df["Low"]
         est_ticket_ratio = np.clip(df["Val_Per_Tx"] / median_val_per_tx, 0.4, 3.8)
         df["Ticket_MA20"] = df["Ticket_Size"] / np.maximum(est_ticket_ratio, 0.1)
         df["Ticket_Ratio"] = est_ticket_ratio.round(2)
 
+    # 2. True Range & ATR(14)
+    tr1 = df["High"] - df["Low"]
+    tr2 = (df["High"] - df["Prev_Close"]).abs()
+    tr3 = (df["Low"] - df["Prev_Close"]).abs()
+    df["TR"] = np.maximum(tr1, np.maximum(tr2, tr3))
+    if is_multi_day:
+        df["ATR14"] = df.groupby("Ticker")["TR"].transform(lambda s: s.rolling(14, min_periods=1).mean()).fillna(tr1).round().astype(np.int64)
+    else:
+        df["ATR14"] = np.maximum(1, np.round(df["TR"] * 0.9)).astype(np.int64)
+    df["ATR_Pct"] = ((df["ATR14"] / np.maximum(df["Close"], 1.0)) * 100.0).round(2)
+
+    # 3. 5-Day VWAP
+    typ_p = (df["High"] + df["Low"] + df["Close"]) / 3.0
+    pv_tmp = typ_p * np.maximum(df["Volume_Lot"], 1)
+    v_tmp = np.maximum(df["Volume_Lot"], 1)
+    if is_multi_day:
+        pv_5d = df.assign(_pv=pv_tmp).groupby("Ticker")["_pv"].transform(lambda s: s.rolling(5, min_periods=1).sum())
+        v_5d = df.assign(_v=v_tmp).groupby("Ticker")["_v"].transform(lambda s: s.rolling(5, min_periods=1).sum())
+        df["VWAP_5D"] = (pv_5d / np.maximum(v_5d, 1.0)).round().astype(np.int64)
+    else:
+        df["VWAP_5D"] = typ_p.round().astype(np.int64)
+    df["Bandar_Avg_Buy"] = df["VWAP_5D"]
+    df["Diff_VWAP_Pct"] = (((df["Close"] - df["VWAP_5D"]) / np.maximum(df["VWAP_5D"], 1.0)) * 100.0).round(2)
+
+    # 4. Volatility Compression / Squeeze Detection
+    if is_multi_day:
+        std20 = df.groupby("Ticker")["Close"].transform(lambda s: s.rolling(20, min_periods=1).std()).fillna(0.0)
+        bb_upper = df["MA20"] + 2.0 * std20
+        bb_lower = df["MA20"] - 2.0 * std20
+        kc_upper = df["MA20"] + 1.5 * df["ATR14"]
+        kc_lower = df["MA20"] - 1.5 * df["ATR14"]
+        spread_3d = df.groupby("Ticker")["Spread_Pct"].transform(lambda s: s.rolling(3, min_periods=1).mean())
+        spread_20d = df.groupby("Ticker")["Spread_Pct"].transform(lambda s: s.rolling(20, min_periods=1).mean())
+        df["Is_Squeeze"] = ((bb_upper <= kc_upper) & (bb_lower >= kc_lower)) | (spread_3d <= spread_20d * 0.75)
+    else:
+        df["Is_Squeeze"] = df["Spread_Pct"] <= 2.5
+
     df["Net_Top3_Lot"] = df["Top3_Buy_Lot"] - df["Top3_Sell_Lot"]
-    df["Top3_BSR"] = df["Top3_Buy_Lot"] / np.maximum(df["Top3_Sell_Lot"], 1.0)
-    df["Top1_BSR"] = df["Top1_Buy_Lot"] / np.maximum(df["Top1_Sell_Lot"], 1.0)
-    df["Top5_BSR"] = df["Top5_Buy_Lot"] / np.maximum(df["Top5_Sell_Lot"], 1.0)
-    df["Broker_Dominance_Pct"] = (df["Net_Top3_Lot"] / np.maximum(df["Volume_Lot"], 1.0)) * 100.0
+    df["Top3_BSR"] = (df["Top3_Buy_Lot"] / np.maximum(df["Top3_Sell_Lot"], 1.0)).round(2)
+    df["Top1_BSR"] = (df["Top1_Buy_Lot"] / np.maximum(df["Top1_Sell_Lot"], 1.0)).round(2)
+    df["Top5_BSR"] = (df["Top5_Buy_Lot"] / np.maximum(df["Top5_Sell_Lot"], 1.0)).round(2)
+    df["Broker_Dominance_Pct"] = ((df["Net_Top3_Lot"] / np.maximum(df["Volume_Lot"], 1.0)) * 100.0).round(2)
 
     df["Net_Foreign_IDR"] = df["Foreign_Buy_Val"] - df["Foreign_Sell_Val"]
-    df["Net_Foreign_Pct"] = (df["Net_Foreign_IDR"] / np.maximum(df["Value_IDR"], 1.0)) * 100.0
+    df["Net_Foreign_Pct"] = ((df["Net_Foreign_IDR"] / np.maximum(df["Value_IDR"], 1.0)) * 100.0).round(2)
 
-    # Skor Harian secara vektorisasi penuh
-    p_vs_ma_all = ((df["Close"] - df["MA20"]) / np.maximum(df["MA20"], 1.0)) * 100.0
-    s_vsa_all = np.clip((df["Volume_Ratio"] - 0.7) * 9.5 + (df["Closing_Range"] - 0.3) * 12.0, 0.0, 25.0)
-    s_bandar_all = np.clip((df["Top3_BSR"] - 0.8) * 18.0 + df["Broker_Dominance_Pct"] * 0.45, 0.0, 30.0)
-    s_ticket_all = np.clip((df["Ticket_Ratio"] - 0.75) * 14.0, 0.0, 15.0)
-    s_foreign_all = np.clip(6.0 + df["Net_Foreign_Pct"] * 0.42, 0.0, 15.0)
-    s_struct_all = np.clip(
-        8.0 + p_vs_ma_all * 1.1 + np.where(df["Close"] >= df["MA20"], 3.0, -2.0),
-        0.0,
-        15.0,
+    # =========================================================================
+    # SINGLE SOURCE OF TRUTH: 5 PILAR KUANTITATIF (MAKSIMUM 100 POIN)
+    # =========================================================================
+
+    # Pilar 1: Volume Spike & VSA (25 Poin)
+    vol_pts = np.select(
+        [df["Volume_Ratio"] >= 2.5, df["Volume_Ratio"] >= 1.8, df["Volume_Ratio"] >= 1.3, df["Volume_Ratio"] >= 1.0],
+        [16.0, 13.0, 10.0, 6.0],
+        default=2.0,
     )
-    df["Daily_SM_Score"] = np.clip(
-        np.round(s_vsa_all + s_bandar_all + s_ticket_all + s_foreign_all + s_struct_all),
+    cr_pts = np.select(
+        [(df["Closing_Range"] >= 0.75) & (df["Pct_Change"] >= 0), df["Closing_Range"] >= 0.60, df["Closing_Range"] >= 0.45],
+        [9.0, 7.0, 4.0],
+        default=0.0,
+    )
+    df["Pilar1_VSA_Score"] = np.clip(vol_pts + cr_pts, 0.0, 25.0).round(1)
+
+    # Pilar 2: Tren & Struktur MA20/MA50 (20 Poin)
+    p_vs_ma20_pts = np.where(df["Close"] >= df["MA20"], 8.0, 0.0)
+    ma_align_pts = np.where(df["MA20"] >= df["MA50"], 7.0, 2.0)
+    breakout_pts = np.where(df["Close"] >= df["High_10D"] * 0.995, 5.0, 0.0)
+    df["Pilar2_Trend_Score"] = np.clip(p_vs_ma20_pts + ma_align_pts + breakout_pts, 0.0, 20.0).round(1)
+
+    # Pilar 3: Kompresi Volatilitas / Squeeze (15 Poin)
+    sq_pts = np.select(
+        [df["Is_Squeeze"], df["Spread_Pct"] <= 2.8, df["ATR_Pct"] <= 4.0],
+        [15.0, 10.0, 6.0],
+        default=2.0,
+    )
+    df["Pilar3_Squeeze_Score"] = np.clip(sq_pts, 0.0, 15.0).round(1)
+
+    # Pilar 4: Likuiditas & Turnover Riil (15 Poin)
+    val_pts = np.select(
+        [
+            (df["Close"] >= 50) & (df["Value_IDR"] >= 10_000_000_000),
+            (df["Close"] >= 50) & (df["Value_IDR"] >= 3_000_000_000),
+            (df["Close"] >= 50) & (df["Value_IDR"] >= 1_000_000_000),
+            (df["Close"] >= 50) & (df["Value_IDR"] >= 500_000_000),
+        ],
+        [15.0, 12.0, 8.0, 5.0],
+        default=0.0,
+    )
+    df["Pilar4_Liquidity_Score"] = np.clip(val_pts, 0.0, 15.0).round(1)
+
+    # Pilar 5: Posisi Harga vs 5-Day VWAP (25 Poin)
+    vwap_pts = np.select(
+        [
+            (df["Diff_VWAP_Pct"] >= -1.0) & (df["Diff_VWAP_Pct"] <= 2.5),
+            (df["Diff_VWAP_Pct"] > 2.5) & (df["Diff_VWAP_Pct"] <= 5.0),
+            (df["Diff_VWAP_Pct"] >= -3.0) & (df["Diff_VWAP_Pct"] < -1.0),
+            (df["Diff_VWAP_Pct"] > 5.0) & (df["Diff_VWAP_Pct"] <= 8.0),
+            df["Diff_VWAP_Pct"] > 8.0,
+        ],
+        [25.0, 20.0, 18.0, 10.0, 5.0],
+        default=3.0,
+    )
+    df["Pilar5_VWAP_Score"] = np.clip(vwap_pts, 0.0, 25.0).round(1)
+
+    # Total Skor Kuantitatif (Single Unified Value)
+    df["Smart_Money_Score"] = np.clip(
+        np.round(
+            df["Pilar1_VSA_Score"]
+            + df["Pilar2_Trend_Score"]
+            + df["Pilar3_Squeeze_Score"]
+            + df["Pilar4_Liquidity_Score"]
+            + df["Pilar5_VWAP_Score"]
+        ),
         5,
         100,
     ).astype(int)
+    df["Daily_SM_Score"] = df["Smart_Money_Score"]
 
+    # Klasifikasi Sinyal Kuantitatif (Trigger Type)
+    c_dist = (
+        ((df["Closing_Range"] <= 0.35) & (df["Pct_Change"] <= -1.5) & (df["Volume_Ratio"] >= 1.2))
+        | (df["Smart_Money_Score"] <= 35)
+    )
+    c_markup = (
+        (df["Smart_Money_Score"] >= 74)
+        & (df["Volume_Ratio"] >= 1.6)
+        & (df["Pct_Change"] >= 1.2)
+        & (df["Closing_Range"] >= 0.65)
+        & (df["Close"] >= df["MA20"])
+    )
+    c_silent = (
+        (df["Smart_Money_Score"] >= 65)
+        & (df["Is_Squeeze"])
+        & (df["Diff_VWAP_Pct"] >= -2.0)
+        & (df["Diff_VWAP_Pct"] <= 3.5)
+        & (df["Volume_Ratio"] <= 1.35)
+    )
+    c_big_accum = (
+        (df["Smart_Money_Score"] >= 68)
+        & (df["Volume_Ratio"] >= 1.3)
+        & (df["Diff_VWAP_Pct"] >= -1.5)
+        & (df["Value_IDR"] >= 1_000_000_000)
+    )
+    c_foreign = (
+        (df["Smart_Money_Score"] >= 64)
+        & (df["Net_Foreign_Pct"] >= 12.0)
+        & (df["Net_Foreign_IDR"] > 0)
+    )
+
+    df["Trigger_Type"] = np.select(
+        [c_dist, c_markup, c_silent, c_big_accum, c_foreign],
+        ["DISTRIBUTION_WARNING", "MARKUP_BREAKOUT", "SILENT_ACCUMULATION", "BIG_ACCUMULATION", "FOREIGN_INFLOW"],
+        default="NEUTRAL_FLOW",
+    )
+
+    return df
+
+
+def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
+    """
+    Mesin Analisis Kuantitatif Ter-Vektorisasi Lengkap SmartFlow IDX (v4.0).
+    """
+    df = compute_quantitative_dataframe(raw_df)
     stocks_result: list[dict[str, Any]] = []
     stocks_detail_map: dict[str, dict[str, Any]] = {}
 
@@ -925,6 +1069,8 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         vol_ratio = round(float(latest["Volume_Ratio"]), 2)
         closing_range = round(float(latest["Closing_Range"]), 2)
         spread_pct = round(float(latest["Spread_Pct"]), 2)
+        atr14_val = max(1, int(round(float(latest["ATR14"]))))
+        atr_pct = round(float(latest["ATR_Pct"]), 2)
 
         top3_bsr = round(float(latest["Top3_BSR"]), 2)
         top1_bsr = round(float(latest["Top1_BSR"]), 2)
@@ -934,273 +1080,141 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         cum_5d_vol_lot = max(1, int(round(float(last5["Volume_Lot"].sum()))))
         cum_5d_bdr_pct = round((cum_5d_net_top3_lot / cum_5d_vol_lot) * 100.0, 2)
 
-        weights = np.maximum(last5["Top3_Buy_Lot"].to_numpy(dtype=float), 1.0)
-        bandar_avg_5d = int(round(float(np.average(last5["Bandar_Avg_Buy"].to_numpy(dtype=float), weights=weights))))
-        diff_bandar_avg_pct = round(((close_price - bandar_avg_5d) / max(bandar_avg_5d, 1)) * 100.0, 2)
+        vwap_5d = int(round(float(latest["VWAP_5D"])))
+        diff_vwap_pct = round(float(latest["Diff_VWAP_Pct"]), 2)
 
         ticket_size = round(float(latest["Ticket_Size"]), 1)
         ticket_ratio = round(float(latest["Ticket_Ratio"]), 2)
 
+        val_idr = int(round(float(latest["Value_IDR"])))
         net_foreign_idr = int(round(float(latest["Net_Foreign_IDR"])))
         net_foreign_pct = round(float(latest["Net_Foreign_Pct"]), 2)
         cum_5d_foreign_idr = int(round(float(last5["Net_Foreign_IDR"].sum())))
 
         ma20 = int(round(float(latest["MA20"])))
+        ma50 = int(round(float(latest["MA50"])))
         price_vs_ma20_pct = round(((close_price - ma20) / max(ma20, 1)) * 100.0, 2)
-        high_10d = int(round(float(latest["High_10D"])))
-        low_10d = int(round(float(latest["Low_10D"])))
+        is_squeeze = bool(latest["Is_Squeeze"])
 
-        # 5 Pilar Scores
-        vsa_score = 0.0
-        if vol_ratio >= 2.5:
-            vsa_score += 16.0
-        elif vol_ratio >= 1.8:
-            vsa_score += 13.0
-        elif vol_ratio >= 1.3:
-            vsa_score += 9.5
-        elif vol_ratio >= 1.0:
-            vsa_score += 6.0
-        else:
-            vsa_score += 3.0
+        pilar1_score = float(latest["Pilar1_VSA_Score"])
+        pilar2_score = float(latest["Pilar2_Trend_Score"])
+        pilar3_score = float(latest["Pilar3_Squeeze_Score"])
+        pilar4_score = float(latest["Pilar4_Liquidity_Score"])
+        pilar5_score = float(latest["Pilar5_VWAP_Score"])
+        smart_money_score = int(latest["Smart_Money_Score"])
+        trigger_type = str(latest["Trigger_Type"])
 
-        if closing_range >= 0.75 and pct_change >= 0:
-            vsa_score += 9.0
-        elif closing_range >= 0.60:
-            vsa_score += 6.5
-        elif closing_range >= 0.45:
-            vsa_score += 4.0
-        else:
-            vsa_score -= 3.0
-        vsa_score = round(min(25.0, max(0.0, vsa_score)), 1)
-
-        bandar_score = 0.0
-        if top3_bsr >= 2.0:
-            bandar_score += 18.0
-        elif top3_bsr >= 1.5:
-            bandar_score += 15.0
-        elif top3_bsr >= 1.25:
-            bandar_score += 11.5
-        elif top3_bsr >= 1.0:
-            bandar_score += 6.5
-        else:
-            bandar_score += 1.5
-
-        if cum_5d_bdr_pct >= 14.0:
-            bandar_score += 12.0
-        elif cum_5d_bdr_pct >= 8.0:
-            bandar_score += 9.5
-        elif cum_5d_bdr_pct >= 3.0:
-            bandar_score += 6.0
-        elif cum_5d_bdr_pct > 0:
-            bandar_score += 3.5
-        bandar_score = round(min(30.0, max(0.0, bandar_score)), 1)
-
-        if ticket_ratio >= 1.65:
-            ticket_score = 15.0
-        elif ticket_ratio >= 1.35:
-            ticket_score = 12.5
-        elif ticket_ratio >= 1.15:
-            ticket_score = 9.5
-        elif ticket_ratio >= 0.95:
-            ticket_score = 6.0
-        else:
-            ticket_score = 2.0
-
-        foreign_score = 6.0
-        if net_foreign_pct >= 20.0:
-            foreign_score = 15.0
-        elif net_foreign_pct >= 12.0:
-            foreign_score = 12.5
-        elif net_foreign_pct >= 5.0:
-            foreign_score = 10.0
-        elif net_foreign_pct >= 0.0:
-            foreign_score = 7.0
-        elif net_foreign_pct <= -15.0:
-            foreign_score = 1.0
-        else:
-            foreign_score = 3.5
-        if cum_5d_foreign_idr > 0 and foreign_score < 15.0:
-            foreign_score = min(15.0, foreign_score + 1.5)
-        foreign_score = round(foreign_score, 1)
-
-        structure_score = 5.0
-        if close_price >= ma20:
-            structure_score += 5.0
-        if close_price >= high_10d * 0.995 and pct_change > 1.0:
-            structure_score += 5.0
-        elif -1.5 <= diff_bandar_avg_pct <= 3.5:
-            structure_score += 4.5
-        elif pct_change < -1.5:
-            structure_score -= 3.0
-        structure_score = round(min(15.0, max(0.0, structure_score)), 1)
-
-        smart_money_score = int(
-            round(min(100.0, max(5.0, vsa_score + bandar_score + ticket_score + foreign_score + structure_score)))
-        )
-
-        # Solusi Penstabil Skor (5-Day Accumulation Memory vs High-Volume Distribution Penalty)
-        prev_max_3d_score = (
-            int(last5.iloc[:-1].tail(3)["Daily_SM_Score"].max()) if len(last5) >= 2 else smart_money_score
-        )
-        is_no_supply_pullback = (
-            len(last5) >= 2
-            and prev_max_3d_score >= 70
-            and -3.5 <= pct_change < 0.0
-            and vol_ratio <= 0.85
-            and top3_bsr >= 0.95
-            and cum_5d_bdr_pct >= 5.0
-            and -2.5 <= diff_bandar_avg_pct <= 5.0
-        )
-        is_heavy_distribution = (
-            pct_change <= -1.5
-            and vol_ratio >= 1.20
-            and (top3_bsr < 0.80 or bdr_pct <= -8.0 or cum_5d_bdr_pct <= -6.0)
-        )
-
-        if is_heavy_distribution:
-            # Guyuran bandar volume besar -> paksa skor turun ke zona bahaya (<= 25)
-            smart_money_score = min(smart_money_score, 25)
-        elif is_no_supply_pullback and smart_money_score < 68:
-            # Koreksi sehat volume sepi (No-Supply Pullback) saat barang bandar 5H masih utuh -> tahan di zona sehat
-            vsa_score = round(max(vsa_score, 12.0), 1)
-            smart_money_score = max(smart_money_score, min(68, int(round(prev_max_3d_score * 0.88))))
-
-        avg_abs_pct_3d = float(last5.tail(3)["Pct_Change"].abs().mean())
-
-        if top3_bsr < 0.80 or bdr_pct <= -8.0 or cum_5d_bdr_pct <= -6.0:
-            trigger_type = "DISTRIBUTION_WARNING"
+        if trigger_type == "DISTRIBUTION_WARNING":
             trigger_label = "Distribution Warning"
-            bandar_status = "Big Distribution" if top3_bsr < 0.65 else "Distribution"
-            vsa_pattern = "Supply Entering (Distribusi / Tekanan Jual)"
-        elif (
-            smart_money_score >= 76
-            and vol_ratio >= 1.75
-            and pct_change >= 1.6
-            and closing_range >= 0.68
-            and top3_bsr >= 1.25
-        ):
-            trigger_type = "MARKUP_BREAKOUT"
+            bandar_status = "Distribution"
+            vsa_pattern = "Supply Pressure (Tekanan Jual Melebihi Permintaan)"
+        elif trigger_type == "MARKUP_BREAKOUT":
             trigger_label = "Markup Breakout"
             bandar_status = "Big Accumulation"
-            vsa_pattern = "Demand Breakout Candle (High Volume + Close di Pucuk)"
-        elif (
-            smart_money_score >= 65
-            and avg_abs_pct_3d <= 1.25
-            and (top3_bsr >= 1.35 or cum_5d_bdr_pct >= 8.0)
-            and ticket_ratio >= 1.18
-        ):
-            trigger_type = "SILENT_ACCUMULATION"
+            vsa_pattern = "Demand Breakout Candle (High Volume + Penutupan di Pucuk)"
+        elif trigger_type == "SILENT_ACCUMULATION":
             trigger_label = "Silent Accumulation"
             bandar_status = "Silent Accumulation"
-            vsa_pattern = "Stopping Volume / Silent Absorption (Harga Dijaga Rapat)"
-        elif smart_money_score >= 68 and (top3_bsr >= 1.42 or bdr_pct >= 10.5):
-            trigger_type = "BIG_ACCUMULATION"
+            vsa_pattern = "Volatility Squeeze / Silent Absorption (Harga Dijaga di VWAP 5H)"
+        elif trigger_type == "BIG_ACCUMULATION":
             trigger_label = "Big Accumulation"
             bandar_status = "Big Accumulation"
-            vsa_pattern = "Institutional Accumulation (Dominasi Akumulasi)"
-        elif smart_money_score >= 64 and net_foreign_pct >= 13.0 and cum_5d_foreign_idr > 0:
-            trigger_type = "FOREIGN_INFLOW"
+            vsa_pattern = "Institutional Accumulation (Dominasi Aliran Dana Besar)"
+        elif trigger_type == "FOREIGN_INFLOW":
             trigger_label = "Foreign Inflow Surge"
             bandar_status = "Accumulation"
             vsa_pattern = "Sustained Foreign Inflow (Akumulasi Institusi Asing)"
         else:
             trigger_type = "NEUTRAL_FLOW"
             trigger_label = "Neutral / Retail Flow"
-            bandar_status = "Accumulation" if top3_bsr >= 1.15 else "Neutral"
+            bandar_status = "Accumulation" if smart_money_score >= 60 else "Neutral"
             vsa_pattern = "Normal Consolidation Activity"
 
+        # 5-Pillar Quantitative Checklist
         checklist = [
             {
                 "title": "Pilar 1: Volume Spike & VSA",
-                "score": f"{vsa_score}/25",
-                "status": "pass" if vsa_score >= 16 else ("warn" if vsa_score >= 10 else "fail"),
+                "score": f"{pilar1_score}/25",
+                "status": "pass" if pilar1_score >= 17 else ("warn" if pilar1_score >= 10 else "fail"),
                 "metric": f"{vol_ratio}x Vol | CR {int(closing_range * 100)}%",
-                "detail": (
-                    f"Intensitas volume {vol_ratio}x lipat baseline MA20 dengan penutupan di {int(closing_range * 100)}% range harian ({vsa_pattern})."
-                ),
+                "detail": f"Volume {vol_ratio}x baseline MA20 dengan penutupan di {int(closing_range * 100)}% range bar harian ({vsa_pattern}).",
             },
             {
-                "title": "Pilar 2: Tren & Struktur Harga vs MA20",
-                "score": f"{bandar_score}/30",
-                "status": "pass" if bandar_score >= 20 else ("warn" if bandar_score >= 12 else "fail"),
-                "metric": f"Ratio: {top3_bsr}x ({bdr_pct:+.1f}%)",
-                "detail": (
-                    f"Aksi harga menunjukkan akumulasi volume 5H sebesar {cum_5d_net_top3_lot:+,} Lot "
-                    f"({cum_5d_bdr_pct:+.1f}% dari total volume 5 hari terakhir)."
-                ),
+                "title": "Pilar 2: Tren & Struktur MA20/MA50",
+                "score": f"{pilar2_score}/20",
+                "status": "pass" if pilar2_score >= 15 else ("warn" if pilar2_score >= 10 else "fail"),
+                "metric": f"{'Above' if close_price >= ma20 else 'Below'} MA20 | MA50: {'Bull' if ma20 >= ma50 else 'Bear'}",
+                "detail": f"Harga Rp {close_price:,} vs MA20 Rp {ma20:,} ({price_vs_ma20_pct:+.1f}%), struktur tren {'Uptrend' if ma20 >= ma50 else 'Konsolidasi/Downtrend'}.",
             },
             {
-                "title": "Pilar 3: Kompresi & Kualitas Order Flow",
-                "score": f"{ticket_score}/15",
-                "status": "pass" if ticket_score >= 11 else ("warn" if ticket_score >= 7 else "fail"),
-                "metric": f"{ticket_size:.1f} Lot/Tx ({ticket_ratio}x)",
-                "detail": (
-                    f"Rata-rata {ticket_size:.1f} lot per transaksi ({ticket_ratio}x baseline MA20), "
-                    + ("menunjukkan dominasi eksekusi blok order besar." if ticket_ratio >= 1.25 else "didominasi frekuensi transaksi reguler.")
-                ),
+                "title": "Pilar 3: Kompresi Volatilitas (Squeeze)",
+                "score": f"{pilar3_score}/15",
+                "status": "pass" if pilar3_score >= 12 else ("warn" if pilar3_score >= 8 else "fail"),
+                "metric": f"{'Squeeze On' if is_squeeze else 'Normal'} | ATR14: Rp {atr14_val:,}",
+                "detail": f"Volatilitas ATR(14) Rp {atr14_val:,} ({atr_pct:.1f}% dari harga). " + ("Terdeteksi kompresi volatilitas ketat sebelum potensi ledakan ekspansi harga." if is_squeeze else "Volatilitas dalam rentang normal harian."),
             },
             {
-                "title": "Pilar 4: Arus Nilai Transaksi & Likuiditas",
-                "score": f"{foreign_score}/15",
-                "status": "pass" if foreign_score >= 11 else ("warn" if foreign_score >= 7 else "fail"),
-                "metric": f"Net Flow: {net_foreign_pct:+.1f}%",
-                "detail": (
-                    f"Arus perputaran dana harian Rp {net_foreign_idr / 1e9:+.2f} Miliar (Total 5H: Rp {cum_5d_foreign_idr / 1e9:+.2f} Miliar)."
-                ),
+                "title": "Pilar 4: Likuiditas & Turnover Riil",
+                "score": f"{pilar4_score}/15",
+                "status": "pass" if pilar4_score >= 12 else ("warn" if pilar4_score >= 8 else "fail"),
+                "metric": f"Rp {val_idr / 1e9:.2f} Miliar",
+                "detail": f"Nilai transaksi harian Rp {val_idr / 1e9:.2f} Miliar ({'Sangat Likuid' if val_idr >= 1e10 else 'Likuiditas Memadai' if val_idr >= 1e9 else 'Likuiditas Rendah'}).",
             },
             {
-                "title": "Pilar 5: Posisi Harga vs VWAP 5 Hari & Baseline",
-                "score": f"{structure_score}/15",
-                "status": "pass" if structure_score >= 10 else ("warn" if structure_score >= 6 else "fail"),
-                "metric": f"VWAP 5H Rp {bandar_avg_5d:,} ({diff_bandar_avg_pct:+.1f}%)",
-                "detail": (
-                    f"Harga saat ini Rp {close_price:,} berjarak {diff_bandar_avg_pct:+.1f}% dari VWAP 5 hari bursa terakhir (Rp {bandar_avg_5d:,})."
-                ),
+                "title": "Pilar 5: Posisi Harga vs VWAP 5 Hari",
+                "score": f"{pilar5_score}/25",
+                "status": "pass" if pilar5_score >= 18 else ("warn" if pilar5_score >= 10 else "fail"),
+                "metric": f"VWAP 5H Rp {vwap_5d:,} ({diff_vwap_pct:+.1f}%)",
+                "detail": f"Harga saat ini Rp {close_price:,} berjarak {diff_vwap_pct:+.1f}% dari VWAP 5 hari bursa terakhir (Rp {vwap_5d:,}).",
             },
         ]
 
+        # Trading Plan Berbasis ATR(14) & Risk/Reward 1:2 & 1:3
+        entry_low, entry_high = _tight_entry_zone(close_price, 0.01)
+        sl_distance = max(int(round(entry_low * 0.025)), min(int(round(entry_low * 0.075)), int(round(1.75 * atr14_val))))
+        stop_loss = _round_idx_tick(entry_low - sl_distance)
+        risk_idr = max(1, entry_high - stop_loss)
+        risk_pct = round((risk_idr / max(entry_high, 1)) * 100.0, 2)
+
+        tp1 = _round_idx_tick(entry_high + 2.0 * risk_idr)
+        tp2 = _round_idx_tick(entry_high + 3.0 * risk_idr)
+        tp1_pct = round(((tp1 - entry_high) / max(entry_high, 1)) * 100.0, 2)
+        tp2_pct = round(((tp2 - entry_high) / max(entry_high, 1)) * 100.0, 2)
+        rr_ratio = round(tp2_pct / max(risk_pct, 0.1), 1)
+
         if trigger_type == "DISTRIBUTION_WARNING":
             action_bias = "AVOID / SELL ON STRENGTH"
-            entry_low, entry_high = _tight_entry_zone(low_10d * 0.98, 0.01)
-            stop_loss = _round_idx_tick(entry_low * 0.96)
-            tp1 = _round_idx_tick(close_price * 1.02)
-            tp2 = _round_idx_tick(close_price * 1.04)
             rationale = (
-                f"Terdeteksi tekanan jual tinggi dengan penutupan di paruh bawah candle (CR {int(closing_range * 100)}%). "
+                f"Tekanan jual tinggi dengan penutupan di paruh bawah candle (CR {int(closing_range * 100)}%). "
                 "Hindari entry terburu-buru sampai terbentuk sinyal pembalikan (Stopping Volume)."
             )
         elif trigger_type == "MARKUP_BREAKOUT":
             action_bias = "BUY ON BREAKOUT / RETEST"
-            entry_low, entry_high = _tight_entry_zone(close_price, 0.01)
-            stop_loss = _round_idx_tick(min(entry_low * 0.96, ma20 * 0.985))
-            tp1 = _round_idx_tick(close_price * 1.065)
-            tp2 = _round_idx_tick(close_price * 1.135)
             rationale = (
-                f"Harga menembus resisten dengan lonjakan volume {vol_ratio}x lipat baseline. "
-                f"Area ideal entry di rentang Rp {entry_low:,} - Rp {entry_high:,}."
+                f"Breakout di atas resisten dengan lonjakan volume {vol_ratio}x baseline. "
+                f"Stop Loss berbasis ATR(14) Rp {atr14_val:,} di level Rp {stop_loss:,} (-{risk_pct}%)."
             )
-        elif trigger_type in ("SILENT_ACCUMULATION", "BIG_ACCUMULATION"):
+        elif trigger_type == "SILENT_ACCUMULATION":
             action_bias = "BUY NEAR VWAP 5H (SWING)"
-            entry_low, entry_high = _tight_entry_zone(close_price, 0.01)
-            stop_loss = _round_idx_tick(min(low_10d * 0.98, entry_low * 0.962))
-            tp1 = _round_idx_tick(close_price * 1.06)
-            tp2 = _round_idx_tick(close_price * 1.12)
             rationale = (
-                f"Volume terakumulasi dengan titik keseimbangan harga (VWAP 5H) di sekitar Rp {bandar_avg_5d:,}. "
-                "Cicil beli di dekat area VWAP sebelum terjadi ekspansi harga."
+                f"Terdeteksi kompresi volatilitas (Squeeze) dengan harga dijaga ketat di area VWAP 5H (Rp {vwap_5d:,}). "
+                f"Cicil beli dengan batas risiko ATR(14) Rp {atr14_val:,}."
+            )
+        elif trigger_type == "BIG_ACCUMULATION":
+            action_bias = "BUY ON ACCUMULATION"
+            rationale = (
+                f"Akumulasi volume likuiditas besar (Turnover Rp {val_idr / 1e9:.2f} M) di atas VWAP 5H. "
+                f"Target terukur 2R-3R di Rp {tp1:,} - Rp {tp2:,}."
+            )
+        elif trigger_type == "FOREIGN_INFLOW":
+            action_bias = "FOLLOW FOREIGN INFLOW"
+            rationale = (
+                f"Arus perputaran dana asing positif Rp {net_foreign_idr / 1e9:+.2f} Miliar. "
+                f"Manfaatkan momentum akumulasi dengan Stop Loss Rp {stop_loss:,}."
             )
         else:
             action_bias = "BUY ON SUPPORT / WATCHLIST"
-            entry_low, entry_high = _tight_entry_zone(close_price, 0.01)
-            stop_loss = _round_idx_tick(entry_low * 0.96)
-            tp1 = _round_idx_tick(close_price * 1.05)
-            tp2 = _round_idx_tick(close_price * 1.09)
-            rationale = "Aliran volume masih moderat. Pantau konfirmasi lonjakan volume di atas 1.8x baseline."
-
-        risk_pct = max(1.0, round(((entry_high - stop_loss) / max(entry_high, 1)) * 100.0, 2))
-        tp1_pct = round(((tp1 - entry_high) / max(entry_high, 1)) * 100.0, 2)
-        tp2_pct = round(((tp2 - entry_high) / max(entry_high, 1)) * 100.0, 2)
-        rr_ratio = round(max(tp2_pct, 1.0) / risk_pct, 2)
+            rationale = f"Struktur konsolidasi normal. Pantau konfirmasi lonjakan volume di atas 1.5x baseline."
 
         trading_plan = {
             "action_bias": action_bias,
@@ -1213,8 +1227,10 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             "target_2": tp2,
             "target_2_pct": tp2_pct,
             "risk_reward": f"1 : {rr_ratio}",
-            "bandar_avg_buy": bandar_avg_5d,
-            "diff_bandar_avg_pct": diff_bandar_avg_pct,
+            "bandar_avg_buy": vwap_5d,
+            "diff_bandar_avg_pct": diff_vwap_pct,
+            "atr14": atr14_val,
+            "atr_pct": atr_pct,
             "rationale": rationale,
         }
 
@@ -1259,20 +1275,24 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             "cum_5d_bdr_pct": cum_5d_bdr_pct,
             "top_buyers": str(latest["Top_Buyer_Brokers"]),
             "top_sellers": str(latest["Top_Seller_Brokers"]),
-            "bandar_avg_buy": bandar_avg_5d,
-            "diff_bandar_avg_pct": diff_bandar_avg_pct,
+            "bandar_avg_buy": vwap_5d,
+            "diff_bandar_avg_pct": diff_vwap_pct,
             "ticket_size": ticket_size,
             "ticket_ratio": ticket_ratio,
             "net_foreign_b_idr": round(net_foreign_idr / 1e9, 2),
             "net_foreign_pct": net_foreign_pct,
             "cum_5d_foreign_b_idr": round(cum_5d_foreign_idr / 1e9, 2),
             "ma20": ma20,
+            "ma50": ma50,
+            "atr14": atr14_val,
+            "atr_pct": atr_pct,
+            "is_squeeze": is_squeeze,
             "price_vs_ma20_pct": price_vs_ma20_pct,
-            "vsa_score": vsa_score,
-            "bandar_score": bandar_score,
-            "ticket_score": ticket_score,
-            "foreign_score": foreign_score,
-            "structure_score": structure_score,
+            "vsa_score": pilar1_score,
+            "bandar_score": pilar2_score,
+            "ticket_score": pilar3_score,
+            "foreign_score": pilar4_score,
+            "structure_score": pilar5_score,
             "smart_money_score": smart_money_score,
             "trigger_type": trigger_type,
             "trigger_label": trigger_label,
@@ -1300,201 +1320,65 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         float(np.mean([s["smart_money_score"] for s in stocks_result])) if stocks_result else 0.0, 1
     )
 
-    # Hitung data historis real (Hari Ini vs Kemarin & Tren 10 Hari Bursa) secara ter-vektorisasi
-    trend_avg_score: list[float] = [avg_score_now]
-    trend_markup: list[int] = [markup_now]
-    trend_accum: list[int] = [accum_now]
-    trend_dist: list[int] = [dist_now]
-    prev_total_emiten = total_emiten_now
-    prev_avg_score = avg_score_now
-    prev_markup = markup_now
-    prev_accum = accum_now
-    prev_dist = dist_now
+    # Historical Daily Metrics (Single Source of Truth across dates)
+    unique_dates = sorted(df["Date"].unique())
+    last_10_dates = unique_dates[-10:] if len(unique_dates) >= 10 else unique_dates
 
-    if is_multi_day and len(df) > 0:
-        close_p = np.round(df["Close"]).astype(int)
-        pct_c = df["Pct_Change"].round(2)
-        vol_r = df["Volume_Ratio"].round(2)
-        cr = df["Closing_Range"].round(2)
-        t3_bsr = df["Top3_BSR"].round(2)
-        bdr_p = df["Broker_Dominance_Pct"].round(2)
-        c5_net = (
-            df.groupby("Ticker")["Net_Top3_Lot"]
-            .transform(lambda s: s.rolling(5, min_periods=1).sum())
-            .round()
-            .astype(int)
-        )
-        c5_vol = np.maximum(
-            1,
-            df.groupby("Ticker")["Volume_Lot"]
-            .transform(lambda s: s.rolling(5, min_periods=1).sum())
-            .round()
-            .astype(int),
-        )
-        c5_bdr_p = ((c5_net / c5_vol) * 100.0).round(2)
+    trend_avg_score: list[float] = []
+    trend_markup: list[int] = []
+    trend_accum: list[int] = []
+    trend_dist: list[int] = []
 
-        w_arr = np.maximum(df["Top3_Buy_Lot"].astype(float), 1.0)
-        wb_arr = w_arr * df["Bandar_Avg_Buy"].astype(float)
-        df["_w_tmp"] = w_arr
-        df["_wb_tmp"] = wb_arr
-        b_avg_5d = np.round(
-            df.groupby("Ticker")["_wb_tmp"].transform(lambda s: s.rolling(5, min_periods=1).sum())
-            / df.groupby("Ticker")["_w_tmp"].transform(lambda s: s.rolling(5, min_periods=1).sum())
-        ).astype(int)
-        diff_b_pct = (((close_p - b_avg_5d) / np.maximum(b_avg_5d, 1)) * 100.0).round(2)
+    for d_str in last_10_dates:
+        sub = df[df["Date"] == d_str]
+        trend_avg_score.append(round(float(sub["Smart_Money_Score"].mean()), 1) if not sub.empty else 0.0)
+        trend_markup.append(int((sub["Trigger_Type"] == "MARKUP_BREAKOUT").sum()))
+        trend_accum.append(int(sub["Trigger_Type"].isin(["BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW"]).sum()))
+        trend_dist.append(int((sub["Trigger_Type"] == "DISTRIBUTION_WARNING").sum()))
 
-        t_ratio = df["Ticket_Ratio"].round(2)
-        nf_pct = df["Net_Foreign_Pct"].round(2)
-        c5_for = (
-            df.groupby("Ticker")["Net_Foreign_IDR"]
-            .transform(lambda s: s.rolling(5, min_periods=1).sum())
-            .round()
-            .astype(int)
-        )
-        ma20_i = np.round(df["MA20"]).astype(int)
-        h10_i = np.round(df["High_10D"]).astype(int)
+    if not trend_avg_score:
+        trend_avg_score = [avg_score_now]
+        trend_markup = [markup_now]
+        trend_accum = [accum_now]
+        trend_dist = [dist_now]
 
-        vsa_s = np.select(
-            [vol_r >= 2.5, vol_r >= 1.8, vol_r >= 1.3, vol_r >= 1.0],
-            [16.0, 13.0, 9.5, 6.0],
-            default=3.0,
-        )
-        vsa_s += np.select(
-            [(cr >= 0.75) & (pct_c >= 0), cr >= 0.60, cr >= 0.45],
-            [9.0, 6.5, 4.0],
-            default=-3.0,
-        )
-        vsa_s = np.clip(vsa_s, 0.0, 25.0).round(1)
-
-        bdr_s = np.select(
-            [t3_bsr >= 2.0, t3_bsr >= 1.5, t3_bsr >= 1.25, t3_bsr >= 1.0],
-            [18.0, 15.0, 11.5, 6.5],
-            default=1.5,
-        )
-        bdr_s += np.select(
-            [c5_bdr_p >= 14.0, c5_bdr_p >= 8.0, c5_bdr_p >= 3.0, c5_bdr_p > 0],
-            [12.0, 9.5, 6.0, 3.5],
-            default=0.0,
-        )
-        bdr_s = np.clip(bdr_s, 0.0, 30.0).round(1)
-
-        tkt_s = np.select(
-            [t_ratio >= 1.65, t_ratio >= 1.35, t_ratio >= 1.15, t_ratio >= 0.95],
-            [15.0, 12.5, 9.5, 6.0],
-            default=2.0,
-        )
-
-        for_s = np.select(
-            [nf_pct >= 20.0, nf_pct >= 12.0, nf_pct >= 5.0, nf_pct >= 0.0, nf_pct <= -15.0],
-            [15.0, 12.5, 10.0, 7.0, 1.0],
-            default=3.5,
-        )
-        for_s = np.where((c5_for > 0) & (for_s < 15.0), np.minimum(15.0, for_s + 1.5), for_s).round(1)
-
-        str_s = 5.0 + np.where(close_p >= ma20_i, 5.0, 0.0)
-        str_s += np.select(
-            [
-                (close_p >= h10_i * 0.995) & (pct_c > 1.0),
-                (diff_b_pct >= -1.5) & (diff_b_pct <= 3.5),
-                pct_c < -1.5,
-            ],
-            [5.0, 4.5, -3.0],
-            default=0.0,
-        )
-        str_s = np.clip(str_s, 0.0, 15.0).round(1)
-
-        sm_s = np.clip(np.round(vsa_s + bdr_s + tkt_s + for_s + str_s), 5, 100).astype(int)
-        row_num = df.groupby("Ticker").cumcount() + 1
-        prev_max_3d = (
-            df.groupby("Ticker")["Daily_SM_Score"]
-            .transform(lambda s: s.shift(1).rolling(3, min_periods=1).max())
-            .fillna(pd.Series(sm_s, index=df.index))
-            .astype(int)
-        )
-        is_nsp = (
-            (row_num >= 2)
-            & (prev_max_3d >= 70)
-            & (pct_c >= -3.5)
-            & (pct_c < 0.0)
-            & (vol_r <= 0.85)
-            & (t3_bsr >= 0.95)
-            & (c5_bdr_p >= 5.0)
-            & (diff_b_pct >= -2.5)
-            & (diff_b_pct <= 5.0)
-        )
-        is_hd = (pct_c <= -1.5) & (vol_r >= 1.20) & ((t3_bsr < 0.80) | (bdr_p <= -8.0) | (c5_bdr_p <= -6.0))
-        sm_s = np.where(
-            is_hd,
-            np.minimum(sm_s, 25),
-            np.where(
-                is_nsp & (sm_s < 68),
-                np.maximum(sm_s, np.minimum(68, np.round(prev_max_3d * 0.88).astype(int))),
-                sm_s,
-            ),
-        )
-        avg_abs_3d = df.groupby("Ticker")["Pct_Change"].transform(lambda s: s.abs().rolling(3, min_periods=1).mean())
-
-        trig_vec = np.select(
-            [
-                (t3_bsr < 0.80) | (bdr_p <= -8.0) | (c5_bdr_p <= -6.0),
-                (sm_s >= 76) & (vol_r >= 1.75) & (pct_c >= 1.6) & (cr >= 0.68) & (t3_bsr >= 1.25),
-                (sm_s >= 65) & (avg_abs_3d <= 1.25) & ((t3_bsr >= 1.35) | (c5_bdr_p >= 8.0)) & (t_ratio >= 1.18),
-                (sm_s >= 68) & ((t3_bsr >= 1.42) | (bdr_p >= 10.5)),
-                (sm_s >= 64) & (nf_pct >= 13.0) & (c5_for > 0),
-            ],
-            [
-                "DISTRIBUTION_WARNING",
-                "MARKUP_BREAKOUT",
-                "SILENT_ACCUMULATION",
-                "BIG_ACCUMULATION",
-                "FOREIGN_INFLOW",
-            ],
-            default="NEUTRAL_FLOW",
-        )
-
-        df["_sm_s_hist"] = sm_s
-        df["_trig_hist"] = trig_vec
-        df["_rev_idx"] = df.groupby("Ticker").cumcount(ascending=False)
-
-        max_rev = min(9, int(df["_rev_idx"].max()))
-        t_avg_list: list[float] = []
-        t_mkp_list: list[int] = []
-        t_acc_list: list[int] = []
-        t_dst_list: list[int] = []
-
-        for r_idx in range(max_rev, 0, -1):
-            sub = df[df["_rev_idx"] == r_idx]
-            if len(sub) == 0:
-                continue
-            r_avg = round(float(sub["_sm_s_hist"].mean()), 1)
-            r_mkp = int((sub["_trig_hist"] == "MARKUP_BREAKOUT").sum())
-            r_acc = int(sub["_trig_hist"].isin(["BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW"]).sum())
-            r_dst = int((sub["_trig_hist"] == "DISTRIBUTION_WARNING").sum())
-            t_avg_list.append(r_avg)
-            t_mkp_list.append(r_mkp)
-            t_acc_list.append(r_acc)
-            t_dst_list.append(r_dst)
-            if r_idx == 1:
-                prev_total_emiten = int(len(sub))
-                prev_avg_score = r_avg
-                prev_markup = r_mkp
-                prev_accum = r_acc
-                prev_dist = r_dst
-
-        t_avg_list.append(avg_score_now)
-        t_mkp_list.append(markup_now)
-        t_acc_list.append(accum_now)
-        t_dst_list.append(dist_now)
-
-        trend_avg_score = t_avg_list
-        trend_markup = t_mkp_list
-        trend_accum = t_acc_list
-        trend_dist = t_dst_list
+    if len(last_10_dates) >= 2:
+        prev_date = last_10_dates[-2]
+        prev_sub = df[df["Date"] == prev_date]
+        prev_total_emiten = int(len(prev_sub))
+        prev_avg_score = round(float(prev_sub["Smart_Money_Score"].mean()), 1) if not prev_sub.empty else avg_score_now
+        prev_markup = int((prev_sub["Trigger_Type"] == "MARKUP_BREAKOUT").sum())
+        prev_accum = int(prev_sub["Trigger_Type"].isin(["BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW"]).sum())
+        prev_dist = int((prev_sub["Trigger_Type"] == "DISTRIBUTION_WARNING").sum())
+    else:
+        prev_total_emiten = total_emiten_now
+        prev_avg_score = avg_score_now
+        prev_markup = markup_now
+        prev_accum = accum_now
+        prev_dist = dist_now
 
     def _calc_pct(curr: float, prev: float) -> float:
         if prev > 0:
             return round(((curr - prev) / prev) * 100.0, 1)
         return 100.0 if curr > 0 else 0.0
+
+    # Market Regime Analysis
+    latest_dt = max((s["date"] for s in stocks_result), default="2026-10-08")
+    latest_day_df = df[df["Date"] == latest_dt]
+    if not latest_day_df.empty:
+        breadth_ma50 = float((latest_day_df["Close"] >= latest_day_df["MA50"]).mean() * 100.0)
+    else:
+        breadth_ma50 = 50.0
+
+    is_regime_bullish = breadth_ma50 >= 48.0
+    market_regime = {
+        "status": "BULLISH / RISK-ON" if is_regime_bullish else "BEARISH / RISK-OFF",
+        "breadth_ma50_pct": round(breadth_ma50, 1),
+        "regime_note": (
+            f"Market Breadth: {breadth_ma50:.1f}% emiten di atas MA50. "
+            + ("Kondisi bursa kondusif untuk strategi Breakout & Trend Following." if is_regime_bullish else "Bursa konsolidasi/tertekan. Prioritaskan Silent Accumulation dekat VWAP & kurangi risiko per trade.")
+        ),
+    }
 
     kpis = {
         "total_emiten": total_emiten_now,
@@ -1502,8 +1386,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         "accum_triggers": accum_now,
         "distribution_warnings": dist_now,
         "avg_smart_money_score": avg_score_now,
-        "latest_date": max((s["date"] for s in stocks_result), default="2026-10-08"),
-        # Data perbandingan real Hari Ini vs Kemarin & Tren Sparkline 10 Hari
+        "latest_date": latest_dt,
         "prev_total_emiten": prev_total_emiten,
         "prev_avg_smart_money_score": prev_avg_score,
         "prev_markup_triggers": prev_markup,
@@ -1521,6 +1404,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         "trend_markup": trend_markup,
         "trend_accum": trend_accum,
         "trend_dist": trend_dist,
+        "market_regime": market_regime,
     }
 
     return {

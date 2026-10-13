@@ -247,6 +247,15 @@ function updateKPICards(kpis, currentTrigger) {
   const elDist = document.getElementById('kpiDistCount');
   if (elDist) elDist.textContent = kpis.distribution_warnings;
 
+  if (kpis.market_regime) {
+    const autoTimerEl = document.getElementById('marketAutoTimer');
+    if (autoTimerEl) {
+      const isBull = kpis.market_regime.status.includes('BULLISH');
+      const badgeCls = isBull ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold';
+      autoTimerEl.innerHTML = `<span class="${badgeCls}" title="${kpis.market_regime.regime_note}">Regime: ${kpis.market_regime.status.split(' / ')[0]} (${kpis.market_regime.breadth_ma50_pct}% > MA50)</span>`;
+    }
+  }
+
   // Update real vs kemarin badges & 10-day sparklines
   const c1Hex = renderKpiDeltaBadge(
     'kpiAllDelta',

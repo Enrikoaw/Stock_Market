@@ -20,7 +20,7 @@ import yfinance as yf
 
 
 def _download_batch_safe(yf_symbols: list[str], period: str) -> pd.DataFrame | None:
-    """Mengunduh 1 batch secara aman dengan retry otomatis jika error sesaat."""
+    """Mengunduh 1 batch secara aman dengan retry otomatis dan fallback split mini-batch jika error sesaat (Bug 4 Fix)."""
     for attempt in range(2):
         try:
             raw = yf.download(
@@ -36,7 +36,35 @@ def _download_batch_safe(yf_symbols: list[str], period: str) -> pd.DataFrame | N
                 return raw
         except Exception:
             if attempt == 0:
-                time.sleep(0.6)
+                time.sleep(0.8)
+
+    # Bug 4 Fix: Jika batch gagal (misal 120 ticker timeout), jangan abaikan diam-diam.
+    # Retry dengan memecah menjadi mini-batch (25 ticker per mini-batch)
+    if len(yf_symbols) > 25:
+        mini_dfs = []
+        chunk_size = 25
+        for i in range(0, len(yf_symbols), chunk_size):
+            chunk = yf_symbols[i : i + chunk_size]
+            try:
+                sub_raw = yf.download(
+                    chunk,
+                    period=period,
+                    interval="1d",
+                    group_by="ticker",
+                    threads=True,
+                    progress=False,
+                    auto_adjust=False,
+                )
+                if sub_raw is not None and not sub_raw.empty:
+                    mini_dfs.append(sub_raw)
+            except Exception:
+                pass
+            time.sleep(0.2)
+        if mini_dfs:
+            try:
+                return pd.concat(mini_dfs, axis=1)
+            except Exception:
+                pass
     return None
 
 
@@ -66,7 +94,7 @@ def _process_ticker_sub(sub: pd.DataFrame, t_code: str, sector_map: dict[str, st
             return None
 
         prev_c = np.roll(close_s.astype(float), 1)
-        prev_c[0] = float(open_s[0])
+        prev_c[0] = float(close_s[0]) if len(close_s) > 1 else float(open_s[0])
 
         typ_p = (high_s.astype(float) + low_s.astype(float) + close_s.astype(float)) / 3.0
         val_idr = np.round(vol_lot * 100.0 * typ_p).astype(np.int64)
@@ -202,7 +230,7 @@ def fetch_real_idx_market_data(
     )
 
     if period == "auto":
-        download_period = "5d" if (has_existing_cache and not force_full) else "15d"
+        download_period = "5d" if (has_existing_cache and not force_full) else "60d"
     else:
         download_period = period
 
@@ -265,17 +293,30 @@ def fetch_real_idx_market_data(
             old_cache = pd.read_csv(output_csv_path)
             result_df = pd.concat([old_cache, new_batch_df], ignore_index=True)
             result_df = result_df.drop_duplicates(subset=["Ticker", "Date"], keep="last")
-            # Batasi riwayat maksimum 20 candle per ticker agar RAM & disk tetap ringan
-            result_df = result_df.groupby("Ticker", group_keys=False).tail(20)
+            # Batasi riwayat maksimum 90 candle per ticker agar stabil untuk MA20, MA50 & ATR14
+            result_df = result_df.groupby("Ticker", group_keys=False).tail(90)
             result_df = result_df.sort_values(by=["Ticker", "Date"]).reset_index(drop=True)
             del old_cache
         except Exception:
             result_df = new_batch_df
     else:
-        result_df = new_batch_df.groupby("Ticker", group_keys=False).tail(20).reset_index(drop=True)
+        result_df = new_batch_df.groupby("Ticker", group_keys=False).tail(90).reset_index(drop=True)
 
     del new_batch_df
     gc.collect()
+
+    # Rekalkulasi Prev_Close dan VWAP 5H pada rangkaian historis gabungan untuk akurasi sempurna
+    if not result_df.empty:
+        result_df = result_df.sort_values(by=["Ticker", "Date"]).reset_index(drop=True)
+        shifted_c = result_df.groupby("Ticker")["Close"].shift(1)
+        result_df["Prev_Close"] = shifted_c.fillna(result_df["Open"]).round().astype(np.int64)
+
+        typ_p = (result_df["High"] + result_df["Low"] + result_df["Close"]) / 3.0
+        pv_val = typ_p * np.maximum(result_df["Volume_Lot"], 1)
+        v_val = np.maximum(result_df["Volume_Lot"], 1)
+        pv_roll = result_df.assign(_pv=pv_val).groupby("Ticker")["_pv"].transform(lambda s: s.rolling(5, min_periods=1).sum())
+        v_roll = result_df.assign(_v=v_val).groupby("Ticker")["_v"].transform(lambda s: s.rolling(5, min_periods=1).sum())
+        result_df["Bandar_Avg_Buy"] = (pv_roll / np.maximum(v_roll, 1.0)).round().astype(np.int64)
 
     if output_csv_path is not None:
         output_csv_path.parent.mkdir(parents=True, exist_ok=True)
