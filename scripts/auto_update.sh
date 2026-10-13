@@ -21,8 +21,8 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     # Check if requirements.txt changed
     REQ_CHANGED=$(git diff --name-only "$LOCAL" "$REMOTE" | grep "requirements.txt" || true)
     
-    # Pull latest code
-    git pull origin main
+    # Reset to latest code cleanly
+    git reset --hard origin/main
     
     # If requirements changed, install new packages
     if [ -n "$REQ_CHANGED" ]; then
