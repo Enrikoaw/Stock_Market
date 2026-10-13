@@ -96,6 +96,17 @@ function switchMainTab(tabName) {
   if (btnExplore) btnExplore.className = tabName === 'explore' ? activeBtnCls : inactiveBtnCls;
   if (btnWatchlist) btnWatchlist.className = tabName === 'watchlist' ? activeBtnCls : inactiveBtnCls;
 
+  // Sinkronisasi tombol Navigasi Mobile (Bottom Bar)
+  const mobToday = document.getElementById('mobileNavToday');
+  const mobExplore = document.getElementById('mobileNavExplore');
+  const mobWatchlist = document.getElementById('mobileNavWatchlist');
+  const mobActiveCls = "mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-emerald-400 bg-emerald-500/15 border border-emerald-400/30 transition active:scale-95";
+  const mobInactiveCls = "mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-slate-400 hover:text-white transition active:scale-95";
+
+  if (mobToday) mobToday.className = tabName === 'today' ? mobActiveCls : mobInactiveCls;
+  if (mobExplore) mobExplore.className = tabName === 'explore' ? mobActiveCls : mobInactiveCls;
+  if (mobWatchlist) mobWatchlist.className = tabName === 'watchlist' ? mobActiveCls : mobInactiveCls;
+
   if (tabName === 'today') {
     renderTodayCandidates(currentStocks);
   } else if (tabName === 'watchlist') {
@@ -1054,6 +1065,14 @@ async function selectStock(ticker, scrollToTradingPlan = false) {
           }, 2000);
         }
       }, 100);
+    } else if (window.innerWidth < 1280) {
+      // Pada layar mobile/tablet, otomatis gulir halus ke Inspector agar detail langsung terlihat
+      setTimeout(() => {
+        const inspector = document.getElementById('inspectorPanel');
+        if (inspector) {
+          inspector.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 120);
     }
   } catch (err) {
     showToast(err.message, 'error');

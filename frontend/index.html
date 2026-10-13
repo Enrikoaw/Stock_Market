@@ -52,7 +52,7 @@
     }
   </script>
 </head>
-<body class="min-h-screen flex flex-col relative selection:bg-emerald-500/30 selection:text-emerald-200 pb-12">
+<body class="min-h-screen flex flex-col relative selection:bg-emerald-500/30 selection:text-emerald-200 pb-20 md:pb-12">
 
   <!-- AMBIENT GLOW MESH BACKGROUND (DARK GLASSMORPHISM ORNAMENTS) -->
   <div class="ambient-bg-orbs fixed inset-0 -z-10 overflow-hidden pointer-events-none">
@@ -69,8 +69,8 @@
       <!-- Brand Logo & 3 Main Navigation Tabs -->
       <div class="flex items-center gap-3 sm:gap-6">
         <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.35)] border border-white/20 shrink-0">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.35)] border border-white/20 shrink-0">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M3 17l6-6 4 4 8-8M14 7h7v7" />
             </svg>
           </div>
@@ -87,8 +87,8 @@
           </div>
         </div>
 
-        <!-- 3 Top Navigation Tabs: Hari Ini · Jelajah · Pantauan -->
-        <nav class="flex items-center bg-slate-900/60 p-1 rounded-xl border border-white/[0.08] shadow-inner" aria-label="Navigasi Utama">
+        <!-- 3 Top Navigation Tabs (Desktop only; on mobile these are in bottom nav bar) -->
+        <nav class="hidden md:flex items-center bg-slate-900/60 p-1 rounded-xl border border-white/[0.08] shadow-inner" aria-label="Navigasi Utama">
           <button
             id="tabNavToday"
             onclick="switchMainTab('today')"
@@ -117,14 +117,14 @@
       </div>
 
       <!-- Right Header Actions: Status Bursa, Saklar Mode, Alat/Pengaturan, Tema -->
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5 sm:gap-2">
         <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" multiple class="hidden" />
 
         <!-- Status Bursa Jelas & Sadar Jeda/Libur -->
         <div id="marketLivePill" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900/60 border border-white/[0.08] text-xs shadow-inner">
           <span id="marketStatusDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span id="marketStatusText" class="font-bold text-emerald-300 text-[11px] sm:text-xs">BURSA LIVE</span>
-          <span id="marketAutoTimer" class="font-mono text-[10px] sm:text-[11px] text-slate-300 border-l border-white/10 pl-2">Auto-Sync</span>
+          <span id="marketAutoTimer" class="font-mono text-[10px] sm:text-[11px] text-slate-300 border-l border-white/10 pl-2 hidden xs:inline sm:inline">Auto-Sync</span>
         </div>
 
         <!-- Saklar Mode Pemula / Mode Mahir -->
@@ -138,11 +138,11 @@
           <span id="modeLabel" class="hidden sm:inline">Mode Pemula</span>
         </button>
 
-        <!-- Menu Pengaturan & Alat Teknis (Gear Icon) -->
+        <!-- Menu Pengaturan & Alat Teknis (Gear Icon - Desktop Only) -->
         <button
           id="btnOpenSettingsModal"
           onclick="openSettingsModal()"
-          class="p-2 rounded-xl bg-slate-900/60 hover:bg-white/[0.08] text-slate-200 hover:text-white border border-white/[0.08] text-xs font-semibold transition active:scale-95"
+          class="hidden md:inline-flex p-2 rounded-xl bg-slate-900/60 hover:bg-white/[0.08] text-slate-200 hover:text-white border border-white/[0.08] text-xs font-semibold transition active:scale-95"
           title="Pengaturan &amp; Alat Teknis (Sync Kilat, Full IDX, Telegram, Unggah File, Panduan Rumus)"
           aria-label="Pengaturan dan Alat"
         >
@@ -515,6 +515,19 @@
         <!-- KANAN: DETAIL INSPECTOR PANEL (4 Kolom di XL) -->
         <div id="inspectorPanel" class="xl:col-span-4 glass-panel rounded-2xl p-4 sm:p-5 space-y-4">
           
+          <!-- Tombol Pintas Mobile: Kembali ke Tabel Saham -->
+          <div class="xl:hidden flex items-center justify-between pb-2.5 mb-1 border-b border-white/[0.08]">
+            <button
+              type="button"
+              onclick="document.querySelector('#sectionExplore table').scrollIntoView({ behavior: 'smooth', block: 'start' })"
+              class="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-emerald-500/10 border border-emerald-400/25 active:scale-95 transition"
+            >
+              <span>↑</span>
+              <span>Kembali ke Tabel Saham</span>
+            </button>
+            <span class="text-[10px] text-slate-400 font-medium">Detail Saham</span>
+          </div>
+
           <!-- Header Saham Terpilih -->
           <div class="flex items-start justify-between border-b border-white/[0.08] pb-3.5">
             <div class="flex items-center gap-3">
@@ -1347,7 +1360,47 @@
     </div>
   </div>
 
+  <!-- MODERN MOBILE BOTTOM NAVIGATION BAR (md:hidden - THUMB ZONE ERGONOMIC) -->
+  <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 inset-x-0 h-16 bg-slate-950/95 backdrop-blur-xl border-t border-white/[0.08] px-3 flex items-center justify-around z-40 shadow-2xl" aria-label="Navigasi Mobile">
+    <button
+      id="mobileNavToday"
+      onclick="switchMainTab('today')"
+      class="mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-emerald-400 bg-emerald-500/15 border border-emerald-400/30 transition active:scale-95"
+      aria-label="Tab Hari Ini"
+    >
+      <span class="text-base leading-none">🌟</span>
+      <span class="text-[10px] font-bold mt-1">Hari Ini</span>
+    </button>
+    <button
+      id="mobileNavExplore"
+      onclick="switchMainTab('explore')"
+      class="mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-slate-400 hover:text-white transition active:scale-95"
+      aria-label="Tab Jelajah"
+    >
+      <span class="text-base leading-none">🔍</span>
+      <span class="text-[10px] font-medium mt-1">Jelajah</span>
+    </button>
+    <button
+      id="mobileNavWatchlist"
+      onclick="switchMainTab('watchlist')"
+      class="mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-slate-400 hover:text-white transition active:scale-95"
+      aria-label="Tab Pantauan"
+    >
+      <span class="text-base leading-none">⭐</span>
+      <span class="text-[10px] font-medium mt-1">Pantauan</span>
+    </button>
+    <button
+      id="mobileNavSettings"
+      onclick="openSettingsModal()"
+      class="mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-slate-400 hover:text-white transition active:scale-95"
+      aria-label="Pengaturan dan Alat"
+    >
+      <span class="text-base leading-none">⚙️</span>
+      <span class="text-[10px] font-medium mt-1">Alat</span>
+    </button>
+  </nav>
+
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=29.0"></script>
+  <script src="/static/app.js?v=30.0"></script>
 </body>
 </html>

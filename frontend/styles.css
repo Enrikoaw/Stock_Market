@@ -344,9 +344,9 @@ html.light a[href*="template?mode=blank"]:hover {
 
 /* 9. Badge Kontras Terang */
 html.light .badge-markup {
-  background: #fef3c7 !important;
-  color: #b45309 !important;
-  border-color: #fde68a !important;
+  background: #ffedd5 !important;
+  color: #c2410c !important;
+  border-color: #fdba74 !important;
 }
 html.light .badge-big-accum {
   background: #d1fae5 !important;
@@ -373,6 +373,45 @@ html.light .badge-neutral {
   color: #475569 !important;
   border-color: #cbd5e1 !important;
 }
+
+/* 10. LIGHT MODE: UBAH SEMUA TEKS & AKSEN KUNING MENJADI ORANYE BERKONTRAS TINGGI */
+html.light .text-amber-300,
+html.light .text-amber-400,
+html.light .text-amber-500,
+html.light .text-yellow-300,
+html.light .text-yellow-400,
+html.light .text-yellow-500,
+html.light [class*="text-amber-"],
+html.light [class*="text-yellow-"] {
+  color: #ea580c !important; /* Orange 600 - tajam, sangat kontras & terbaca jelas di background putih */
+}
+
+html.light [class*="bg-amber-500"],
+html.light [class*="bg-yellow-500"] {
+  background-color: rgba(234, 88, 12, 0.14) !important;
+}
+
+html.light [class*="border-amber-"],
+html.light [class*="border-yellow-"] {
+  border-color: rgba(234, 88, 12, 0.35) !important;
+}
+
+html.light .star-btn.text-amber-400,
+html.light .star-btn.text-amber-300 {
+  color: #ea580c !important;
+  filter: drop-shadow(0 0 6px rgba(234, 88, 12, 0.45)) !important;
+}
+
+html.light #mobileBottomNav {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-top: 1px solid #e2e8f0 !important;
+  box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08) !important;
+}
+
+html.light .mobile-nav-btn.text-slate-400 {
+  color: #64748b !important;
+}
+
 
 /* =====================================================================
    RESPONSIVE MOBILE ENHANCEMENTS (Fix overlapping & squished tables)
