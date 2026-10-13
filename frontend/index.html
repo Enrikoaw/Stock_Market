@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SmartFlow IDX — Smart Money & Bandarmology Stock Screener</title>
+  <title>SmartFlow IDX — Quantitative VSA, Volume Flow & Momentum Screener</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=15.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=16.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -157,7 +157,7 @@
           <div>
             <p class="text-xs font-medium text-slate-300">Total Emiten</p>
             <div class="flex items-baseline gap-2 mt-0.5">
-              <span id="kpiTotalEmiten" class="text-2xl sm:text-3xl font-extrabold font-sans text-white tracking-tight">844</span>
+              <span id="kpiTotalEmiten" class="text-2xl sm:text-3xl font-extrabold font-sans text-white tracking-tight">-</span>
               <span id="kpiAvgScore" class="text-[10px] font-mono text-sky-300 bg-sky-500/10 border border-sky-400/20 px-1.5 py-0.5 rounded-md">Avg: -</span>
             </div>
           </div>
@@ -193,7 +193,7 @@
           <div>
             <p class="text-xs font-medium text-slate-300">Markup Breakout</p>
             <div class="mt-0.5">
-              <span id="kpiMarkupCount" class="text-2xl sm:text-3xl font-extrabold font-sans text-white tracking-tight">15</span>
+              <span id="kpiMarkupCount" class="text-2xl sm:text-3xl font-extrabold font-sans text-white tracking-tight">-</span>
             </div>
           </div>
         </div>
@@ -228,7 +228,7 @@
           <div>
             <p class="text-xs font-medium text-slate-300">Accumulation</p>
             <div class="mt-0.5">
-              <span id="kpiAccumCount" class="text-2xl sm:text-3xl font-extrabold font-sans text-white tracking-tight">72</span>
+              <span id="kpiAccumCount" class="text-2xl sm:text-3xl font-extrabold font-sans text-white tracking-tight">-</span>
             </div>
           </div>
         </div>
@@ -261,7 +261,7 @@
           <div>
             <p class="text-xs font-medium text-slate-300">Distribution Warning</p>
             <div class="mt-0.5">
-              <span id="kpiDistCount" class="text-2xl sm:text-3xl font-extrabold font-sans text-white tracking-tight">677</span>
+              <span id="kpiDistCount" class="text-2xl sm:text-3xl font-extrabold font-sans text-white tracking-tight">-</span>
             </div>
           </div>
         </div>
@@ -349,10 +349,10 @@
 
             <!-- Sort By -->
             <select id="filterSortBy" class="px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition shadow-sm">
-              <option value="score" class="bg-slate-900 text-white">Urut: Smart Money Score</option>
+              <option value="score" class="bg-slate-900 text-white">Urut: VSA Score</option>
               <option value="vol_ratio" class="bg-slate-900 text-white">Urut: Volume Spike Ratio</option>
-              <option value="top3_bsr" class="bg-slate-900 text-white">Urut: Top 3 Broker Ratio</option>
-              <option value="foreign" class="bg-slate-900 text-white">Urut: Net Foreign %</option>
+              <option value="top3_bsr" class="bg-slate-900 text-white">Urut: Jarak ke VWAP 5H</option>
+              <option value="foreign" class="bg-slate-900 text-white">Urut: Nilai Transaksi (Turnover)</option>
               <option value="pct_change" class="bg-slate-900 text-white">Urut: % Kenaikan Harga</option>
             </select>
           </div>
@@ -367,8 +367,8 @@
                 <th class="py-3 px-2 text-right">Price</th>
                 <th class="py-3 px-2 text-right">Change</th>
                 <th class="py-3 px-2 text-center">Volume Spike</th>
-                <th class="py-3 px-2 text-right">Smart Money Score</th>
-                <th class="py-3 pl-2 pr-4">Broker Summary</th>
+                <th class="py-3 px-2 text-right">VSA Score</th>
+                <th class="py-3 pl-2 pr-4">Profil VSA &amp; VWAP 5H</th>
               </tr>
             </thead>
             <tbody id="screenerTableBody" class="divide-y divide-white/[0.05] text-xs">
@@ -474,7 +474,7 @@
                 Harga &amp; Vol Spike
               </button>
               <button id="tabChartBandar" onclick="switchChartTab('bandar')" class="px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-white transition">
-                Top 3 Broker Lot
+                Volume vs MA20
               </button>
               <button id="tabChartScore" onclick="switchChartTab('score')" class="px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-white transition">
                 Histori Score
@@ -791,34 +791,34 @@
   <div id="guideModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
     <div class="glass-panel rounded-2xl max-w-2xl w-full p-6 border border-white/15 shadow-2xl space-y-4 max-h-[88vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
-        <h3 class="text-base font-bold text-white">Metodologi 5 Pilar Smart Money &amp; Bandarmology</h3>
+        <h3 class="text-base font-bold text-white">Metodologi 5 Pilar Kuantitatif VSA &amp; Volume Flow</h3>
         <button onclick="closeGuideModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
       </div>
 
       <div class="space-y-3 text-xs text-slate-300 leading-relaxed">
         <div class="p-3 rounded-xl glass-subcard">
           <div class="font-bold text-emerald-400">1. Pilar Volume Spike &amp; VSA (Bobot 25 Poin)</div>
-          <p class="mt-1 text-slate-400">Mendeteksi anomali volume harian terhadap rata-rata 20 hari (<code class="text-white">Volume / MA20_Vol</code>) yang dikombinasikan dengan posisi penutupan candle (<code class="text-white">Closing Range</code>). Volume tinggi (&ge;1.8x) dengan penutupan di atas 70% range harian menandakan institusi agresif melakukan HAKA (Demand Breakout).</p>
+          <p class="mt-1 text-slate-400">Mendeteksi anomali volume harian terhadap rata-rata 20 hari (<code class="text-white">Volume / MA20_Vol</code>) yang dikombinasikan dengan posisi penutupan candle (<code class="text-white">Closing Range</code>). Lonjakan volume (&ge;1.8x) dengan penutupan di paruh atas rentang candle menandakan dominasi agresif pihak pembeli (Demand Breakout).</p>
         </div>
 
         <div class="p-3 rounded-xl glass-subcard">
-          <div class="font-bold text-emerald-400">2. Pilar Konsentrasi Broker / Bandarmology (Bobot 30 Poin)</div>
-          <p class="mt-1 text-slate-400">Membandingkan jumlah Lot beli bersih <strong class="text-white">Top 1, Top 3, dan Top 5 Broker Pembeli</strong> terhadap Penjual (<code class="text-white">Top3_Buy_Lot / Top3_Sell_Lot</code>). Jika rasio &ge; 1.35x, berarti segelintir broker institusi sedang menyerap barang yang dijual oleh banyak broker ritel.</p>
+          <div class="font-bold text-emerald-400">2. Pilar Tren &amp; Struktur Relatif Pasar (Bobot 25 Poin)</div>
+          <p class="mt-1 text-slate-400">Menilai posisi harga penutupan terhadap <code class="text-white">MA20</code> dan <code class="text-white">MA50</code> serta momentum jangka menengah agar sinyal tidak melawan tren utama pasar.</p>
         </div>
 
         <div class="p-3 rounded-xl glass-subcard">
-          <div class="font-bold text-blue-400">3. Pilar Ticket Size / Lot per Transaksi (Bobot 15 Poin)</div>
-          <p class="mt-1 text-slate-400">Dihitung dari <code class="text-white">Volume_Lot / Frequency</code>. Investor ritel cenderung memecah order kecil dengan frekuensi tinggi, sedangkan Smart Money menyapu order book dengan jumlah lot besar per transaksi.</p>
+          <div class="font-bold text-blue-400">3. Pilar Kompresi &amp; Volatilitas Candle (Bobot 20 Poin)</div>
+          <p class="mt-1 text-slate-400">Mengukur rentang volatilitas harian (Spread) dan rasio ukuran order rata-rata. Fase akumulasi sering ditandai oleh penyempitan rentang harga (Volatility Contraction) sebelum terjadi ledakan harga (Expansion).</p>
         </div>
 
         <div class="p-3 rounded-xl glass-subcard">
-          <div class="font-bold text-purple-400">4. Pilar Arus Dana Asing / Foreign Flow (Bobot 15 Poin)</div>
-          <p class="mt-1 text-slate-400">Mengukur persentase <code class="text-white">Net Foreign Buy/Sell</code> terhadap nilai transaksi harian serta akumulasi 5 hari bursa terakhir.</p>
+          <div class="font-bold text-purple-400">4. Pilar Likuiditas &amp; Nilai Transaksi (Bobot 15 Poin)</div>
+          <p class="mt-1 text-slate-400">Memastikan saham memiliki likuiditas riil yang sehat (<code class="text-white">Turnover Harian &ge; Rp 1–2 Miliar</code>) untuk mengeliminasi saham tidur / gocap yang tidak dapat dieksekusi dengan aman.</p>
         </div>
 
         <div class="p-3 rounded-xl glass-subcard">
-          <div class="font-bold text-amber-400">5. Pilar Struktur Harga &amp; Modal Bandar (Bobot 15 Poin)</div>
-          <p class="mt-1 text-slate-400">Membandingkan posisi harga penutupan terhadap <code class="text-white">MA20</code> serta jarak harga saat ini terhadap estimasi <strong class="text-white">Modal Rata-Rata Bandar 5 Hari (<code class="text-white">Bandar_Avg_Buy</code>)</strong> agar kita tidak membeli terlalu pucuk.</p>
+          <div class="font-bold text-amber-400">5. Pilar Posisi Harga vs VWAP 5 Hari (Bobot 15 Poin)</div>
+          <p class="mt-1 text-slate-400">Menghitung <strong class="text-white">Volume-Weighted Average Price 5 Hari (<code class="text-white">VWAP 5H</code>)</strong> sebagai titik jangkar keseimbangan harga. Membeli di dekat area VWAP meminimalkan risiko membeli saat harga sudah overextended.</p>
         </div>
       </div>
     </div>
@@ -951,6 +951,6 @@
   </div>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=27.0"></script>
+  <script src="/static/app.js?v=28.0"></script>
 </body>
 </html>

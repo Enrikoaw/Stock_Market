@@ -358,19 +358,22 @@ class SignalTracker:
                 except (ValueError, TypeError):
                     diff_val = 0.0
 
-                # 1. Sinyal yang dari awal skornya < 70 tidak valid
-                if row_score < self.min_score:
-                    ids_to_delete.append(int(row["id"]))
-                    continue
-
-                # 2. Aturan khusus WATCHLIST (belum terbeli):
-                #    Batalkan jika bandar guyur (is_dist_warning) atau harga sudah kabur > 5% di atas modal bandar
+                # 1. Aturan khusus WATCHLIST (belum terbeli):
+                #    Jika terdeteksi distribusi volume atau harga sudah lari > 5% di atas VWAP 5H,
+                #    tandai status sebagai CANCELLED (jangan hapus agar riwayat evaluasi jujur & transparan)
                 if st == "WATCHLIST":
                     if is_dist_warning or diff_val > 5.0:
-                        ids_to_delete.append(int(row["id"]))
+                        reason = "Distribusi Volume / Tekanan Jual" if is_dist_warning else f"Harga lari (+{diff_val:.1f}% di atas VWAP 5H)"
+                        upd = {
+                            "status": "CANCELLED",
+                            "note": f"Dibatalkan otomatis ({reason}).",
+                            "last_close": cur_close if cur_close > 0 else float(row.get("last_close") or 0),
+                            "updated_at": _now_str(),
+                        }
+                        conn.execute(update(signals_table).where(signals_table.c.id == row["id"]).values(**upd))
                         continue
 
-                # 3. Sinkronkan Zona Entry, SL, TP dengan Auto Trading Plan (kecuali bila berubah jadi DISTRIBUTION_WARNING saat RUNNING)
+                # 2. Sinkronkan Zona Entry, SL, TP dengan Auto Trading Plan (kecuali bila berubah jadi DISTRIBUTION_WARNING saat RUNNING)
                 plan = d.get("trading_plan") or {}
                 if not plan:
                     continue
@@ -420,20 +423,20 @@ class SignalTracker:
                             upd["exit_price"] = p_sl
                             upd["pnl_pct"] = round((p_sl - ep) / ep * 100.0, 2)
 
-                # 4. Solusi 2: Peringatan Dini (Early Exit Warning) bila saham RUNNING mendadak didistribusi bandar
+                # 3. Peringatan Dini (Early Exit Warning) bila saham RUNNING mendadak didistribusi
                 if st == "RUNNING" and is_dist_warning:
                     ep = float(row.get("entry_price") or row.get("entry_high") or cur_close or 1)
                     new_pnl = round((cur_close - ep) / ep * 100.0, 2) if ep > 0 and cur_close > 0 else 0.0
                     upd["pnl_pct"] = new_pnl
                     warn_note = (
-                        f"⚠️ AWAS DISTRIBUSI BANDAR (Skor turun ke {cur_score}) — "
+                        f"⚠️ AWAS DISTRIBUSI VOLUME (Skor turun ke {cur_score}) — "
                         f"Pertimbangkan Early Exit / Ketatkan Stop Loss! (P/L {new_pnl:+.2f}%)"
                     )
                     if row.get("note") != warn_note:
                         upd["note"] = warn_note
                 elif st == "WATCHLIST" and cur_score < self.min_score and not is_dist_warning:
                     pullback_note = (
-                        f"Koreksi sehat volume sepi (Skor harian: {cur_score}, Akumulasi 5H aman) — "
+                        f"Koreksi sehat volume sepi (Skor harian: {cur_score}, Baseline 5H aman) — "
                         "tetap antre di Zona Entry."
                     )
                     if row.get("note") != pullback_note:
@@ -443,10 +446,7 @@ class SignalTracker:
                     upd["updated_at"] = _now_str()
                     conn.execute(update(signals_table).where(signals_table.c.id == row["id"]).values(**upd))
 
-            if ids_to_delete:
-                res = conn.execute(delete(signals_table).where(signals_table.c.id.in_(ids_to_delete)))
-                removed = res.rowcount or len(ids_to_delete)
-        return removed
+        return 0
 
     # ------------------------------------------------------------- evaluate
     def evaluate(self, details: dict[str, dict]) -> dict:

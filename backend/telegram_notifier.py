@@ -137,9 +137,9 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
         )
 
     lines = [
-        "🎯 <b>SMARTFLOW IDX — REKOMENDASI TERBAIK</b>",
+        "🎯 <b>SMARTFLOW IDX — RADAR AKUMULASI & VSA</b>",
         f"📅 <i>Sesi Bursa: {html.escape(date_str)}</i>",
-        "💡 <i>Kriteria: Akumulasi Smart Money, Belum Terbang (≤ 2.5%), & Avg Bandar ≤ 5%</i>",
+        "💡 <i>Kriteria: Sinyal VSA & Akumulasi Volume, Belum Terbang (≤ 2.5%), & Jarak VWAP 5H ≤ 5%</i>",
         f"🔍 Ditemukan <b>{len(picks)} Saham Pilihan</b>:\n",
     ]
 
@@ -152,7 +152,7 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
         score = int(s.get("smart_money_score", 0))
         trigger_lbl = html.escape(str(s.get("trigger_label", s.get("trigger_type", ""))))
         vol_ratio = float(s.get("vol_ratio", 0))
-        top3_bsr = float(s.get("top3_bsr", 0))
+        cr = int(s.get("closing_range_pct", 50))
         val_b = float(s.get("value_b_idr", 0))
 
         plan = s.get("trading_plan") or {}
@@ -164,21 +164,21 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
         tp1_pct = float(plan.get("target_1_pct", 0))
         tp2 = int(plan.get("target_2", tp1))
         tp2_pct = float(plan.get("target_2_pct", 0))
-        bandar_avg = int(plan.get("bandar_avg_buy", close))
-        diff_bandar = float(plan.get("diff_bandar_avg_pct", 0))
+        vwap_5d = int(plan.get("bandar_avg_buy", close))
+        diff_vwap = float(plan.get("diff_bandar_avg_pct", 0))
 
         card = (
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"<b>{idx}. #{ticker}</b> ({sector})\n"
-            f"💰 <b>Harga:</b> Rp {close:,} (<b>{pct_sign}{pct:.2f}%</b>) | <b>Score:</b> {score}/100\n"
-            f"🐋 <b>Tipe:</b> {trigger_lbl} | <b>BSR Top 3:</b> {top3_bsr:.2f}x\n"
-            f"📊 <b>Vol Spike:</b> {vol_ratio:.1f}x MA20 | <b>Transaksi:</b> Rp {val_b:.2f}M\n\n"
+            f"💰 <b>Harga:</b> Rp {close:,} (<b>{pct_sign}{pct:.2f}%</b>) | <b>VSA Score:</b> {score}/100\n"
+            f"⚡ <b>Sinyal:</b> {trigger_lbl} | <b>Closing Range:</b> {cr}%\n"
+            f"📊 <b>Vol Spike:</b> {vol_ratio:.1f}x MA20 | <b>Nilai Transaksi:</b> Rp {val_b:.2f}M\n\n"
             f"🎯 <b>TRADING PLAN:</b>\n"
             f"• <b>Zona Entry:</b> <code>Rp {e_low:,} – {e_high:,}</code>\n"
             f"• <b>Stop Loss (SL):</b> <code>Rp {sl:,} ({sl_pct:.1f}%)</code>\n"
             f"• <b>Target TP1:</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code>\n"
             f"• <b>Target TP2:</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code>\n"
-            f"• <b>Modal Bandar:</b> Rp {bandar_avg:,} (Jarak: {diff_bandar:+.1f}%)\n"
+            f"• <b>VWAP 5 Hari:</b> Rp {vwap_5d:,} (Jarak: {diff_vwap:+.1f}%)\n"
         )
         lines.append(card)
 

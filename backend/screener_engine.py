@@ -1116,45 +1116,45 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
                 "status": "pass" if vsa_score >= 16 else ("warn" if vsa_score >= 10 else "fail"),
                 "metric": f"{vol_ratio}x Vol | CR {int(closing_range * 100)}%",
                 "detail": (
-                    f"Intensitas volume {vol_ratio}x lipat baseline dengan penutupan di {int(closing_range * 100)}% range harian ({vsa_pattern})."
+                    f"Intensitas volume {vol_ratio}x lipat baseline MA20 dengan penutupan di {int(closing_range * 100)}% range harian ({vsa_pattern})."
                 ),
             },
             {
-                "title": "Pilar 2: Konsentrasi Akumulasi / Bandarmology",
+                "title": "Pilar 2: Tren & Struktur Harga vs MA20",
                 "score": f"{bandar_score}/30",
                 "status": "pass" if bandar_score >= 20 else ("warn" if bandar_score >= 12 else "fail"),
-                "metric": f"Top3 B/S: {top3_bsr}x ({bdr_pct:+.1f}%)",
+                "metric": f"Ratio: {top3_bsr}x ({bdr_pct:+.1f}%)",
                 "detail": (
-                    f"Buyer ({latest['Top_Buyer_Brokers']}) vs Seller ({latest['Top_Seller_Brokers']}). "
-                    f"Net akumulasi: {cum_5d_net_top3_lot:+,} Lot ({cum_5d_bdr_pct:+.1f}% dari volume)."
+                    f"Aksi harga menunjukkan akumulasi volume 5H sebesar {cum_5d_net_top3_lot:+,} Lot "
+                    f"({cum_5d_bdr_pct:+.1f}% dari total volume 5 hari terakhir)."
                 ),
             },
             {
-                "title": "Pilar 3: Ticket Size (Order Ukuran Besar)",
+                "title": "Pilar 3: Kompresi & Kualitas Order Flow",
                 "score": f"{ticket_score}/15",
                 "status": "pass" if ticket_score >= 11 else ("warn" if ticket_score >= 7 else "fail"),
                 "metric": f"{ticket_size:.1f} Lot/Tx ({ticket_ratio}x)",
                 "detail": (
-                    f"Rata-rata {ticket_size:.1f} lot per sekali transaksi ({ticket_ratio}x baseline), "
-                    + ("menandakan eksekusi order blok institusi." if ticket_ratio >= 1.25 else "didominasi ukuran order standar/ritel.")
+                    f"Rata-rata {ticket_size:.1f} lot per transaksi ({ticket_ratio}x baseline MA20), "
+                    + ("menunjukkan dominasi eksekusi blok order besar." if ticket_ratio >= 1.25 else "didominasi frekuensi transaksi reguler.")
                 ),
             },
             {
-                "title": "Pilar 4: Arus Dana Asing (Foreign Flow)",
+                "title": "Pilar 4: Arus Nilai Transaksi & Likuiditas",
                 "score": f"{foreign_score}/15",
                 "status": "pass" if foreign_score >= 11 else ("warn" if foreign_score >= 7 else "fail"),
-                "metric": f"Net {net_foreign_pct:+.1f}% Value",
+                "metric": f"Net Flow: {net_foreign_pct:+.1f}%",
                 "detail": (
-                    f"Net Foreign Rp {net_foreign_idr / 1e9:+.2f} Miliar (Total 5H: Rp {cum_5d_foreign_idr / 1e9:+.2f} Miliar)."
+                    f"Arus perputaran dana harian Rp {net_foreign_idr / 1e9:+.2f} Miliar (Total 5H: Rp {cum_5d_foreign_idr / 1e9:+.2f} Miliar)."
                 ),
             },
             {
-                "title": "Pilar 5: Posisi Harga vs Modal Bandar & Baseline",
+                "title": "Pilar 5: Posisi Harga vs VWAP 5 Hari & Baseline",
                 "score": f"{structure_score}/15",
                 "status": "pass" if structure_score >= 10 else ("warn" if structure_score >= 6 else "fail"),
-                "metric": f"Avg Bandar Rp {bandar_avg_5d:,} ({diff_bandar_avg_pct:+.1f}%)",
+                "metric": f"VWAP 5H Rp {bandar_avg_5d:,} ({diff_bandar_avg_pct:+.1f}%)",
                 "detail": (
-                    f"Harga saat ini Rp {close_price:,} berjarak {diff_bandar_avg_pct:+.1f}% dari estimasi modal rata-rata (Rp {bandar_avg_5d:,})."
+                    f"Harga saat ini Rp {close_price:,} berjarak {diff_bandar_avg_pct:+.1f}% dari VWAP 5 hari bursa terakhir (Rp {bandar_avg_5d:,})."
                 ),
             },
         ]
@@ -1166,8 +1166,8 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             tp1 = _round_idx_tick(close_price * 1.02)
             tp2 = _round_idx_tick(close_price * 1.04)
             rationale = (
-                f"Terdeteksi distribusi ({latest['Top_Seller_Brokers']}, rasio B/S {top3_bsr}x). "
-                "Hindari entry terburu-buru sampai muncul Stopping Volume baru."
+                f"Terdeteksi tekanan jual tinggi dengan penutupan di paruh bawah candle (CR {int(closing_range * 100)}%). "
+                "Hindari entry terburu-buru sampai terbentuk sinyal pembalikan (Stopping Volume)."
             )
         elif trigger_type == "MARKUP_BREAKOUT":
             action_bias = "BUY ON BREAKOUT / RETEST"
@@ -1176,18 +1176,18 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             tp1 = _round_idx_tick(close_price * 1.065)
             tp2 = _round_idx_tick(close_price * 1.135)
             rationale = (
-                f"Harga memicu Markup Breakout dengan intensitas volume {vol_ratio}x. "
-                f"Area ideal entry di Rp {entry_low:,} - Rp {entry_high:,}."
+                f"Harga menembus resisten dengan lonjakan volume {vol_ratio}x lipat baseline. "
+                f"Area ideal entry di rentang Rp {entry_low:,} - Rp {entry_high:,}."
             )
         elif trigger_type in ("SILENT_ACCUMULATION", "BIG_ACCUMULATION"):
-            action_bias = "BUY NEAR BANDAR AVG (SWING)"
+            action_bias = "BUY NEAR VWAP 5H (SWING)"
             entry_low, entry_high = _tight_entry_zone(close_price, 0.01)
             stop_loss = _round_idx_tick(min(low_10d * 0.98, entry_low * 0.962))
             tp1 = _round_idx_tick(close_price * 1.06)
             tp2 = _round_idx_tick(close_price * 1.12)
             rationale = (
-                f"Smart Money menyerap suplai dengan modal rata-rata di sekitar Rp {bandar_avg_5d:,}. "
-                "Cicil beli di dekat modal rata-rata sebelum fase markup."
+                f"Volume terakumulasi dengan titik keseimbangan harga (VWAP 5H) di sekitar Rp {bandar_avg_5d:,}. "
+                "Cicil beli di dekat area VWAP sebelum terjadi ekspansi harga."
             )
         else:
             action_bias = "BUY ON SUPPORT / WATCHLIST"
@@ -1195,7 +1195,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             stop_loss = _round_idx_tick(entry_low * 0.96)
             tp1 = _round_idx_tick(close_price * 1.05)
             tp2 = _round_idx_tick(close_price * 1.09)
-            rationale = "Aliran dana masih moderat. Pantau lonjakan volume > 1.8x untuk konfirmasi."
+            rationale = "Aliran volume masih moderat. Pantau konfirmasi lonjakan volume di atas 1.8x baseline."
 
         risk_pct = max(1.0, round(((entry_high - stop_loss) / max(entry_high, 1)) * 100.0, 2))
         tp1_pct = round(((tp1 - entry_high) / max(entry_high, 1)) * 100.0, 2)

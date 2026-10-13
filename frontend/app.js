@@ -412,13 +412,13 @@ function renderScreenerTable(stocks) {
             </div>
           </td>
 
-          <!-- Broker Summary -->
+          <!-- Profil VSA & VWAP 5H -->
           <td class="py-3 pl-2 pr-4 text-xs font-mono">
             <div class="text-[11px] text-slate-300">
-              Top B: <span class="text-emerald-400 font-bold">${s.top_buyers || '-'}</span> | S: <span class="text-rose-400 font-bold">${s.top_sellers || '-'}</span>
+              VWAP 5H: <span class="text-white font-bold">${fmtPrice(s.bandar_avg_buy)}</span> <span class="${s.diff_bandar_avg_pct >= 0 ? 'text-amber-300' : 'text-emerald-400'} font-semibold">(${s.diff_bandar_avg_pct >= 0 ? '+' : ''}${s.diff_bandar_avg_pct.toFixed(1)}%)</span>
             </div>
             <div class="text-[10px] text-slate-400">
-              Ratio: <span class="${bsrColor}">${s.top3_bsr.toFixed(2)}x</span> · Net F: <span class="${foreignColor}">${s.net_foreign_pct >= 0 ? '+' : ''}${s.net_foreign_pct.toFixed(1)}%</span>
+              CR: <span class="text-slate-200 font-semibold">${s.closing_range_pct}%</span> · Val: <span class="text-slate-200">Rp ${s.value_b_idr} M</span>
             </div>
           </td>
         </tr>
@@ -1076,17 +1076,26 @@ function isIDXMarketOpenNow() {
   const now = new Date();
   const utcHours = now.getUTCHours();
   const utcMinutes = now.getUTCMinutes();
-  const wibHours = (utcHours + 7) % 24;
-  const wibMinutes = utcMinutes;
-  const dayOfWeek = (now.getUTCDay() + (utcHours + 7 >= 24 ? 1 : 0)) % 7; // 0=Sun, 6=Sat
+  const totalUtcMinutes = utcHours * 60 + utcMinutes;
+  const wibTotalMinutes = (totalUtcMinutes + 7 * 60) % (24 * 60);
+  const dayShift = Math.floor((totalUtcMinutes + 7 * 60) / (24 * 60));
+  const dayOfWeek = (now.getUTCDay() + dayShift) % 7; // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
 
-  // Senin (1) s/d Jumat (5)
-  const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
-  // Jam Bursa: 09:00 s/d 16:05 WIB
-  const wibTotalMins = wibHours * 60 + wibMinutes;
-  const isMarketHours = wibTotalMins >= 9 * 60 && wibTotalMins <= 16 * 60 + 5;
+  // Hanya Senin (1) s/d Jumat (5)
+  if (dayOfWeek < 1 || dayOfWeek > 5) return false;
 
-  return isWeekday && isMarketHours;
+  // Jadwal Resmi BEI (dengan jeda istirahat siang)
+  if (dayOfWeek === 5) {
+    // Hari Jumat: Sesi 1 (09:00 - 11:30 WIB), Sesi 2 (14:00 - 16:05 WIB)
+    const isSesi1 = wibTotalMinutes >= 9 * 60 && wibTotalMinutes <= 11 * 60 + 30;
+    const isSesi2 = wibTotalMinutes >= 14 * 60 && wibTotalMinutes <= 16 * 60 + 5;
+    return isSesi1 || isSesi2;
+  } else {
+    // Senin - Kamis: Sesi 1 (09:00 - 12:00 WIB), Sesi 2 (13:30 - 16:05 WIB)
+    const isSesi1 = wibTotalMinutes >= 9 * 60 && wibTotalMinutes <= 12 * 60;
+    const isSesi2 = wibTotalMinutes >= 13 * 60 + 30 && wibTotalMinutes <= 16 * 60 + 5;
+    return isSesi1 || isSesi2;
+  }
 }
 
 function updateMarketLiveStatusUI() {
@@ -1161,6 +1170,7 @@ const TRACKER_STATUS_STYLE = {
   LOSS: 'bg-rose-500/25 text-rose-300 border-rose-400/60 shadow-sm shadow-rose-500/25',
   EXPIRED: 'bg-slate-700/40 text-slate-300 border-slate-600',
   TIMEOUT: 'bg-purple-500/20 text-purple-300 border-purple-400/50 shadow-sm shadow-purple-500/20',
+  CANCELLED: 'bg-slate-800/60 text-slate-400 border-slate-600/60',
 };
 
 const fmtPctOrDash = (v) => (v === null || v === undefined ? '-' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`);

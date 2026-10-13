@@ -239,6 +239,25 @@ def _run_sync_job_blocking() -> dict:
     return analysis
 
 
+# Daftar Hari Libur Resmi Bursa Efek Indonesia (BEI / IDX) 2025 - 2027
+IDX_HOLIDAYS: set[str] = {
+    # 2025
+    "2025-01-01", "2025-01-27", "2025-01-28", "2025-01-29", "2025-03-28", "2025-03-31",
+    "2025-04-01", "2025-04-02", "2025-04-03", "2025-04-04", "2025-04-07", "2025-04-18",
+    "2025-05-01", "2025-05-12", "2025-05-29", "2025-05-30", "2025-06-06", "2025-06-09",
+    "2025-06-27", "2025-08-18", "2025-09-05", "2025-12-24", "2025-12-25", "2025-12-26", "2025-12-31",
+    # 2026
+    "2026-01-01", "2026-01-16", "2026-02-17", "2026-03-19", "2026-03-20", "2026-03-23",
+    "2026-03-24", "2026-03-25", "2026-04-03", "2026-05-01", "2026-05-14", "2026-05-27",
+    "2026-05-28", "2026-06-01", "2026-06-16", "2026-07-16", "2026-08-17", "2026-08-25",
+    "2026-10-14", "2026-12-24", "2026-12-25", "2026-12-31",
+    # 2027
+    "2027-01-01", "2027-02-08", "2027-02-09", "2027-03-09", "2027-03-10", "2027-03-26",
+    "2027-04-09", "2027-05-03", "2027-05-06", "2027-05-17", "2027-05-20", "2027-06-01",
+    "2027-08-17", "2027-12-24", "2027-12-25", "2027-12-31",
+}
+
+
 def _get_now_wib() -> datetime:
     try:
         from zoneinfo import ZoneInfo
@@ -248,23 +267,44 @@ def _get_now_wib() -> datetime:
         return datetime.now(timezone(timedelta(hours=7)))
 
 
+def _is_idx_holiday(dt: datetime.date) -> bool:
+    return dt.strftime("%Y-%m-%d") in IDX_HOLIDAYS
+
+
 def is_idx_market_open_now() -> bool:
-    """Mengecek apakah bursa saham BEI/IDX saat ini sedang berlangsung (09:00 - 16:10 WIB, Senin-Jumat)."""
+    """
+    Mengecek apakah bursa saham BEI/IDX saat ini sedang berlangsung dengan jadwal resmi bursa:
+    - Senin s/d Kamis: Sesi 1 (09:00 - 12:00 WIB), Sesi 2 (13:30 - 16:05 WIB)
+    - Jumat: Sesi 1 (09:00 - 11:30 WIB), Sesi 2 (14:00 - 16:05 WIB)
+    - Sabtu, Minggu, Libur Nasional, Cuti Bersama BEI: TUTUP
+    """
     now = _get_now_wib()
-    if now.weekday() >= 5:  # Sabtu / Minggu
+    if now.weekday() >= 5 or _is_idx_holiday(now.date()):
         return False
+
     from datetime import time as dtime
-    return dtime(9, 0) <= now.time() <= dtime(16, 10)
+    t = now.time()
+
+    if now.weekday() == 4:  # Hari Jumat
+        is_sesi_1 = dtime(9, 0) <= t <= dtime(11, 30)
+        is_sesi_2 = dtime(14, 0) <= t <= dtime(16, 5)
+    else:  # Senin - Kamis
+        is_sesi_1 = dtime(9, 0) <= t <= dtime(12, 0)
+        is_sesi_2 = dtime(13, 30) <= t <= dtime(16, 5)
+
+    return is_sesi_1 or is_sesi_2
 
 
 def _expected_latest_trading_date() -> str:
-    """Mengembalikan tanggal hari bursa terakhir yang seharusnya sudah memiliki data (YYYY-MM-DD)."""
+    """Mengembalikan tanggal hari bursa terakhir yang seharusnya sudah memiliki data (melewati akhir pekan & hari libur BEI)."""
     from datetime import time as dtime, timedelta
     now = _get_now_wib()
     cur = now.date()
-    if cur.weekday() < 5 and now.time() < dtime(9, 5):
+    # Jika hari bursa aktif tapi belum jam 09:15 WIB, tanggal yang diharapkan adalah sesi hari sebelumnya
+    if cur.weekday() < 5 and not _is_idx_holiday(cur) and now.time() < dtime(9, 15):
         cur -= timedelta(days=1)
-    while cur.weekday() >= 5:
+    # Lewati akhir pekan dan tanggal merah bursa
+    while cur.weekday() >= 5 or _is_idx_holiday(cur):
         cur -= timedelta(days=1)
     return cur.strftime("%Y-%m-%d")
 
@@ -330,7 +370,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -622,7 +662,16 @@ async def upload_excel_files(
 @app.post("/api/load-path")
 def load_excel_from_local_path(req: LocalPathRequest) -> dict:
     raw_path = req.path.strip().strip('"').strip("'")
-    target = Path(raw_path)
+    target = Path(raw_path).resolve()
+    # Proteksi Keamanan: Hanya izinkan akses file/folder di dalam direktori aplikasi
+    try:
+        target.relative_to(BASE_DIR.resolve())
+    except ValueError:
+        raise HTTPException(
+            status_code=403,
+            detail="Akses ditolak: File atau folder harus berada di dalam direktori data aplikasi.",
+        )
+
     if not target.exists():
         raise HTTPException(status_code=404, detail=f"Lokasi file/folder tidak ditemukan: {raw_path}")
 
