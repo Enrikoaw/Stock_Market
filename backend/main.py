@@ -457,15 +457,27 @@ def get_screener_data(
         stocks = [s for s in stocks if s["vol_ratio"] >= min_vol_ratio]
 
     if search and isinstance(search, str) and search.strip():
-        q = search.strip().lower()
-        stocks = [
-            s
-            for s in stocks
-            if q in s["ticker"].lower()
-            or q in s["sector"].lower()
-            or q in s["trigger_label"].lower()
-            or q in s["top_buyers"].lower()
-        ]
+        q_raw = search.strip().upper()
+        # Prioritas 1: Jika pengguna mengetik kode saham persis (misal: BBCA, ASPI, ADRO),
+        # tampilkan HANYA 1 saham tersebut sesuai permintaan pengguna.
+        exact_matches = [s for s in stocks if s["ticker"].upper() == q_raw]
+        if exact_matches:
+            stocks = exact_matches
+        else:
+            q = q_raw.lower()
+            # Prioritas 2: Pencarian awalan ticker
+            prefix_matches = [s for s in stocks if s["ticker"].lower().startswith(q)]
+            if prefix_matches:
+                stocks = prefix_matches
+            else:
+                stocks = [
+                    s
+                    for s in stocks
+                    if q in s["ticker"].lower()
+                    or q in s["sector"].lower()
+                    or q in s["trigger_label"].lower()
+                    or q in s["top_buyers"].lower()
+                ]
 
     sort_key_map = {
         "score": lambda x: (x["smart_money_score"], x["vol_ratio"]),

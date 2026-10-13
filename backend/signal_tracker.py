@@ -152,6 +152,7 @@ class SignalTracker:
             "entry_expiry_days": self.entry_expiry_days,
             "max_hold_days": self.max_hold_days,
             "fee_roundtrip_pct": self.fee_roundtrip_pct,
+            "min_value_b_idr": 1.0,
             "db_backend": self.db_backend,
             "final_session_date": last_final_session_date(),
             "trackable_triggers": sorted(TRACKABLE_TRIGGERS),
@@ -181,6 +182,21 @@ class SignalTracker:
                 diff_val = float(diff_bandar)
                 if diff_val > 5.0:
                     return False, f"{ticker}: Jarak harga ke modal bandar ({diff_val:+.1f}%) melebihi batas toleransi aman (maks +5.0%)."
+            except (ValueError, TypeError):
+                pass
+
+        # Filter ke-6: Nilai Transaksi Harian Minimal Rp 1.0 Miliar (Menolak Saham Gorengan Sepi / Tidak Likuid)
+        val_b = stock.get("value_b_idr")
+        if val_b is None and "value_idr" in stock:
+            try:
+                val_b = float(stock["value_idr"]) / 1e9
+            except (ValueError, TypeError):
+                val_b = 0.0
+        if val_b is not None:
+            try:
+                val_num = float(val_b)
+                if val_num < 1.0:
+                    return False, f"{ticker}: Nilai transaksi harian (Rp {val_num:.2f} M) di bawah batas minimal likuiditas (Rp 1.0 Miliar)."
             except (ValueError, TypeError):
                 pass
 

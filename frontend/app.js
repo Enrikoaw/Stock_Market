@@ -1946,7 +1946,7 @@ function renderTrackerStats(data) {
   const cfgLine = document.getElementById('trackerConfigLine');
   if (cfgLine) {
     cfgLine.textContent =
-      `Auto-track: Score ≥ ${c.min_score} · Target TP${c.tp_level} · Entry kedaluwarsa ${c.entry_expiry_days} hari · ` +
+      `Auto-track: Score ≥ ${c.min_score} · Transaksi ≥ Rp 1.0M · Target TP${c.tp_level} · Entry kedaluwarsa ${c.entry_expiry_days} hari · ` +
       `Max hold ${c.max_hold_days} hari · Fee ${c.fee_roundtrip_pct}% · DB: ${c.db_backend} · Candle final s/d ${c.final_session_date}` +
       (data.last_tracker_run ? ` · Evaluasi terakhir: ${data.last_tracker_run}` : '') +
       (data.is_real_market ? '' : ' · ⚠ Dataset aktif bukan data real (tracker pause)');

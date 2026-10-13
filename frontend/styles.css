@@ -488,27 +488,28 @@ html.light .mobile-nav-btn.text-slate-400 {
   transform: scale(1.12);
 }
 
-/* Fixed Bottom Risk Disclaimer Banner */
+/* Risk Disclaimer Banner (Statis di bawah konten, tidak menutupi menu navigasi) */
 .fixed-risk-banner {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 35;
-  background: rgba(6, 10, 18, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 11px;
-  color: #94a3b8;
-  padding: 6px 16px;
-  text-align: center;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  position: static !important;
+  margin-top: 1.5rem !important;
+  margin-bottom: 1.5rem !important;
+  border-radius: 1rem !important;
+  background: rgba(15, 23, 42, 0.55) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  font-size: 11px !important;
+  color: #94a3b8 !important;
+  padding: 12px 18px !important;
+  text-align: center !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+  max-width: 1200px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 html.light .fixed-risk-banner {
-  background: rgba(248, 250, 252, 0.92);
-  border-top: 1px solid #cbd5e1;
-  color: #64748b;
-  box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #64748b !important;
+  box-shadow: 0 4px 15px rgba(15, 23, 42, 0.04) !important;
 }
 
