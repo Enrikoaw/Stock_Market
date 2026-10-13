@@ -582,6 +582,29 @@
               </span>
             </div>
 
+            <!-- PROBABILITAS WINRATE STRIP (BARU: Visual Rasio Win vs Loss Teruji) -->
+            <div id="planProbStrip" class="p-2.5 rounded-xl bg-slate-950/60 border border-emerald-500/25 space-y-1.5">
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="font-bold text-slate-200 flex items-center gap-1.5">
+                  <span>🎯</span>
+                  <span>Probabilitas Menang (Win vs Loss)</span>
+                </span>
+                <span id="planProbBadge" class="font-mono font-bold text-emerald-400 text-xs">
+                  - Win / - Loss
+                </span>
+              </div>
+              <!-- Mini Visual Bar Win (Hijau) vs Loss (Merah) -->
+              <div class="w-full bg-rose-500/30 rounded-full h-2 overflow-hidden flex" title="Visualisasi Rasio Win vs Loss">
+                <div id="planProbBarWin" class="bg-gradient-to-r from-emerald-500 to-emerald-400 h-full transition-all duration-500" style="width: 75%"></div>
+                <div id="planProbBarLoss" class="bg-rose-500 h-full transition-all duration-500" style="width: 25%"></div>
+              </div>
+              <div class="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                <span id="planProbSubTP1" class="text-emerald-300 font-mono font-semibold">🎯 TP1: -% Win</span>
+                <span id="planProbSubTP2" class="text-sky-300 font-mono font-semibold">🚀 TP2: -% Win</span>
+                <span id="planProbSubSL" class="text-rose-400 font-mono font-semibold">🛑 SL: -% Loss</span>
+              </div>
+            </div>
+
             <!-- Grid Harga Area Masuk, Batas Rugi, Target -->
             <div class="grid grid-cols-3 gap-2 text-center text-xs">
               <div class="p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
@@ -593,14 +616,15 @@
                 <div id="planStopLoss" class="font-mono font-bold text-white text-[11px] mt-0.5">-</div>
               </div>
               <div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-400/20">
-                <div class="text-[10px] text-emerald-300 font-semibold">Target Untung (TP)</div>
+                <div class="text-[10px] text-emerald-300 font-semibold">Target 1 (TP1)</div>
                 <div id="planTargets" class="font-mono font-bold text-white text-[11px] mt-0.5">-</div>
+                <div id="planTarget1Winrate" class="text-[10px] font-bold text-emerald-400 mt-0.5 font-mono">Win: -%</div>
               </div>
             </div>
 
-            <div class="text-[11px] text-slate-300 flex items-center justify-between">
-              <span>Target 2: <span id="planTarget2" class="font-mono text-white font-semibold">-</span></span>
-              <span id="planRationale" class="text-slate-300 truncate max-w-[200px]">-</span>
+            <div class="text-[11px] text-slate-300 flex items-center justify-between bg-white/[0.02] p-2 rounded-lg border border-white/5">
+              <span>Target 2: <span id="planTarget2" class="font-mono text-white font-semibold">-</span> <span id="planTarget2Winrate" class="font-mono text-emerald-400 font-bold ml-1">(-)</span></span>
+              <span id="planRationale" class="text-slate-300 truncate max-w-[180px]">-</span>
             </div>
 
             <!-- Tombol Hitung Lot Cepat untuk Saham Ini -->

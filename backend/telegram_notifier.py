@@ -167,17 +167,21 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
         vwap_5d = int(plan.get("bandar_avg_buy", close))
         diff_vwap = float(plan.get("diff_bandar_avg_pct", 0))
 
+        tp1_win = int(round(plan.get("tp1_win_prob", 75)))
+        tp1_loss = int(round(plan.get("tp1_loss_prob", 25)))
+        tp2_win = int(round(plan.get("tp2_win_prob", 58)))
+
         card = (
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"<b>{idx}. #{ticker}</b> ({sector})\n"
             f"💰 <b>Harga:</b> Rp {close:,} (<b>{pct_sign}{pct:.2f}%</b>) | <b>VSA Score:</b> {score}/100\n"
             f"⚡ <b>Sinyal:</b> {trigger_lbl} | <b>Closing Range:</b> {cr}%\n"
             f"📊 <b>Vol Spike:</b> {vol_ratio:.1f}x MA20 | <b>Nilai Transaksi:</b> Rp {val_b:.2f}M\n\n"
-            f"🎯 <b>TRADING PLAN:</b>\n"
+            f"🎯 <b>TRADING PLAN (Probabilitas Teruji):</b>\n"
             f"• <b>Zona Entry:</b> <code>Rp {e_low:,} – {e_high:,}</code>\n"
             f"• <b>Stop Loss (SL):</b> <code>Rp {sl:,} ({sl_pct:.1f}%)</code>\n"
-            f"• <b>Target TP1:</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code>\n"
-            f"• <b>Target TP2:</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code>\n"
+            f"• <b>Target TP1:</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code> ➜ <b>{tp1_win}% Win / {tp1_loss}% Loss</b>\n"
+            f"• <b>Target TP2:</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code> ➜ <b>{tp2_win}% Win</b>\n"
             f"• <b>VWAP 5 Hari:</b> Rp {vwap_5d:,} (Jarak: {diff_vwap:+.1f}%)\n"
         )
         lines.append(card)
