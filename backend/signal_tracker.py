@@ -358,6 +358,8 @@ class SignalTracker:
                 except (ValueError, TypeError):
                     diff_val = 0.0
 
+                cur_close = float(d.get("close") or row.get("last_close") or 0)
+
                 # 1. Aturan khusus WATCHLIST (belum terbeli):
                 #    Jika terdeteksi distribusi volume atau harga sudah lari > 5% di atas VWAP 5H,
                 #    tandai status sebagai CANCELLED (jangan hapus agar riwayat evaluasi jujur & transparan)
@@ -379,7 +381,6 @@ class SignalTracker:
                     continue
 
                 upd: dict[str, Any] = {}
-                cur_close = float(d.get("close") or row.get("last_close") or 0)
                 if cur_close > 0 and float(row.get("last_close") or 0) != cur_close:
                     upd["last_close"] = cur_close
                 if d.get("sector") and row.get("sector") != d.get("sector"):
