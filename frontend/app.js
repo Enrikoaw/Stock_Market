@@ -1,8 +1,12 @@
 /**
  * SmartFlow IDX - Frontend Controller (app.js)
- * Mengelola state screener, filter interaktif, upload Excel, dan grafik Inspector.
+ * Antarmuka Ramah Pemula & Mahir, Kalkulator Lot, Glosarium, Favorit Pribadi,
+ * Live Market Sync, Candlestick Chart.js, dan Forward-Test Signal Tracker.
  */
 
+// =====================================================================
+// GLOBAL STATE
+// =====================================================================
 let currentStocks = [];
 let currentPage = 1;
 const PAGE_SIZE = 50;
@@ -11,6 +15,17 @@ let selectedStockDetail = null;
 let activeChartTab = 'price';
 let chartInstance = null;
 let isSyncingFast = false;
+
+// State Baru: Mode Navigasi, Mode Mahir, & Favorit Pribadi (localStorage)
+let activeMainTab = localStorage.getItem('smartflow_active_tab') || 'today';
+let isExpertMode = localStorage.getItem('smartflow_expert_mode') === 'true';
+let favoriteTickers = [];
+try {
+  favoriteTickers = JSON.parse(localStorage.getItem('smartflow_favorites') || '[]');
+  if (!Array.isArray(favoriteTickers)) favoriteTickers = [];
+} catch (e) {
+  favoriteTickers = [];
+}
 
 // Formatters
 const fmtNumber = (n) => new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
@@ -53,9 +68,581 @@ function toggleTheme() {
   applyTheme(isDark ? 'light' : 'dark');
 }
 
-// Inisialisasi tema segera
 initTheme();
 
+// =====================================================================
+// 3 TOP NAVIGATION TABS (Hari Ini · Jelajah · Pantauan)
+// =====================================================================
+function switchMainTab(tabName) {
+  activeMainTab = tabName;
+  localStorage.setItem('smartflow_active_tab', tabName);
+
+  const secToday = document.getElementById('sectionToday');
+  const secExplore = document.getElementById('sectionExplore');
+  const secWatchlist = document.getElementById('sectionWatchlist');
+
+  const btnToday = document.getElementById('tabNavToday');
+  const btnExplore = document.getElementById('tabNavExplore');
+  const btnWatchlist = document.getElementById('tabNavWatchlist');
+
+  const activeBtnCls = "px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shadow-[0_0_12px_rgba(16,185,129,0.2)]";
+  const inactiveBtnCls = "px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5";
+
+  if (secToday) secToday.classList.toggle('hidden', tabName !== 'today');
+  if (secExplore) secExplore.classList.toggle('hidden', tabName !== 'explore');
+  if (secWatchlist) secWatchlist.classList.toggle('hidden', tabName !== 'watchlist');
+
+  if (btnToday) btnToday.className = tabName === 'today' ? activeBtnCls : inactiveBtnCls;
+  if (btnExplore) btnExplore.className = tabName === 'explore' ? activeBtnCls : inactiveBtnCls;
+  if (btnWatchlist) btnWatchlist.className = tabName === 'watchlist' ? activeBtnCls : inactiveBtnCls;
+
+  if (tabName === 'today') {
+    renderTodayCandidates(currentStocks);
+  } else if (tabName === 'watchlist') {
+    renderFavorites();
+    loadTracker();
+  } else if (tabName === 'explore') {
+    if (selectedStockDetail) {
+      renderInspectorChart(selectedStockDetail);
+    }
+  }
+}
+
+// =====================================================================
+// SAKLAR MODE PEMULA VS MODE MAHIR
+// =====================================================================
+function applyExpertModeUI() {
+  const modeIcon = document.getElementById('modeIcon');
+  const modeLabel = document.getElementById('modeLabel');
+  const kpiContainer = document.getElementById('kpiContainer');
+  const quickFilterNotice = document.getElementById('quickFilterNotice');
+
+  if (isExpertMode) {
+    if (modeIcon) modeIcon.textContent = '🚀';
+    if (modeLabel) modeLabel.textContent = 'Mode Mahir';
+    if (kpiContainer) kpiContainer.classList.remove('hidden');
+    if (quickFilterNotice) quickFilterNotice.classList.remove('hidden');
+    document.querySelectorAll('.expert-only').forEach(el => el.classList.remove('hidden'));
+  } else {
+    if (modeIcon) modeIcon.textContent = '🌱';
+    if (modeLabel) modeLabel.textContent = 'Mode Pemula';
+    if (kpiContainer) kpiContainer.classList.add('hidden');
+    if (quickFilterNotice) quickFilterNotice.classList.add('hidden');
+    document.querySelectorAll('.expert-only').forEach(el => el.classList.add('hidden'));
+  }
+}
+
+function toggleExpertMode() {
+  isExpertMode = !isExpertMode;
+  localStorage.setItem('smartflow_expert_mode', isExpertMode ? 'true' : 'false');
+  applyExpertModeUI();
+  showToast(
+    isExpertMode
+      ? 'Beralih ke Mode Mahir (seluruh kartu KPI & filter teknis aktif).'
+      : 'Beralih ke Mode Pemula (antarmuka bersih & ramah risiko).',
+    'success'
+  );
+}
+
+// =====================================================================
+// FAVORIT PRIBADI (★) - LOCALSTORAGE
+// =====================================================================
+function isFavorite(ticker) {
+  if (!ticker) return false;
+  return favoriteTickers.includes(ticker.trim().toUpperCase());
+}
+
+function toggleFavorite(ticker, e = null) {
+  if (e) {
+    e.stopPropagation();
+  }
+  if (!ticker) return;
+  const clean = ticker.trim().toUpperCase();
+  const idx = favoriteTickers.indexOf(clean);
+
+  if (idx >= 0) {
+    favoriteTickers.splice(idx, 1);
+    showToast(`Dihapus dari Favorit: ${clean}`);
+  } else {
+    favoriteTickers.push(clean);
+    showToast(`★ Disimpan ke Favorit: ${clean}`);
+  }
+
+  localStorage.setItem('smartflow_favorites', JSON.stringify(favoriteTickers));
+
+  // Perbarui semua tombol bintang di tabel dan kartu
+  document.querySelectorAll(`.star-btn-${clean}`).forEach(btn => {
+    btn.innerHTML = isFavorite(clean) ? '★' : '☆';
+    btn.className = `star-btn star-btn-${clean} text-base transition ${isFavorite(clean) ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-500 hover:text-amber-300'}`;
+  });
+
+  if (activeMainTab === 'watchlist') {
+    renderFavorites();
+  }
+  if (activeMainTab === 'today') {
+    renderTodayCandidates(currentStocks);
+  }
+}
+
+function renderFavorites() {
+  const container = document.getElementById('favoritesContainer');
+  const countBadge = document.getElementById('favoritesCountBadge');
+  if (countBadge) countBadge.textContent = `${favoriteTickers.length} Saham`;
+  if (!container) return;
+
+  if (favoriteTickers.length === 0) {
+    container.innerHTML = `
+      <div class="col-span-full py-8 text-center text-xs text-slate-400 glass-subcard rounded-xl p-6">
+        <span class="text-2xl mb-2 block">⭐</span>
+        <p class="font-semibold text-slate-200">Belum ada saham favorit tersimpan.</p>
+        <p class="text-[11px] text-slate-400 mt-1">
+          Klik tanda bintang (★) pada kartu saham di tab <b>Hari Ini</b> atau tabel di tab <b>Jelajah</b> untuk menyimpannya di sini.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  // Cari data saham di currentStocks
+  const cardsHtml = favoriteTickers.map(ticker => {
+    const s = currentStocks.find(x => x.ticker === ticker) || {
+      ticker,
+      close: 0,
+      pct_change: 0,
+      smart_money_score: '-',
+      sector: 'Favorit Tersimpan',
+      trigger_type: 'ALL',
+      trigger_label: 'Pantauan'
+    };
+
+    const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
+    return `
+      <div class="p-3.5 rounded-xl glass-subcard border border-white/[0.08] hover:border-amber-400/40 transition flex flex-col justify-between gap-3">
+        <div class="flex items-start justify-between">
+          <div class="flex items-center gap-2.5">
+            ${getStockLogoImg(s.ticker, 'w-8 h-8')}
+            <div>
+              <div class="font-mono font-black text-sm text-white flex items-center gap-1.5">
+                <span>${s.ticker}</span>
+                <span class="text-[10px] font-sans font-bold px-1.5 py-0.2 rounded bg-white/[0.08] text-slate-300">Skor ${s.smart_money_score}</span>
+              </div>
+              <div class="text-[10px] text-slate-400 truncate max-w-[130px]">${s.sector}</div>
+            </div>
+          </div>
+          <button onclick="toggleFavorite('${s.ticker}', event)" class="text-amber-400 hover:text-rose-400 text-lg transition leading-none" title="Hapus dari favorit">
+            ★
+          </button>
+        </div>
+
+        <div class="flex items-baseline justify-between border-t border-white/[0.06] pt-2">
+          <div>
+            <div class="font-mono font-bold text-sm text-white">${s.close ? fmtPrice(s.close) : '-'}</div>
+            <div class="font-mono text-[11px] font-semibold ${chgColor}">${s.close ? fmtSignPct(s.pct_change) : ''}</div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="openLotCalculatorForTicker('${s.ticker}')" class="px-2 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-400/30 text-[10px] font-semibold transition" title="Kalkulator Lot">
+              🧮 Lot
+            </button>
+            <button onclick="selectStockAndGoToInspector('${s.ticker}')" class="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-[10px] font-semibold transition" title="Buka Detail">
+              Lihat Detail →
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = cardsHtml;
+}
+
+// =====================================================================
+// TAB 1: KANDIDAT PILIHAN HARI INI (BERANDA PEMULA)
+// =====================================================================
+function getScoreStrengthDots(score) {
+  if (score >= 80) return { dots: '●●●●', label: 'Sangat Kuat', color: 'text-emerald-400' };
+  if (score >= 70) return { dots: '●●●○', label: 'Kuat', color: 'text-teal-300' };
+  if (score >= 60) return { dots: '●●○○', label: 'Cukup', color: 'text-blue-300' };
+  return { dots: '●○○○', label: 'Netral', color: 'text-slate-400' };
+}
+
+function getHumanExplanation(s) {
+  const volTxt = s.vol_ratio >= 1.5
+    ? `Volume perdagangan hari ini melonjak ${s.vol_ratio.toFixed(1)}x rata-rata 20 hari, menandakan minat beli nyata.`
+    : `Aktivitas volume stabil dan likuiditas sehat.`;
+
+  const vwapDiff = s.diff_bandar_avg_pct || 0;
+  let vwapTxt = '';
+  if (vwapDiff <= 0) {
+    vwapTxt = `Harga masih berada di bawah rata-rata modal bandar 5 hari (${fmtPrice(s.bandar_avg_buy)}), memberikan area diskon relatif aman.`;
+  } else if (vwapDiff <= 3.0) {
+    vwapTxt = `Harga berada dekat area rata-rata modal bandar 5 hari (${fmtPrice(s.bandar_avg_buy)}), risiko masuk masih terukur.`;
+  } else {
+    vwapTxt = `Harga sudah naik ${vwapDiff.toFixed(1)}% di atas modal rata-rata 5 hari bandar, disiplin pasang batas rugi.`;
+  }
+
+  return `${volTxt} ${vwapTxt}`;
+}
+
+function renderTodayCandidates(stocks) {
+  const container = document.getElementById('todayCandidatesGrid');
+  if (!container) return;
+
+  if (!stocks || stocks.length === 0) {
+    container.innerHTML = `
+      <div class="col-span-full p-8 rounded-2xl glass-panel text-center text-slate-300 text-xs">
+        Belum ada data saham yang dimuat. Silakan tunggu sinkronisasi atau unggah data.
+      </div>
+    `;
+    return;
+  }
+
+  // Filter kandidat terbaik untuk pemula:
+  // 1. Skor Smart Money >= 70
+  // 2. Turnover likuid (value_b_idr >= 1.0 Miliar)
+  // 3. Kenaikan belum berlebihan (-2% <= pct_change <= 6%)
+  let candidates = stocks.filter(s =>
+    s.smart_money_score >= 70 &&
+    (s.value_b_idr || 0) >= 1.0 &&
+    s.pct_change >= -3.0 &&
+    s.pct_change <= 7.0 &&
+    s.trigger_type !== 'DISTRIBUTION_WARNING'
+  );
+
+  // Fallback jika kriteria terlalu ketat: ambil top 3-5 berdasarkan skor tertinggi yang bukan distribusi
+  if (candidates.length < 3) {
+    candidates = stocks
+      .filter(s => s.trigger_type !== 'DISTRIBUTION_WARNING')
+      .sort((a, b) => b.smart_money_score - a.smart_money_score)
+      .slice(0, 5);
+  } else {
+    candidates = candidates.slice(0, 6);
+  }
+
+  if (candidates.length === 0) {
+    container.innerHTML = `
+      <div class="col-span-full p-8 rounded-2xl glass-panel text-center text-slate-300 text-xs space-y-2">
+        <span class="text-3xl block">🛡️</span>
+        <div class="text-sm font-bold text-white">Pasar Sedang Defensif / Belum Ada Setup Ideal</div>
+        <p class="max-w-md mx-auto text-slate-400">
+          Sistem tidak menemukan saham yang memenuhi syarat keamanan pemula hari ini. Menahan diri di posisi Cash adalah keputusan cerdas saat pasar belum memberi peluang aman!
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = candidates.map(s => {
+    const starActive = isFavorite(s.ticker);
+    const strength = getScoreStrengthDots(s.smart_money_score);
+    const reasonText = getHumanExplanation(s);
+    const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
+
+    // Rencana trading sederhana
+    const entryLow = Math.round(s.close * 0.985);
+    const entryHigh = Math.round(s.close * 1.015);
+    const stopLoss = Math.round(s.close * 0.95);
+    const target1 = Math.round(s.close * 1.06);
+
+    const slPct = (((stopLoss - s.close) / s.close) * 100).toFixed(1);
+    const tpPct = (((target1 - s.close) / s.close) * 100).toFixed(1);
+
+    // Tingkat Risiko
+    let riskBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">Risiko Rendah</span>';
+    if (s.vol_ratio > 2.5 || s.pct_change > 4.5) {
+      riskBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-400/30">Risiko Sedang</span>';
+    }
+
+    return `
+      <div class="p-5 rounded-2xl glass-panel border border-white/[0.08] hover:border-emerald-400/40 transition shadow-lg flex flex-col justify-between gap-4">
+        
+        <!-- Header: Logo, Ticker, Star, Price -->
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-3">
+            ${getStockLogoImg(s.ticker, 'w-10 h-10')}
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="font-mono font-black text-base text-white">${s.ticker}</span>
+                <button
+                  onclick="toggleFavorite('${s.ticker}', event)"
+                  class="star-btn star-btn-${s.ticker} text-lg leading-none ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-500 hover:text-amber-300'}"
+                  title="Simpan ke Favorit"
+                >
+                  ${starActive ? '★' : '☆'}
+                </button>
+              </div>
+              <div class="text-[11px] text-slate-400 truncate max-w-[140px]">${s.sector}</div>
+            </div>
+          </div>
+
+          <div class="text-right">
+            <div class="font-mono font-black text-base text-white">${fmtPrice(s.close)}</div>
+            <div class="font-mono text-xs font-bold ${chgColor}">${fmtSignPct(s.pct_change)}</div>
+          </div>
+        </div>
+
+        <!-- Kekuatan Smart Money (Bahasa Biasa) -->
+        <div class="p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-between text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="font-mono ${strength.color}">${strength.dots}</span>
+            <span class="text-white font-bold">${strength.label}</span>
+            <span class="text-slate-400 text-[11px]">(Skor ${s.smart_money_score})</span>
+          </div>
+          ${riskBadge}
+        </div>
+
+        <!-- Kenapa Masuk Radar? (Narasi Ramah) -->
+        <div class="space-y-1">
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+            <span>💡</span>
+            <span>Kenapa Masuk Radar?</span>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            ${reasonText}
+          </p>
+        </div>
+
+        <!-- Skenario Trading Sederhana (Area Masuk, SL, TP) -->
+        <div class="p-3 rounded-xl glass-subcard border border-white/[0.06] space-y-2 text-xs">
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Skenario Terukur:</div>
+          <div class="grid grid-cols-3 gap-1.5 text-center font-mono">
+            <div class="p-1.5 rounded-lg bg-blue-500/10 border border-blue-400/20">
+              <div class="text-[10px] text-blue-300 font-sans font-semibold">Area Beli</div>
+              <div class="text-white font-bold text-[11px] mt-0.5">${fmtNumber(entryLow)}-${fmtNumber(entryHigh)}</div>
+            </div>
+            <div class="p-1.5 rounded-lg bg-rose-500/10 border border-rose-400/20">
+              <div class="text-[10px] text-rose-300 font-sans font-semibold">Batas Rugi (SL)</div>
+              <div class="text-rose-300 font-bold text-[11px] mt-0.5">${fmtNumber(stopLoss)} (${slPct}%)</div>
+            </div>
+            <div class="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-400/20">
+              <div class="text-[10px] text-emerald-300 font-sans font-semibold">Target Untung (TP)</div>
+              <div class="text-emerald-300 font-bold text-[11px] mt-0.5">${fmtNumber(target1)} (+${tpPct}%)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tombol Aksi -->
+        <div class="flex items-center gap-2 pt-1">
+          <button
+            onclick="openLotCalculatorForStockDetails('${s.ticker}', ${s.close}, ${stopLoss})"
+            class="flex-1 py-2 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-400/30 text-xs font-semibold transition flex items-center justify-center gap-1"
+          >
+            <span>🧮</span>
+            <span>Hitung Lot</span>
+          </button>
+          <button
+            onclick="selectStockAndGoToInspector('${s.ticker}')"
+            class="flex-1 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition flex items-center justify-center gap-1"
+          >
+            <span>Lihat Detail</span>
+            <span>→</span>
+          </button>
+        </div>
+
+      </div>
+    `;
+  }).join('');
+}
+
+function selectStockAndGoToInspector(ticker) {
+  switchMainTab('explore');
+  selectStock(ticker, true);
+}
+
+// =====================================================================
+// KALKULATOR LOT & UKURAN RISIKO INTERAKTIF
+// =====================================================================
+function openLotCalculatorModal() {
+  const modal = document.getElementById('lotCalculatorModal');
+  if (modal) modal.classList.remove('hidden');
+
+  // Pre-fill jika ada saham yang sedang dipilih
+  if (selectedStockDetail) {
+    const entryInput = document.getElementById('calcModalEntry');
+    const stopInput = document.getElementById('calcModalStop');
+    if (entryInput) entryInput.value = selectedStockDetail.close;
+    if (stopInput) {
+      const sl = selectedStockDetail.trading_plan ? selectedStockDetail.trading_plan.stop_loss : Math.round(selectedStockDetail.close * 0.95);
+      stopInput.value = sl;
+    }
+  }
+  runModalLotCalculation();
+}
+
+function openLotCalculatorForStockDetails(ticker, price, stopLoss) {
+  const modal = document.getElementById('lotCalculatorModal');
+  if (modal) modal.classList.remove('hidden');
+
+  const entryInput = document.getElementById('calcModalEntry');
+  const stopInput = document.getElementById('calcModalStop');
+  if (entryInput) entryInput.value = price;
+  if (stopInput) stopInput.value = stopLoss;
+
+  runModalLotCalculation();
+}
+
+function openLotCalculatorForTicker(ticker) {
+  const s = currentStocks.find(x => x.ticker === ticker);
+  if (s) {
+    const sl = Math.round(s.close * 0.95);
+    openLotCalculatorForStockDetails(s.ticker, s.close, sl);
+  } else {
+    openLotCalculatorModal();
+  }
+}
+
+function closeLotCalculatorModal() {
+  const modal = document.getElementById('lotCalculatorModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function runModalLotCalculation() {
+  const capital = parseFloat(document.getElementById('calcModalCapital')?.value) || 0;
+  const riskPct = parseFloat(document.getElementById('calcModalRiskPct')?.value) || 0;
+  const entry = parseFloat(document.getElementById('calcModalEntry')?.value) || 0;
+  const stop = parseFloat(document.getElementById('calcModalStop')?.value) || 0;
+
+  const lotEl = document.getElementById('resLotCount');
+  const valEl = document.getElementById('resTotalVal');
+  const riskEl = document.getElementById('resMaxRisk');
+
+  if (entry <= stop) {
+    if (lotEl) lotEl.textContent = '0 Lot (Batas Rugi harus < Harga Beli!)';
+    if (valEl) valEl.textContent = 'Rp 0';
+    if (riskEl) riskEl.textContent = 'Periksa kembali harga batas rugi';
+    return;
+  }
+
+  const perShareRisk = entry - stop;
+  const maxRiskRp = capital * (riskPct / 100);
+
+  let lots = 0;
+  if (perShareRisk > 0 && entry > 0) {
+    const lotsByRisk = Math.floor(maxRiskRp / (perShareRisk * 100));
+    const lotsByCap = Math.floor(capital / (entry * 100));
+    lots = Math.max(0, Math.min(lotsByRisk, lotsByCap));
+  }
+
+  const totalCost = lots * entry * 100;
+  const actualRiskRp = lots * perShareRisk * 100;
+  const actualRiskPct = capital > 0 ? ((actualRiskRp / capital) * 100).toFixed(1) : '0.0';
+
+  if (lotEl) lotEl.textContent = `${fmtNumber(lots)} Lot (${fmtNumber(lots * 100)} Lembar)`;
+  if (valEl) valEl.textContent = fmtPrice(totalCost);
+  if (riskEl) riskEl.textContent = `${fmtPrice(actualRiskRp)} (${actualRiskPct}% dari modal)`;
+}
+
+// =====================================================================
+// KAMUS ISTILAH SAHAM INTERAKTIF (GLOSSARY)
+// =====================================================================
+const GLOSSARY_TERMS = {
+  smart_money: {
+    title: 'Smart Money (Bandar / Investor Institusi)',
+    badge: 'Konsep Dasar',
+    desc: 'Pelaku pasar bermodal sangat besar (manajer investasi, dana pensiun, institusi asing, atau bandar profesional). Pergerakan akumulasi atau distribusi dana mereka menggerakkan tren harga saham utama.'
+  },
+  vwap: {
+    title: 'VWAP 5 Hari (Volume-Weighted Average Price)',
+    badge: 'Indikator Modal',
+    desc: 'Rata-rata harga beli saham yang dibobotkan dengan volume transaksi selama 5 hari bursa terakhir. Level ini mencerminkan perkiraan modal rata-rata pelaku pasar besar. Membeli dekat area VWAP meminimalkan risiko harga berbalik turun.'
+  },
+  vsa: {
+    title: 'VSA (Volume Spread Analysis)',
+    badge: 'Analisis Candle',
+    desc: 'Metodologi membaca niat pasar dengan mengamati lebar rentang candle (spread harga tinggi-rendah) dipadukan dengan volume transaksi. Kenaikan harga disertai lonjakan volume menandakan permintaan beli nyata.'
+  },
+  stop_loss: {
+    title: 'Batas Rugi (Stop Loss / SL)',
+    badge: 'Pagar Pengaman',
+    desc: 'Tingkat harga yang ditentukan sebelum membeli di mana Anda wajib menjual saham untuk membatasi kerugian. Stop loss melindungi modal Anda dari penurunan harga yang dalam (nyangkut).'
+  },
+  take_profit: {
+    title: 'Target Untung (Take Profit / TP)',
+    badge: 'Strategi Keluar',
+    desc: 'Tingkat harga target di mana Anda merealisasikan keuntungan sesuai skenario trading yang telah direncanakan.'
+  },
+  risk_reward: {
+    title: 'Rasio Risiko terhadap Keuntungan (Risk/Reward)',
+    badge: 'Manajemen Risiko',
+    desc: 'Perbandingan potensi kerugian terhadap potensi keuntungan. Rasio 1 : 2 artinya jika Anda siap menanggung risiko rugi Rp 100.000, maka potensi keuntungan minimal yang ditargetkan adalah Rp 200.000.'
+  },
+  lot: {
+    title: '1 Lot Saham',
+    badge: 'Ketentuan Bursa',
+    desc: 'Satuan standar transaksi di Bursa Efek Indonesia (BEI). 1 Lot sama dengan 100 lembar saham.'
+  },
+  markup: {
+    title: 'Markup Breakout',
+    badge: 'Fase Tren',
+    desc: 'Fase di mana harga didorong naik menembus area resisten disertai volume besar setelah tahap akumulasi selesai.'
+  },
+  akumulasi: {
+    title: 'Akumulasi Bertahap',
+    badge: 'Fase Tren',
+    desc: 'Tahap pengumpulan saham oleh Smart Money secara tenang dan perlahan di rentang harga tertentu tanpa membuat harga melonjak drastis.'
+  },
+  distribusi: {
+    title: 'Peringatan Distribusi (Waspada)',
+    badge: 'Peringatan Risiko',
+    desc: 'Fase di mana Smart Money mulai menjual saham mereka kepada investor ritel di harga tinggi sebelum harga mengalami penurunan signifikan.'
+  }
+};
+
+function openGlossaryModal(termKey = 'all') {
+  const modal = document.getElementById('glossaryModal');
+  const body = document.getElementById('glossaryBody');
+  if (!modal || !body) return;
+
+  const entries = termKey === 'all'
+    ? Object.entries(GLOSSARY_TERMS)
+    : Object.entries(GLOSSARY_TERMS).filter(([k]) => k === termKey);
+
+  body.innerHTML = entries.map(([key, item]) => `
+    <div class="p-3.5 rounded-xl glass-subcard border border-white/[0.08] space-y-1.5" id="glossary-${key}">
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-bold text-white text-xs">${item.title}</span>
+        <span class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">${item.badge}</span>
+      </div>
+      <p class="text-xs text-slate-300 leading-relaxed">${item.desc}</p>
+    </div>
+  `).join('');
+
+  modal.classList.remove('hidden');
+}
+
+function closeGlossaryModal() {
+  const modal = document.getElementById('glossaryModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+// =====================================================================
+// PENGATURAN & ALAT TEKNIS MODAL (GEAR ICON)
+// =====================================================================
+function openSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function toggleExpertPillarsView() {
+  const content = document.getElementById('expertPillarsContent');
+  const btn = document.getElementById('btnTogglePillars');
+  if (!content) return;
+  const isHidden = content.classList.contains('hidden');
+  content.classList.toggle('hidden', !isHidden);
+  if (btn) btn.textContent = isHidden ? 'Sembunyikan Rincian' : 'Tampilkan Rincian';
+}
+
+function openTradingViewSuperchart(ticker) {
+  openTradingViewModal();
+}
+
+// =====================================================================
+// BADGES & HELPERS
+// =====================================================================
 function getTriggerBadgeClass(triggerType) {
   switch (triggerType) {
     case 'MARKUP_BREAKOUT':
@@ -98,6 +685,7 @@ function getStockLogoImg(ticker, sizeCls = 'w-7 h-7') {
 
 function showToast(msg, type = 'success') {
   const banner = document.getElementById('toastBanner');
+  if (!banner) return;
   const text = document.getElementById('toastMessage');
   banner.classList.remove(
     'hidden',
@@ -113,15 +701,22 @@ function showToast(msg, type = 'success') {
   } else {
     banner.classList.add('bg-emerald-950/90', 'border-emerald-500/40', 'text-emerald-200');
   }
-  text.textContent = msg;
+  if (text) text.textContent = msg;
+
+  setTimeout(() => {
+    banner.classList.add('hidden');
+  }, 4000);
 }
 
+// =====================================================================
+// DATA LOADING: SCREENER & KPIS
+// =====================================================================
 async function loadScreenerData(preserveSelection = false) {
-  const trigger = document.getElementById('filterTrigger').value;
-  const minVol = document.getElementById('filterVolRatio').value;
-  const minScore = document.getElementById('filterMinScore').value;
-  const sortBy = document.getElementById('filterSortBy').value;
-  const search = document.getElementById('filterSearch').value.trim();
+  const trigger = document.getElementById('filterTrigger')?.value || 'ALL';
+  const minVol = document.getElementById('filterVolRatio')?.value || '1.0';
+  const minScore = document.getElementById('filterMinScore')?.value || '0';
+  const sortBy = document.getElementById('filterSortBy')?.value || 'score_desc';
+  const search = document.getElementById('filterSearch')?.value.trim() || '';
 
   const params = new URLSearchParams({
     trigger,
@@ -137,16 +732,22 @@ async function loadScreenerData(preserveSelection = false) {
     if (!res.ok) throw new Error('Gagal mengambil data screener');
     const data = await res.json();
 
-    document.getElementById('activeSourceBadge').textContent = data.source_name;
+    const srcBadge = document.getElementById('activeSourceBadge');
+    if (srcBadge) srcBadge.textContent = data.source_name;
+
     const syncEl = document.getElementById('lastSyncBadge');
     if (syncEl && data.last_sync_time) {
       syncEl.textContent = `Update: ${data.last_sync_time} (Auto ${data.auto_sync_interval_min || 30}m)`;
     }
+
     updateKPICards(data.kpis, trigger);
 
     currentStocks = data.stocks || [];
     if (!preserveSelection) currentPage = 1;
     renderScreenerTable(currentStocks);
+
+    // Render kartu pilihan hari ini
+    renderTodayCandidates(currentStocks);
 
     if (currentStocks.length > 0) {
       const targetTicker =
@@ -211,7 +812,6 @@ function renderKpiDeltaBadge(deltaId, labelId, pctChange, diffVal, prevVal, inve
     ? `${numDiff > 0 ? '+' : ''}${numDiff.toFixed(1)}`
     : `${numDiff > 0 ? '+' : ''}${Math.round(numDiff)}`;
 
-  // Warna positif (hijau) vs negatif (merah). Untuk Distribution Warning, kenaikan distribusi = merah (waspada)
   const isPositiveGood = invertColor ? numDiff < 0 : numDiff > 0;
   const isNegativeBad = invertColor ? numDiff > 0 : numDiff < 0;
 
@@ -249,75 +849,61 @@ function updateKPICards(kpis, currentTrigger) {
 
   if (kpis.market_regime) {
     const autoTimerEl = document.getElementById('marketAutoTimer');
+    const todayRegimeBadge = document.getElementById('todayRegimeBadge');
+    const todayMarketSentence = document.getElementById('todayMarketSentence');
+
+    const isBull = kpis.market_regime.status.includes('BULLISH');
+    const badgeCls = isBull ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold';
+
     if (autoTimerEl) {
-      const isBull = kpis.market_regime.status.includes('BULLISH');
-      const badgeCls = isBull ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold';
       autoTimerEl.innerHTML = `<span class="${badgeCls}" title="${kpis.market_regime.regime_note}">Regime: ${kpis.market_regime.status.split(' / ')[0]} (${kpis.market_regime.breadth_ma50_pct}% > MA50)</span>`;
+    }
+
+    if (todayRegimeBadge) {
+      todayRegimeBadge.textContent = kpis.market_regime.status.split(' / ')[0];
+      todayRegimeBadge.className = `text-[10px] font-semibold px-2 py-0.5 rounded-full ${isBull ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30' : 'bg-amber-500/15 text-amber-300 border border-amber-400/30'}`;
+    }
+
+    if (todayMarketSentence) {
+      const breadth = kpis.market_regime.breadth_ma50_pct;
+      if (breadth >= 55) {
+        todayMarketSentence.textContent = `Pasar cenderung kuat (Bullish) dengan ${breadth}% saham berada di atas rata-rata 50 hari (MA50). Sangat kondusif untuk strategi swing breakout terukur.`;
+      } else if (breadth >= 40) {
+        todayMarketSentence.textContent = `Pasar berada dalam fase konsolidasi sehat (${breadth}% saham di atas MA50). Rotasi dana selektif, utamakan saham dengan skor akumulasi tertinggi.`;
+      } else {
+        todayMarketSentence.textContent = `Kondisi pasar defensif (${breadth}% saham di atas MA50). Disarankan bersikap konservatif dan prioritaskan menjaga modal tunai (cash).`;
+      }
     }
   }
 
-  // Update real vs kemarin badges & 10-day sparklines
-  const c1Hex = renderKpiDeltaBadge(
-    'kpiAllDelta',
-    'kpiAllVsLabel',
-    kpis.avg_score_pct_change,
-    kpis.avg_score_diff,
-    kpis.prev_avg_smart_money_score !== undefined ? `Skor ${kpis.prev_avg_smart_money_score}` : null,
-    false,
-    true
-  );
+  // Update sparklines KPI
+  const c1Hex = renderKpiDeltaBadge('kpiAllDelta', 'kpiAllVsLabel', kpis.avg_score_pct_change, kpis.avg_score_diff, kpis.prev_avg_smart_money_score !== undefined ? `Skor ${kpis.prev_avg_smart_money_score}` : null, false, true);
   renderKpiSparkline('kpiAllSpark', 'sparkGrad1', kpis.trend_avg_score, c1Hex);
 
-  const c2Hex = renderKpiDeltaBadge(
-    'kpiMarkupDelta',
-    'kpiMarkupVsLabel',
-    kpis.markup_pct_change,
-    kpis.markup_diff,
-    kpis.prev_markup_triggers,
-    false,
-    false
-  );
+  const c2Hex = renderKpiDeltaBadge('kpiMarkupDelta', 'kpiMarkupVsLabel', kpis.markup_pct_change, kpis.markup_diff, kpis.prev_markup_triggers, false, false);
   renderKpiSparkline('kpiMarkupSpark', 'sparkGrad2', kpis.trend_markup, c2Hex);
 
-  const c3Hex = renderKpiDeltaBadge(
-    'kpiAccumDelta',
-    'kpiAccumVsLabel',
-    kpis.accum_pct_change,
-    kpis.accum_diff,
-    kpis.prev_accum_triggers,
-    false,
-    false
-  );
+  const c3Hex = renderKpiDeltaBadge('kpiAccumDelta', 'kpiAccumVsLabel', kpis.accum_pct_change, kpis.accum_diff, kpis.prev_accum_triggers, false, false);
   renderKpiSparkline('kpiAccumSpark', 'sparkGrad3', kpis.trend_accum, c3Hex);
 
-  const c4Hex = renderKpiDeltaBadge(
-    'kpiDistDelta',
-    'kpiDistVsLabel',
-    kpis.dist_pct_change,
-    kpis.dist_diff,
-    kpis.prev_distribution_warnings,
-    true,
-    false
-  );
+  const c4Hex = renderKpiDeltaBadge('kpiDistDelta', 'kpiDistVsLabel', kpis.dist_pct_change, kpis.dist_diff, kpis.prev_distribution_warnings, true, false);
   renderKpiSparkline('kpiDistSpark', 'sparkGrad4', kpis.trend_dist, c4Hex);
 
-  // Highlight active KPI card
-  const mapCard = {
-    ALL: 'kpiAll',
-    MARKUP_BREAKOUT: 'kpiMarkup',
-    ACCUM_ALL: 'kpiAccum',
-    DISTRIBUTION_WARNING: 'kpiDist',
-  };
+  // Highlight KPI card
+  const mapCard = { ALL: 'kpiAll', MARKUP_BREAKOUT: 'kpiMarkup', ACCUM_ALL: 'kpiAccum', DISTRIBUTION_WARNING: 'kpiDist' };
   ['kpiAll', 'kpiMarkup', 'kpiAccum', 'kpiDist'].forEach((id) => {
-    document.getElementById(id).classList.remove('active-filter');
+    const cardEl = document.getElementById(id);
+    if (cardEl) cardEl.classList.remove('active-filter');
   });
   if (mapCard[currentTrigger]) {
-    document.getElementById(mapCard[currentTrigger]).classList.add('active-filter');
+    const targetCard = document.getElementById(mapCard[currentTrigger]);
+    if (targetCard) targetCard.classList.add('active-filter');
   }
 }
 
 function applyQuickFilter(triggerCode) {
-  document.getElementById('filterTrigger').value = triggerCode;
+  const triggerEl = document.getElementById('filterTrigger');
+  if (triggerEl) triggerEl.value = triggerCode;
   loadScreenerData(false);
 }
 
@@ -327,17 +913,25 @@ function changePage(delta) {
   renderScreenerTable(currentStocks);
 }
 
+// =====================================================================
+// TABLE SCREENER (TAB JELAJAH)
+// =====================================================================
 function renderScreenerTable(stocks) {
   const tbody = document.getElementById('screenerTableBody');
+  if (!tbody) return;
+
   const totalPages = Math.max(1, Math.ceil(stocks.length / PAGE_SIZE));
   if (currentPage > totalPages) currentPage = totalPages;
 
   const startIdx = (currentPage - 1) * PAGE_SIZE;
   const pageStocks = stocks.slice(startIdx, startIdx + PAGE_SIZE);
 
-  document.getElementById('tableResultCount').textContent = stocks.length
-    ? `Menampilkan ${startIdx + 1}-${startIdx + pageStocks.length} dari ${stocks.length} saham`
-    : 'Menampilkan 0 saham';
+  const resultCountEl = document.getElementById('tableResultCount');
+  if (resultCountEl) {
+    resultCountEl.textContent = stocks.length
+      ? `Menampilkan ${startIdx + 1}-${startIdx + pageStocks.length} dari ${stocks.length} saham`
+      : 'Menampilkan 0 saham';
+  }
 
   const pageInd = document.getElementById('pageIndicator');
   const btnPrev = document.getElementById('btnPrevPage');
@@ -360,32 +954,25 @@ function renderScreenerTable(stocks) {
   tbody.innerHTML = pageStocks
     .map((s) => {
       const isSelected = s.ticker === selectedTicker;
+      const starActive = isFavorite(s.ticker);
       const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
-      const volColor =
-        s.vol_ratio >= 2.0
-          ? 'text-amber-300 font-bold'
-          : s.vol_ratio >= 1.35
-          ? 'text-emerald-300 font-semibold'
-          : 'text-slate-300';
-      const bsrColor =
-        s.top3_bsr >= 1.35
-          ? 'text-emerald-400 font-bold'
-          : s.top3_bsr < 0.85
-          ? 'text-rose-400 font-semibold'
-          : 'text-slate-300';
-      const foreignColor = s.net_foreign_pct >= 0 ? 'text-emerald-400' : 'text-rose-400';
-      const badgeCls = getTriggerBadgeClass(s.trigger_type);
-      const barGrad = getScoreColor(s.smart_money_score);
 
       return `
         <tr
           id="row-${s.ticker}"
           onclick="selectStock('${s.ticker}')"
-          class="stock-row hover:bg-white/[0.05] transition-colors ${isSelected ? 'selected-row' : ''}"
+          class="stock-row hover:bg-white/[0.05] transition-colors cursor-pointer ${isSelected ? 'selected-row' : ''}"
         >
-          <!-- Ticker & Logo -->
+          <!-- Ticker & Logo & Star -->
           <td class="py-3 pl-4 pr-2">
             <div class="flex items-center gap-2.5">
+              <button
+                onclick="toggleFavorite('${s.ticker}', event)"
+                class="star-btn star-btn-${s.ticker} text-base leading-none transition ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-500 hover:text-amber-300'}"
+                title="Simpan ke Favorit"
+              >
+                ${starActive ? '★' : '☆'}
+              </button>
               ${getStockLogoImg(s.ticker, 'w-8 h-8')}
               <div>
                 <div class="font-mono font-black text-sm text-white">${s.ticker}</div>
@@ -436,10 +1023,12 @@ function renderScreenerTable(stocks) {
     .join('');
 }
 
+// =====================================================================
+// INSPECTOR PANEL & DETAIL SAHAM
+// =====================================================================
 async function selectStock(ticker, scrollToTradingPlan = false) {
   selectedTicker = ticker;
 
-  // Update row highlight
   document.querySelectorAll('.stock-row').forEach((el) => el.classList.remove('selected-row'));
   const activeRow = document.getElementById(`row-${ticker}`);
   if (activeRow) activeRow.classList.add('selected-row');
@@ -471,17 +1060,24 @@ function renderInspectorPanel(d) {
   const logoEl = document.getElementById('inspLogoContainer');
   if (logoEl) logoEl.innerHTML = getStockLogoImg(d.ticker, 'w-10 h-10');
 
-  document.getElementById('inspTicker').textContent = d.ticker;
-  const badgeEl = document.getElementById('inspTriggerBadge');
-  badgeEl.textContent = d.trigger_label;
-  badgeEl.className = `text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${getTriggerBadgeClass(d.trigger_type)}`;
+  const tickerEl = document.getElementById('inspTicker');
+  if (tickerEl) tickerEl.textContent = d.ticker;
 
-  document.getElementById('inspSector').textContent = `${d.sector} • Update: ${d.date}`;
-  document.getElementById('inspPrice').textContent = fmtPrice(d.close);
+  const badgeEl = document.getElementById('inspTriggerBadge');
+  if (badgeEl) {
+    badgeEl.textContent = d.trigger_label;
+    badgeEl.className = `text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${getTriggerBadgeClass(d.trigger_type)}`;
+  }
+
+  const sectorEl = document.getElementById('inspSector');
+  if (sectorEl) sectorEl.textContent = `${d.sector} • Update: ${d.date}`;
+
+  const priceEl = document.getElementById('inspPrice');
+  if (priceEl) priceEl.textContent = fmtPrice(d.close);
 
   const chgEl = document.getElementById('inspPctChange');
   if (chgEl) {
-    chgEl.textContent = `${fmtSignPct(d.pct_change)} (${ fmtNumber(d.volume_lot) } Lot)`;
+    chgEl.textContent = `${fmtSignPct(d.pct_change)} (${fmtNumber(d.volume_lot)} Lot)`;
     chgEl.className = `text-xs font-mono font-semibold ${d.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
   }
 
@@ -490,10 +1086,10 @@ function renderInspectorPanel(d) {
   if (totalScoreBadge) totalScoreBadge.textContent = `Score: ${d.smart_money_score} / 100`;
 
   const p1 = document.getElementById('p1Score'); if (p1) p1.textContent = `${d.vsa_score}/25`;
-  const p2 = document.getElementById('p2Score'); if (p2) p2.textContent = `${d.bandar_score}/30`;
+  const p2 = document.getElementById('p2Score'); if (p2) p2.textContent = `${d.bandar_score}/20`;
   const p3 = document.getElementById('p3Score'); if (p3) p3.textContent = `${d.ticket_score}/15`;
   const p4 = document.getElementById('p4Score'); if (p4) p4.textContent = `${d.foreign_score}/15`;
-  const p5 = document.getElementById('p5Score'); if (p5) p5.textContent = `${d.structure_score}/15`;
+  const p5 = document.getElementById('p5Score'); if (p5) p5.textContent = `${d.structure_score}/25`;
 
   const bar1 = document.getElementById('p1Bar');
   const bar2 = document.getElementById('p2Bar');
@@ -501,15 +1097,15 @@ function renderInspectorPanel(d) {
   const bar4 = document.getElementById('p4Bar');
   const bar5 = document.getElementById('p5Bar');
   if (bar1) bar1.style.width = `${Math.min(100, Math.round((d.vsa_score / 25) * 100))}%`;
-  if (bar2) bar2.style.width = `${Math.min(100, Math.round((d.bandar_score / 30) * 100))}%`;
+  if (bar2) bar2.style.width = `${Math.min(100, Math.round((d.bandar_score / 20) * 100))}%`;
   if (bar3) bar3.style.width = `${Math.min(100, Math.round((d.ticket_score / 15) * 100))}%`;
   if (bar4) bar4.style.width = `${Math.min(100, Math.round((d.foreign_score / 15) * 100))}%`;
-  if (bar5) bar5.style.width = `${Math.min(100, Math.round((d.structure_score / 15) * 100))}%`;
+  if (bar5) bar5.style.width = `${Math.min(100, Math.round((d.structure_score / 25) * 100))}%`;
 
   // Auto Trading Plan
   const plan = d.trading_plan;
   const biasEl = document.getElementById('planActionBias');
-  if (biasEl) {
+  if (biasEl && plan) {
     biasEl.textContent = plan.action_bias;
     if (d.trigger_type === 'DISTRIBUTION_WARNING') {
       biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-400/35 shadow-[0_0_12px_rgba(244,63,94,0.2)]';
@@ -519,13 +1115,13 @@ function renderInspectorPanel(d) {
   }
 
   const pez = document.getElementById('planEntryZone');
-  if (pez) pez.textContent = `${fmtPrice(plan.entry_low)} - ${fmtNumber(plan.entry_high)}`;
+  if (pez && plan) pez.textContent = `${fmtPrice(plan.entry_low)} - ${fmtNumber(plan.entry_high)}`;
   const slEl = document.getElementById('planStopLoss');
-  if (slEl) slEl.textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct}%)`;
+  if (slEl && plan) slEl.textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct}%)`;
   const tgtEl = document.getElementById('planTargets');
-  if (tgtEl) tgtEl.textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct}%)`;
+  if (tgtEl && plan) tgtEl.textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct}%)`;
   const tgt2El = document.getElementById('planTarget2');
-  if (tgt2El) {
+  if (tgt2El && plan) {
     if (plan.target_2 && plan.target_2 > 0) {
       tgt2El.textContent = `${fmtNumber(plan.target_2)} (+${plan.target_2_pct}%)`;
     } else {
@@ -533,33 +1129,35 @@ function renderInspectorPanel(d) {
     }
   }
   const pr = document.getElementById('planRationale');
-  if (pr) pr.textContent = `${plan.rationale} (Risk/Reward = ${plan.risk_reward})`;
+  if (pr && plan) pr.textContent = `${plan.rationale} (Risk/Reward = ${plan.risk_reward})`;
 
-  // Render 5-Pillar Checklist
+  // Checklist 5 Pilar
   const checklistEl = document.getElementById('inspChecklist');
-  checklistEl.innerHTML = (d.checklist || [])
-    .map((item) => {
-      const icon =
-        item.status === 'pass'
-          ? '<span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 flex items-center justify-center font-bold text-xs">✓</span>'
-          : item.status === 'warn'
-          ? '<span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-400/30 flex items-center justify-center font-bold text-xs">!</span>'
-          : '<span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-400/30 flex items-center justify-center font-bold text-xs">✕</span>';
+  if (checklistEl) {
+    checklistEl.innerHTML = (d.checklist || [])
+      .map((item) => {
+        const icon =
+          item.status === 'pass'
+            ? '<span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 flex items-center justify-center font-bold text-xs">✓</span>'
+            : item.status === 'warn'
+            ? '<span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-400/30 flex items-center justify-center font-bold text-xs">!</span>'
+            : '<span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-400/30 flex items-center justify-center font-bold text-xs">✕</span>';
 
-      return `
-        <div class="p-2.5 rounded-xl glass-subcard hover:border-white/15 transition space-y-1">
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2">
-              ${icon}
-              <span class="text-xs font-semibold text-white">${item.title}</span>
+        return `
+          <div class="p-2.5 rounded-xl glass-subcard hover:border-white/15 transition space-y-1">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                ${icon}
+                <span class="text-xs font-semibold text-white">${item.title}</span>
+              </div>
+              <span class="font-mono text-[11px] font-semibold text-emerald-300 bg-white/[0.06] px-2 py-0.5 rounded-md border border-white/10">${item.metric}</span>
             </div>
-            <span class="font-mono text-[11px] font-semibold text-emerald-300 bg-white/[0.06] px-2 py-0.5 rounded-md border border-white/10">${item.metric}</span>
+            <p class="text-[11px] text-slate-400 pl-7 leading-relaxed">${item.detail}</p>
           </div>
-          <p class="text-[11px] text-slate-400 pl-7 leading-relaxed">${item.detail}</p>
-        </div>
-      `;
-    })
-    .join('');
+        `;
+      })
+      .join('');
+  }
 
   renderInspectorChart(d);
 }
@@ -573,6 +1171,7 @@ function switchChartTab(tabName) {
   };
   Object.entries(tabs).forEach(([key, id]) => {
     const btn = document.getElementById(id);
+    if (!btn) return;
     if (key === tabName) {
       btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 text-white shadow-[0_0_12px_rgba(16,185,129,0.3)] transition';
     } else {
@@ -584,8 +1183,13 @@ function switchChartTab(tabName) {
   }
 }
 
+// =====================================================================
+// CHART.JS INSPECTOR DENGAN CANDLESTICK & GARIS RENCANA TP/SL/ENTRY
+// =====================================================================
 function renderInspectorChart(d) {
-  const ctx = document.getElementById('inspectorChart').getContext('2d');
+  const chartCanvas = document.getElementById('inspectorChart');
+  if (!chartCanvas) return;
+  const ctx = chartCanvas.getContext('2d');
   if (chartInstance) {
     chartInstance.destroy();
   }
@@ -604,8 +1208,20 @@ function renderInspectorChart(d) {
     const vols = hist.map((h) => Number(h.volume_lot || 0));
     const allLows = hist.map((h) => Number(h.low || h.close));
     const allHighs = hist.map((h) => Number(h.high || h.close));
-    const rawMin = Math.min(...allLows, ...ma20s.filter((v) => v > 0));
-    const rawMax = Math.max(...allHighs, ...ma20s);
+
+    const plan = d.trading_plan;
+    const tp1Val = plan && plan.target_1 ? plan.target_1 : null;
+    const slVal = plan && plan.stop_loss ? plan.stop_loss : null;
+    const entryVal = plan && plan.entry_high ? plan.entry_high : d.close;
+
+    // Pastikan batas harga mencakup TP dan SL agar garis terlihat di grafik
+    const valCandidatesMin = [...allLows, ...ma20s.filter((v) => v > 0)];
+    if (slVal) valCandidatesMin.push(slVal);
+    const valCandidatesMax = [...allHighs, ...ma20s];
+    if (tp1Val) valCandidatesMax.push(tp1Val);
+
+    const rawMin = Math.min(...valCandidatesMin);
+    const rawMax = Math.max(...valCandidatesMax);
     const pricePad = Math.max(2, Math.round((rawMax - rawMin) * 0.08));
 
     const volColors = hist.map((h, i) => {
@@ -629,6 +1245,8 @@ function renderInspectorChart(d) {
         const bodyWidth = Math.max(4, Math.min(13, Math.floor((plotWidth / count) * 0.58)));
 
         c.save();
+
+        // 1. Gambar Candlestick Body & Wick
         hist.forEach((h, i) => {
           const o = Number(h.open || h.close);
           const hi = Number(h.high || Math.max(o, h.close));
@@ -644,7 +1262,7 @@ function renderInspectorChart(d) {
           const yOpen = yScale.getPixelForValue(o);
           const yClose = yScale.getPixelForValue(cl);
 
-          // 1. Sumbu / Wick (High - Low)
+          // Sumbu / Wick
           c.beginPath();
           c.strokeStyle = candleColor;
           c.lineWidth = 1.4;
@@ -652,7 +1270,7 @@ function renderInspectorChart(d) {
           c.lineTo(x, yLow);
           c.stroke();
 
-          // 2. Body Candle (Open - Close)
+          // Body Candle
           const topY = Math.min(yOpen, yClose);
           const botY = Math.max(yOpen, yClose);
           const boxH = Math.max(2, botY - topY);
@@ -663,6 +1281,35 @@ function renderInspectorChart(d) {
           c.fillRect(x - bodyWidth / 2, topY, bodyWidth, boxH);
           c.strokeRect(x - bodyWidth / 2, topY, bodyWidth, boxH);
         });
+
+        // 2. Gambar Garis Skenario Horizontal (Target TP, Area Entry, Batas Rugi SL)
+        const leftX = xScale.left;
+        const rightX = xScale.right;
+
+        function drawScenarioLine(val, strokeColor, labelText) {
+          if (!val) return;
+          const y = yScale.getPixelForValue(val);
+          if (y < yScale.top || y > yScale.bottom) return;
+
+          c.beginPath();
+          c.setLineDash([5, 4]);
+          c.strokeStyle = strokeColor;
+          c.lineWidth = 1.6;
+          c.moveTo(leftX, y);
+          c.lineTo(rightX, y);
+          c.stroke();
+          c.setLineDash([]);
+
+          // Badge Label di Kiri Garis
+          c.font = 'bold 9px monospace';
+          c.fillStyle = strokeColor;
+          c.fillText(labelText, leftX + 4, y - 3);
+        }
+
+        if (tp1Val) drawScenarioLine(tp1Val, '#10b981', `TP1: Rp ${fmtNumber(tp1Val)}`);
+        if (entryVal) drawScenarioLine(entryVal, '#38bdf8', `Entry: Rp ${fmtNumber(entryVal)}`);
+        if (slVal) drawScenarioLine(slVal, '#f43f5e', `SL: Rp ${fmtNumber(slVal)}`);
+
         c.restore();
       },
     };
@@ -816,22 +1463,24 @@ function renderInspectorChart(d) {
   }
 }
 
-// Upload Excel Modal & Drag-and-Drop Handlers
+// =====================================================================
+// UPLOAD EXCEL & MODAL HANDLERS
+// =====================================================================
 function openUploadModal() {
-  document.getElementById('uploadModal').classList.remove('hidden');
+  document.getElementById('uploadModal')?.classList.remove('hidden');
 }
 function closeUploadModal() {
-  document.getElementById('uploadModal').classList.add('hidden');
+  document.getElementById('uploadModal')?.classList.add('hidden');
 }
 function openGuideModal() {
-  document.getElementById('guideModal').classList.remove('hidden');
+  document.getElementById('guideModal')?.classList.remove('hidden');
 }
 function closeGuideModal() {
-  document.getElementById('guideModal').classList.add('hidden');
+  document.getElementById('guideModal')?.classList.add('hidden');
 }
 
 // =====================================================================
-// OFFICIAL TRADINGVIEW ADVANCED CHART WIDGET (DENGAN TOOLBAR GARIS & INDIKATOR ASLI TRADINGVIEW)
+// OFFICIAL TRADINGVIEW ADVANCED CHART MODAL
 // =====================================================================
 function openTradingViewModal() {
   const ticker = selectedTicker || (selectedStockDetail ? selectedStockDetail.ticker : 'BBCA');
@@ -863,7 +1512,7 @@ function openTradingViewModal() {
   const isLight = document.documentElement.classList.contains('light');
   const theme = isLight ? 'light' : 'dark';
 
-  modal.classList.remove('hidden');
+  if (modal) modal.classList.remove('hidden');
 
   if (container) {
     container.innerHTML = '<div id="tv_advanced_chart_inner" class="w-full h-full"></div>';
@@ -890,10 +1539,7 @@ function openTradingViewModal() {
         show_popup_button: true,
         popup_width: '1280',
         popup_height: '820',
-        studies: [
-          'MASimple@tv-basicstudies',
-          'RSI@tv-basicstudies',
-        ],
+        studies: ['MASimple@tv-basicstudies', 'RSI@tv-basicstudies'],
         container_id: 'tv_advanced_chart_inner',
       });
     } else {
@@ -919,6 +1565,9 @@ function closeTradingViewModal() {
   if (container) container.innerHTML = '';
 }
 
+// =====================================================================
+// UPLOAD FILE EXCEL & LOCAL PATH
+// =====================================================================
 async function handleExcelUpload(fileList) {
   if (!fileList || !fileList.length) return;
   const formData = new FormData();
@@ -971,6 +1620,9 @@ async function handleLoadLocalPath() {
   }
 }
 
+// =====================================================================
+// SYNC CEPAT & FULL LIVE DATA
+// =====================================================================
 async function syncFastMarketData() {
   if (isSyncingFast) return;
   isSyncingFast = true;
@@ -992,7 +1644,7 @@ async function syncFastMarketData() {
     isSyncingFast = false;
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '⚡ Sync Cepat (< 2s)';
+      btn.textContent = '⚡ Sync Kilat (< 2 Detik)';
     }
   }
 }
@@ -1012,7 +1664,6 @@ async function syncLiveMarketData() {
     }
     showToast(data.message);
 
-    // Polling status background worker via /api/health setiap 6 detik
     let pollCount = 0;
     const pollInterval = setInterval(async () => {
       pollCount++;
@@ -1023,84 +1674,46 @@ async function syncLiveMarketData() {
           clearInterval(pollInterval);
           if (btn) {
             btn.disabled = false;
-            btn.textContent = '🔄 Full Sync IDX';
+            btn.textContent = '🌐 Full Sync 844 Saham';
           }
           await Promise.all([loadScreenerData(true), loadTracker()]);
           showToast('✅ Pembaruan seluruh 844 saham IDX selesai!', 'success');
         }
       } catch {
-        // ignore polling network errors
+        // ignore polling error
       }
     }, 6000);
   } catch (err) {
     showToast(err.message, 'error');
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '🔄 Full Sync IDX';
+      btn.textContent = '🌐 Full Sync 844 Saham';
     }
   }
 }
 
-// Event Listeners Setup
-document.addEventListener('DOMContentLoaded', async () => {
-  // 1. Tampilkan data awal secepat mungkin
-  await Promise.all([loadScreenerData(false), loadTracker()]);
-
-  // 2. Otomatis tarik harga live & riwayat chart terbaru dari bursa di latar belakang saat web pertama dibuka!
-  // Pengguna tidak perlu lagi mengklik tombol sync manual.
-  (async () => {
-    try {
-      await fetch('/api/sync-fast', { method: 'POST', cache: 'no-store' });
-      await Promise.all([loadScreenerData(true), loadTracker()]);
-    } catch (e) {
-      console.debug('Initial auto-sync background:', e);
-    }
-  })();
-
-  ['filterTrigger', 'filterVolRatio', 'filterMinScore', 'filterSortBy'].forEach((id) => {
-    document.getElementById(id).addEventListener('change', () => loadScreenerData(true));
-  });
-
-  let searchTimeout = null;
-  document.getElementById('filterSearch').addEventListener('input', () => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => loadScreenerData(true), 200);
-  });
-
-  const guideBtn = document.getElementById('btnOpenGuideModal');
-  if (guideBtn) guideBtn.addEventListener('click', openGuideModal);
-
-  // Setup Live Market Auto Poller & Anti-Sleep Keep-Alive
-  initLiveMarketAutoSync();
-});
-
 // =====================================================================
-// REALTIME MARKET SESSION AUTO-SYNC & ANTI-SLEEP ENGINE
+// LIVE MARKET SESSION AUTO-SYNC & ANTI-SLEEP ENGINE
 // =====================================================================
 let autoSyncTimerId = null;
 let keepAliveTimerId = null;
 
 function isIDXMarketOpenNow() {
-  // Waktu Indonesia Barat (WIB = UTC+7)
   const now = new Date();
   const utcHours = now.getUTCHours();
   const utcMinutes = now.getUTCMinutes();
   const totalUtcMinutes = utcHours * 60 + utcMinutes;
   const wibTotalMinutes = (totalUtcMinutes + 7 * 60) % (24 * 60);
   const dayShift = Math.floor((totalUtcMinutes + 7 * 60) / (24 * 60));
-  const dayOfWeek = (now.getUTCDay() + dayShift) % 7; // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+  const dayOfWeek = (now.getUTCDay() + dayShift) % 7;
 
-  // Hanya Senin (1) s/d Jumat (5)
   if (dayOfWeek < 1 || dayOfWeek > 5) return false;
 
-  // Jadwal Resmi BEI (dengan jeda istirahat siang)
   if (dayOfWeek === 5) {
-    // Hari Jumat: Sesi 1 (09:00 - 11:30 WIB), Sesi 2 (14:00 - 16:05 WIB)
     const isSesi1 = wibTotalMinutes >= 9 * 60 && wibTotalMinutes <= 11 * 60 + 30;
     const isSesi2 = wibTotalMinutes >= 14 * 60 && wibTotalMinutes <= 16 * 60 + 5;
     return isSesi1 || isSesi2;
   } else {
-    // Senin - Kamis: Sesi 1 (09:00 - 12:00 WIB), Sesi 2 (13:30 - 16:05 WIB)
     const isSesi1 = wibTotalMinutes >= 9 * 60 && wibTotalMinutes <= 12 * 60;
     const isSesi2 = wibTotalMinutes >= 13 * 60 + 30 && wibTotalMinutes <= 16 * 60 + 5;
     return isSesi1 || isSesi2;
@@ -1117,17 +1730,17 @@ function updateMarketLiveStatusUI() {
   if (!pill) return;
 
   if (isLive) {
-    if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+    if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
     if (text) {
       text.textContent = 'BURSA LIVE';
-      text.className = 'font-bold text-emerald-300';
+      text.className = 'font-bold text-emerald-300 text-[11px] sm:text-xs';
     }
-    if (timer) timer.textContent = 'Auto-Update Tiap 60s';
+    if (timer) timer.textContent = 'Auto-Sync 60s';
   } else {
-    if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-500';
+    if (dot) dot.className = 'w-2 h-2 rounded-full bg-slate-500';
     if (text) {
       text.textContent = 'BURSA TUTUP';
-      text.className = 'font-bold text-slate-400';
+      text.className = 'font-bold text-slate-400 text-[11px] sm:text-xs';
     }
     if (timer) timer.textContent = 'Data Terakhir 16:00';
   }
@@ -1136,7 +1749,6 @@ function updateMarketLiveStatusUI() {
 function initLiveMarketAutoSync() {
   updateMarketLiveStatusUI();
 
-  // 1. Ping server setiap 5 menit (Keep-Alive agar Render tidak tidur di jam bursa)
   if (keepAliveTimerId) clearInterval(keepAliveTimerId);
   keepAliveTimerId = setInterval(() => {
     if (isIDXMarketOpenNow()) {
@@ -1144,18 +1756,13 @@ function initLiveMarketAutoSync() {
     }
   }, 5 * 60 * 1000);
 
-  // 2. Auto-Sync Screener & Watchlist setiap 60 detik selama jam bursa aktif
   if (autoSyncTimerId) clearInterval(autoSyncTimerId);
   autoSyncTimerId = setInterval(async () => {
     updateMarketLiveStatusUI();
     if (isIDXMarketOpenNow() && !isSyncingFast) {
       try {
-        // Otomatis tarik harga live saham Watchlist/Running & update Screener
         await fetch('/api/sync-fast', { method: 'POST', cache: 'no-store' }).catch(() => {});
-        await Promise.all([
-          loadScreenerData(true),
-          loadTracker(),
-        ]);
+        await Promise.all([loadScreenerData(true), loadTracker()]);
       } catch (err) {
         console.debug('Background market auto-update:', err);
       }
@@ -1163,12 +1770,11 @@ function initLiveMarketAutoSync() {
   }, 60 * 1000);
 }
 
-
 // =====================================================================
 // SIGNAL TRACKER — FORWARD TEST (Watchlist -> Running -> Win / Loss)
 // =====================================================================
 let trackerTab = 'ALL';
-let trackerSortBy = 'pnl_desc'; // Default: Running Profit Terbanyak (Terbang Tinggi)
+let trackerSortBy = 'pnl_desc';
 let currentTrackerSignals = [];
 let trackerSearchTerm = '';
 
@@ -1266,76 +1872,95 @@ function renderTrackerStats(data) {
   const s = data.stats;
   const c = data.config;
 
-  document.getElementById('trackerConfigLine').textContent =
-    `Auto-track: Score ≥ ${c.min_score} · Target TP${c.tp_level} · Entry kedaluwarsa ${c.entry_expiry_days} hari · ` +
-    `Max hold ${c.max_hold_days} hari · Fee ${c.fee_roundtrip_pct}% · DB: ${c.db_backend} · Candle final s/d ${c.final_session_date}` +
-    (data.last_tracker_run ? ` · Evaluasi terakhir: ${data.last_tracker_run}` : '') +
-    (data.is_real_market ? '' : ' · ⚠ Dataset aktif bukan data real (tracker pause)');
+  const cfgLine = document.getElementById('trackerConfigLine');
+  if (cfgLine) {
+    cfgLine.textContent =
+      `Auto-track: Score ≥ ${c.min_score} · Target TP${c.tp_level} · Entry kedaluwarsa ${c.entry_expiry_days} hari · ` +
+      `Max hold ${c.max_hold_days} hari · Fee ${c.fee_roundtrip_pct}% · DB: ${c.db_backend} · Candle final s/d ${c.final_session_date}` +
+      (data.last_tracker_run ? ` · Evaluasi terakhir: ${data.last_tracker_run}` : '') +
+      (data.is_real_market ? '' : ' · ⚠ Dataset aktif bukan data real (tracker pause)');
+  }
 
-  document.getElementById('tsWinRate').textContent = s.win_rate === null ? '-' : `${s.win_rate}%`;
-  document.getElementById('tsDecided').textContent = s.decided ? `${s.win}W / ${s.loss}L dari ${s.decided} trade` : 'belum ada trade selesai';
-  document.getElementById('tsWinBar').style.width = `${s.win_rate || 0}%`;
+  const elWR = document.getElementById('tsWinRate');
+  if (elWR) elWR.textContent = s.win_rate === null ? '-' : `${s.win_rate}%`;
 
-  document.getElementById('tsWatch').textContent = s.watchlist;
-  document.getElementById('tsRunning').textContent = s.running;
-  document.getElementById('tsRunningPnl').textContent = `floating ${fmtPctOrDash(s.running_avg_pnl_pct)}`;
-  document.getElementById('tsWin').textContent = s.win;
-  document.getElementById('tsAvgWin').textContent = `avg ${fmtPctOrDash(s.avg_win_pct)}`;
-  document.getElementById('tsLoss').textContent = s.loss;
-  document.getElementById('tsAvgLoss').textContent = `avg ${fmtPctOrDash(s.avg_loss_pct)}`;
-  document.getElementById('tsExpired').textContent = s.expired;
-  document.getElementById('tsTimeout').textContent = s.timeout;
+  const elDec = document.getElementById('tsDecided');
+  if (elDec) elDec.textContent = s.decided ? `${s.win}W / ${s.loss}L dari ${s.decided} trade` : 'belum ada trade selesai';
+
+  const elBar = document.getElementById('tsWinBar');
+  if (elBar) elBar.style.width = `${s.win_rate || 0}%`;
+
+  const elW = document.getElementById('tsWatch'); if (elW) elW.textContent = s.watchlist;
+  const elR = document.getElementById('tsRunning'); if (elR) elR.textContent = s.running;
+  const elRPnl = document.getElementById('tsRunningPnl'); if (elRPnl) elRPnl.textContent = `floating ${fmtPctOrDash(s.running_avg_pnl_pct)}`;
+  const elWin = document.getElementById('tsWin'); if (elWin) elWin.textContent = s.win;
+  const elAvgW = document.getElementById('tsAvgWin'); if (elAvgW) elAvgW.textContent = `avg ${fmtPctOrDash(s.avg_win_pct)}`;
+  const elLoss = document.getElementById('tsLoss'); if (elLoss) elLoss.textContent = s.loss;
+  const elAvgL = document.getElementById('tsAvgLoss'); if (elAvgL) elAvgL.textContent = `avg ${fmtPctOrDash(s.avg_loss_pct)}`;
+  const elExp = document.getElementById('tsExpired'); if (elExp) elExp.textContent = s.expired;
+  const elTime = document.getElementById('tsTimeout'); if (elTime) elTime.textContent = s.timeout;
 
   const pfEl = document.getElementById('tsPF');
-  pfEl.textContent = s.profit_factor !== null ? s.profit_factor.toFixed(2) : s.win > 0 ? '∞' : '-';
-  pfEl.className = `text-lg font-bold font-mono mt-0.5 ${s.profit_factor === null ? 'text-white' : s.profit_factor >= 1.5 ? 'text-emerald-400' : s.profit_factor >= 1 ? 'text-amber-300' : 'text-rose-400'}`;
+  if (pfEl) {
+    pfEl.textContent = s.profit_factor !== null ? s.profit_factor.toFixed(2) : s.win > 0 ? '∞' : '-';
+    pfEl.className = `text-lg font-bold font-mono mt-0.5 ${s.profit_factor === null ? 'text-white' : s.profit_factor >= 1.5 ? 'text-emerald-400' : s.profit_factor >= 1 ? 'text-amber-300' : 'text-rose-400'}`;
+  }
 
   const expEl = document.getElementById('tsExp');
-  expEl.textContent = fmtPctOrDash(s.expectancy_net_pct);
-  expEl.className = `text-lg font-bold font-mono mt-0.5 ${pctClass(s.expectancy_net_pct)}`;
+  if (expEl) {
+    expEl.textContent = fmtPctOrDash(s.expectancy_net_pct);
+    expEl.className = `text-lg font-bold font-mono mt-0.5 ${pctClass(s.expectancy_net_pct)}`;
+  }
 
   const totEl = document.getElementById('tsTotal');
-  totEl.textContent = s.decided || s.timeout ? fmtPctOrDash(s.total_return_net_pct) : '-';
-  totEl.className = `text-lg font-bold font-mono mt-0.5 ${s.decided || s.timeout ? pctClass(s.total_return_net_pct) : 'text-white'}`;
+  if (totEl) {
+    totEl.textContent = s.decided || s.timeout ? fmtPctOrDash(s.total_return_net_pct) : '-';
+    totEl.className = `text-lg font-bold font-mono mt-0.5 ${s.decided || s.timeout ? pctClass(s.total_return_net_pct) : 'text-white'}`;
+  }
 
-  document.getElementById('tsTotalSignals').textContent = s.total;
+  const elTotSig = document.getElementById('tsTotalSignals');
+  if (elTotSig) elTotSig.textContent = s.total;
 
   // Win rate per trigger
   const bt = Object.entries(s.by_trigger || {});
   const btEl = document.getElementById('tsByTrigger');
-  btEl.innerHTML = bt.length
-    ? bt
-        .map(([type, b]) => {
-          const wr = b.win_rate;
-          return `
-          <div class="glass-subcard rounded-xl p-3 hover:border-white/15 transition">
-            <div class="flex items-center justify-between">
-              <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(type)}">${b.label}</span>
-              <span class="font-mono font-bold ${wr === null ? 'text-slate-400' : wr >= 50 ? 'text-emerald-400' : 'text-rose-400'}">${wr === null ? '-' : wr + '%'}</span>
-            </div>
-            <div class="mt-2 text-[11px] font-mono text-slate-400">
-              ${b.total} sinyal · <span class="text-emerald-400">${b.win}W</span> / <span class="text-rose-400">${b.loss}L</span> · <span class="text-amber-300">${b.running} run</span>
-            </div>
-            <div class="text-[11px] font-mono ${pctClass(b.avg_pnl)}">Avg P/L: ${fmtPctOrDash(b.avg_pnl)}</div>
-          </div>`;
-        })
-        .join('')
-    : '<div class="text-slate-400 text-[11px]">Belum ada data.</div>';
+  if (btEl) {
+    btEl.innerHTML = bt.length
+      ? bt
+          .map(([type, b]) => {
+            const wr = b.win_rate;
+            return `
+            <div class="glass-subcard rounded-xl p-3 hover:border-white/15 transition">
+              <div class="flex items-center justify-between">
+                <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(type)}">${b.label}</span>
+                <span class="font-mono font-bold ${wr === null ? 'text-slate-400' : wr >= 50 ? 'text-emerald-400' : 'text-rose-400'}">${wr === null ? '-' : wr + '%'}</span>
+              </div>
+              <div class="mt-2 text-[11px] font-mono text-slate-400">
+                ${b.total} sinyal · <span class="text-emerald-400">${b.win}W</span> / <span class="text-rose-400">${b.loss}L</span> · <span class="text-amber-300">${b.running} run</span>
+              </div>
+              <div class="text-[11px] font-mono ${pctClass(b.avg_pnl)}">Avg P/L: ${fmtPctOrDash(b.avg_pnl)}</div>
+            </div>`;
+          })
+          .join('')
+      : '<div class="text-slate-400 text-[11px]">Belum ada data.</div>';
+  }
 
   // Tab counts
   const counts = { ALL: s.total, WATCHLIST: s.watchlist, RUNNING: s.running, WIN: s.win, LOSS: s.loss, EXPIRED: s.expired, TIMEOUT: s.timeout };
   document.querySelectorAll('#trackerTabs .tracker-tab').forEach((btn) => {
     const tab = btn.dataset.tab;
     const label = btn.textContent.replace(/\s*\d+$/, '').trim();
-    btn.innerHTML = `${label}<span class="tab-count">${counts[tab] ?? 0}</span>`;
+    btn.innerHTML = `${label}<span class="tab-count ml-1 px-1.5 py-0.2 rounded bg-white/10 text-[10px]">${counts[tab] ?? 0}</span>`;
     btn.classList.toggle('active', tab === trackerTab);
   });
 }
 
 function renderTrackerTable(rows) {
   const tbody = document.getElementById('trackerTableBody');
+  if (!tbody) return;
+
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">
+    tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">
       Belum ada sinyal pada kategori ini. Sinyal akumulasi dengan score tinggi akan otomatis tercatat setelah sinkronisasi data real.
     </td></tr>`;
     return;
@@ -1355,48 +1980,13 @@ function renderTrackerTable(rows) {
         : '<span class="text-slate-400">-</span>';
       const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' ? null : r.pnl_pct;
 
-      // Desain P/L Cell & Badge Terbang Tinggi
-      let pnlContent = '';
       let isHighFlyer = false;
-
-      if (r.status === 'RUNNING') {
-        if (pnl !== null && pnl >= 2.0) {
-          isHighFlyer = true;
-          pnlContent = `
-            <div class="flex items-center justify-end gap-1">
-              <span class="text-xs" title="Sedang Terbang Tinggi!">🚀</span>
-              <span class="font-extrabold text-emerald-400 font-mono text-xs">${fmtPctOrDash(pnl)}</span>
-            </div>
-            <div class="text-[9px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-500/30 inline-block mt-0.5">
-              Terbang Tinggi
-            </div>`;
-        } else if (pnl !== null && pnl > 0) {
-          pnlContent = `
-            <div class="font-bold text-emerald-400 font-mono text-xs">${fmtPctOrDash(pnl)}</div>
-            <div class="text-[10px] text-emerald-500/80">floating profit</div>`;
-        } else if (pnl !== null) {
-          pnlContent = `
-            <div class="font-bold text-rose-400 font-mono text-xs">${fmtPctOrDash(pnl)}</div>
-            <div class="text-[10px] text-slate-400">floating loss</div>`;
-        }
-      } else if (r.status === 'WIN') {
-        pnlContent = `
-          <div class="flex items-center justify-end gap-1">
-            <span class="text-xs">🏆</span>
-            <span class="font-bold text-emerald-400 font-mono text-xs">${fmtPctOrDash(pnl)}</span>
-          </div>
-          <div class="text-[10px] text-emerald-500/80 font-medium">take profit</div>`;
-      } else if (r.status === 'LOSS') {
-        pnlContent = `
-          <div class="font-bold text-rose-400 font-mono text-xs">${fmtPctOrDash(pnl)}</div>
-          <div class="text-[10px] text-rose-500/80 font-medium">stop loss</div>`;
-      } else {
-        pnlContent = `<span class="text-slate-400">-</span>`;
+      if (r.status === 'RUNNING' && pnl !== null && pnl >= 2.0) {
+        isHighFlyer = true;
       }
 
       const noteText = String(r.note || '');
       const hasDistWarning = noteText.startsWith('⚠️');
-      const hasPullbackSafe = noteText.startsWith('Koreksi sehat');
 
       const rowHighlight = hasDistWarning
         ? 'hover:bg-rose-500/10 bg-rose-500/[0.06] border-l-4 border-rose-500 transition-colors'
@@ -1408,20 +1998,20 @@ function renderTrackerTable(rows) {
       <tr class="${rowHighlight}">
         <!-- Saham -->
         <td class="py-3.5 pl-4 pr-2">
-          <div class="flex items-center gap-3 cursor-pointer group" onclick="selectStock('${r.ticker}', true)" title="Klik untuk membuka Auto Trading Plan ${r.ticker}">
+          <div class="flex items-center gap-3 cursor-pointer group" onclick="selectStockAndGoToInspector('${r.ticker}')" title="Klik untuk membuka detail ${r.ticker}">
             ${getStockLogoImg(r.ticker, 'w-8 h-8')}
             <div>
               <div class="font-sans font-extrabold text-sm text-white group-hover:text-emerald-300 flex items-center gap-1.5 transition">
-                <span>${r.ticker}.JK</span>
+                <span>${r.ticker}</span>
                 ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
                 ${hasDistWarning ? `<span class="text-xs animate-pulse" title="${noteText}">⚠️</span>` : ''}
               </div>
-              <div class="text-[11px] text-slate-400 group-hover:text-slate-300 truncate max-w-[150px] mt-0.5">${r.sector || (r.source === 'AUTO' ? 'Auto Sinyal' : 'Watchlist Manual')}</div>
+              <div class="text-[11px] text-slate-400 group-hover:text-slate-300 truncate max-w-[150px] mt-0.5">${r.sector || (r.source === 'AUTO' ? 'Auto Sinyal' : 'Manual')}</div>
             </div>
           </div>
         </td>
 
-        <!-- Trigger & Score (Unified Glowing Pill) -->
+        <!-- Trigger & Score -->
         <td class="py-3.5 px-3">
           <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">
             <span>${r.trigger_label || '-'}</span>
@@ -1432,7 +2022,7 @@ function renderTrackerTable(rows) {
         <!-- Tanggal Sinyal -->
         <td class="py-3.5 px-3 font-sans font-medium text-slate-200 text-xs">${r.signal_date}</td>
 
-        <!-- Zona Entry -->
+        <!-- Area Masuk -->
         <td class="py-3.5 px-3 text-right font-mono text-slate-200 font-semibold text-xs">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
 
         <!-- SL / TP -->
@@ -1440,22 +2030,21 @@ function renderTrackerTable(rows) {
           ${fmtNumber(r.stop_loss)} / ${fmtNumber(r.target)}
         </td>
 
-        <!-- Status Pill Glowing (Matching Image) -->
+        <!-- Status Simulasi -->
         <td class="py-3.5 px-3 text-center">
           <span class="inline-block min-w-[82px] text-center px-3.5 py-1 rounded-full border text-xs font-bold tracking-wide ${statusCls}" title="${noteText}">
             ${r.status === 'RUNNING' ? 'Running' : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : r.status}
           </span>
           ${hasDistWarning ? `<div class="mt-1 text-[9px] font-extrabold text-rose-300 bg-rose-500/20 border border-rose-500/40 rounded px-1.5 py-0.5 animate-pulse" title="${noteText}">⚠️ AWAS DISTRIBUSI</div>` : ''}
-          ${hasPullbackSafe ? `<div class="mt-1 text-[9px] font-bold text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 rounded px-1.5 py-0.5" title="${noteText}">🛡️ Koreksi Sehat (5H Utuh)</div>` : ''}
         </td>
 
-        <!-- Entry Price -->
+        <!-- Harga Masuk -->
         <td class="py-3.5 px-3 text-right font-mono text-white font-semibold text-xs">${entryCell}</td>
 
-        <!-- Last Price -->
+        <!-- Harga Terkini -->
         <td class="py-3.5 px-3 text-right font-mono text-white font-semibold text-xs">${exitOrLast}</td>
 
-        <!-- P/L Badge (Pill Hijau / Merah Matching Image) -->
+        <!-- Hasil (P/L) -->
         <td class="py-3.5 px-3 text-right font-mono">
           ${pnl !== null ? `
             <span class="inline-block min-w-[66px] text-center px-3 py-1 rounded-full text-xs font-extrabold font-mono ${pnl >= 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/70 shadow-[0_0_16px_rgba(16,185,129,0.28)]' : 'bg-rose-500/20 text-rose-300 border border-rose-400/70 shadow-[0_0_16px_rgba(244,63,94,0.25)]'}">
@@ -1475,7 +2064,6 @@ function renderTrackerTable(rows) {
 
 function setTrackerTab(tab) {
   trackerTab = tab;
-  // Jika tab RUNNING dipilih, otomatis urutkan dari profit tertinggi (terbang tinggi)
   if (tab === 'RUNNING' && trackerSortBy !== 'pnl_desc' && trackerSortBy !== 'pnl_asc') {
     trackerSortBy = 'pnl_desc';
     const sel = document.getElementById('trackerSortSelect');
@@ -1502,7 +2090,7 @@ async function addToWatchlist() {
 }
 
 async function deleteSignal(id) {
-  if (!confirm('Hapus sinyal ini dari tracker?')) return;
+  if (!confirm('Hapus sinyal ini dari simulasi tracker?')) return;
   const res = await fetch(`/api/tracker/signals/${id}`, { method: 'DELETE' });
   if (res.ok) {
     showToast('Sinyal dihapus.');
@@ -1512,8 +2100,10 @@ async function deleteSignal(id) {
 
 async function evaluateTracker() {
   const btn = document.getElementById('btnEvalTracker');
-  btn.disabled = true;
-  btn.textContent = '⏳ Mengevaluasi...';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Mengevaluasi...';
+  }
   try {
     const res = await fetch('/api/tracker/evaluate', { method: 'POST' });
     const data = await res.json();
@@ -1523,8 +2113,10 @@ async function evaluateTracker() {
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    btn.disabled = false;
-    btn.textContent = '⚡ Evaluasi Sekarang';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '⚡ Evaluasi Sekarang';
+    }
   }
 }
 
@@ -1535,7 +2127,6 @@ async function resetTracker() {
   showToast(data.message);
   await loadTracker();
 }
-
 
 // =====================================================================
 // TELEGRAM NOTIFIER INTEGRATION
@@ -1591,7 +2182,7 @@ async function testTelegramConnection() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '🔔 Tes Koneksi Bot';
+      btn.textContent = 'Tes Koneksi Bot';
     }
   }
 }
@@ -1636,7 +2227,7 @@ async function sendTelegramRecommendations(token, chatId) {
   const btn = document.getElementById('btnTelegramSend');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '⏳ Menyaring & Mengirim...';
+    btn.textContent = '⏳ Menyaring & Mengirim...';
   }
 
   try {
@@ -1664,15 +2255,101 @@ async function sendTelegramRecommendations(token, chatId) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = `
-        <svg class="w-4 h-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
-        </svg>
-        ✈️ Kirim ke Telegram`;
+      btn.textContent = 'Buka Pengaturan Telegram';
     }
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  loadTracker();
+// =====================================================================
+// GLOBAL KEYBOARD & BACKDROP MODAL HANDLERS
+// =====================================================================
+function closeAllModals() {
+  closeSettingsModal();
+  closeLotCalculatorModal();
+  closeGlossaryModal();
+  closeUploadModal();
+  closeGuideModal();
+  closeTelegramModal();
+  closeTradingViewModal();
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeAllModals();
+  }
+});
+
+// Tutup modal jika user mengklik backdrop / area hitam di luar modal
+document.querySelectorAll('#settingsModal, #lotCalculatorModal, #glossaryModal, #uploadModal, #guideModal, #telegramModal, #tradingViewModal').forEach(modalEl => {
+  modalEl.addEventListener('click', (e) => {
+    if (e.target === modalEl) {
+      modalEl.classList.add('hidden');
+    }
+  });
+});
+
+// =====================================================================
+// EVENT LISTENERS INITIALIZATION
+// =====================================================================
+document.addEventListener('DOMContentLoaded', async () => {
+  // 1. Terapkan state mode (Pemula vs Mahir) & Tab Aktif
+  applyExpertModeUI();
+  switchMainTab(activeMainTab);
+
+  // 2. Muat data awal secepat mungkin
+  await Promise.all([loadScreenerData(false), loadTracker()]);
+
+  // 3. Setup filter listeners di Tab Jelajah
+  ['filterTrigger', 'filterVolRatio', 'filterMinScore', 'filterSortBy'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => loadScreenerData(true));
+  });
+
+  let searchTimeout = null;
+  const searchInput = document.getElementById('filterSearch');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => loadScreenerData(true), 200);
+    });
+  }
+
+  // 4. Setup Drag & Drop File Upload
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('excelFileInput');
+
+  if (dropZone && fileInput) {
+    ['dragenter', 'dragover'].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.add('border-emerald-400', 'bg-emerald-500/10');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-emerald-400', 'bg-emerald-500/10');
+      });
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length) {
+        handleExcelUpload(dt.files);
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files && fileInput.files.length) {
+        handleExcelUpload(fileInput.files);
+      }
+    });
+  }
+
+  // 5. Inisialisasi Market Auto Poller & Anti-Sleep
+  initLiveMarketAutoSync();
+
+  // 6. Jalankan kalkulasi default di modal kalkulator lot
+  runModalLotCalculation();
 });

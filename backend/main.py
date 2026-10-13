@@ -431,7 +431,7 @@ def get_screener_data(
     min_score: int = Query(default=0, ge=0, le=100, description="Minimum Smart Money Score (0-100)"),
     min_vol_ratio: float = Query(default=0.0, ge=0.0, description="Minimum Volume Spike Ratio terhadap MA20"),
     search: Optional[str] = Query(default="", description="Cari kode Ticker atau Sektor"),
-    sort_by: Literal["score", "vol_ratio", "top3_bsr", "foreign", "pct_change"] = Query(default="score"),
+    sort_by: str = Query(default="score", description="Urutkan hasil: score, vol_ratio, top3_bsr, foreign, pct_change"),
 ) -> dict:
     if STATE["analysis"] is None:
         init_default_state()

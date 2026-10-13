@@ -410,3 +410,66 @@ html.light .badge-neutral {
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
 }
+
+/* Skeleton Loading Placeholder */
+@keyframes shimmer {
+  0% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+  100% { opacity: 0.35; }
+}
+.skeleton,
+.skeleton-shimmer {
+  animation: shimmer 1.6s infinite ease-in-out;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+}
+
+/* Tooltip / Kamus Istilah ⓘ Button */
+.tip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  cursor: pointer;
+  margin-left: 4px;
+  vertical-align: middle;
+  transition: all 0.18s ease;
+}
+.tip-btn:hover {
+  background: rgba(56, 189, 248, 0.28);
+  border-color: rgba(56, 189, 248, 0.6);
+  transform: scale(1.12);
+}
+
+/* Fixed Bottom Risk Disclaimer Banner */
+.fixed-risk-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 35;
+  background: rgba(6, 10, 18, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 6px 16px;
+  text-align: center;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+}
+html.light .fixed-risk-banner {
+  background: rgba(248, 250, 252, 0.92);
+  border-top: 1px solid #cbd5e1;
+  color: #64748b;
+  box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.06);
+}
+
