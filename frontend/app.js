@@ -468,6 +468,10 @@ function openLotCalculatorModal() {
   runModalLotCalculation();
 }
 
+function openLotCalcForSelectedStock() {
+  openLotCalculatorModal();
+}
+
 function openLotCalculatorForStockDetails(ticker, price, stopLoss) {
   const modal = document.getElementById('lotCalculatorModal');
   if (modal) modal.classList.remove('hidden');
