@@ -1457,7 +1457,7 @@ function renderInspectorChart(d) {
           c.strokeRect(x - bodyWidth / 2, topY, bodyWidth, boxH);
         });
 
-        // 2. Gambar Garis Skenario Horizontal (TP2, TP1, Harga Asli, Entry, SL)
+        // 2. Gambar Garis Skenario Horizontal (Hanya TP2, TP1, Entry di kiri, dan SL)
         const leftX = xScale.left;
         const rightX = xScale.right;
         const drawnBadges = [];
@@ -1467,15 +1467,15 @@ function renderInspectorChart(d) {
           const y = yScale.getPixelForValue(val);
           if (y < yScale.top - 4 || y > yScale.bottom + 4) return;
 
-          // Garis Horizontal
+          // Garis Horizontal Skenario
           c.save();
           c.beginPath();
           if (isDashed) {
             c.setLineDash([5, 4]);
-            c.lineWidth = 1.6;
+            c.lineWidth = 1.5;
           } else {
             c.setLineDash([]);
-            c.lineWidth = 2.0;
+            c.lineWidth = 1.8;
           }
           c.strokeStyle = strokeColor;
           c.moveTo(leftX, y);
@@ -1483,11 +1483,11 @@ function renderInspectorChart(d) {
           c.stroke();
           c.setLineDash([]);
 
-          // Badge Pill Box
-          c.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+          // Badge Pill Box Ringkas
+          c.font = 'bold 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
           const textMetrics = c.measureText(labelText);
-          const badgeH = 15;
-          const badgeW = textMetrics.width + 10;
+          const badgeH = 14;
+          const badgeW = textMetrics.width + 8;
           let badgeY = Math.max(yScale.top + 2, Math.min(yScale.bottom - badgeH - 2, y - badgeH / 2));
 
           // Cek tabrakan vertikal dengan badge sebelumnya pada sisi yang sama
@@ -1502,17 +1502,12 @@ function renderInspectorChart(d) {
           }
           drawnBadges.push({ alignRight, y: badgeY });
 
-          let badgeX;
-          if (alignRight) {
-            badgeX = rightX - badgeW - 6;
-          } else {
-            badgeX = leftX + 6;
-          }
+          const badgeX = alignRight ? (rightX - badgeW - 4) : (leftX + 4);
 
           // Background Pill Badge
           c.fillStyle = isLight ? '#ffffff' : '#090d16';
           c.strokeStyle = strokeColor;
-          c.lineWidth = 1.2;
+          c.lineWidth = 1.1;
           c.beginPath();
           if (c.roundRect) {
             c.roundRect(badgeX, badgeY, badgeW, badgeH, 3);
@@ -1522,25 +1517,19 @@ function renderInspectorChart(d) {
           c.fill();
           c.stroke();
 
-          // Label Text
+          // Label Text Ringkas
           c.fillStyle = strokeColor;
           c.textAlign = 'left';
           c.textBaseline = 'middle';
-          c.fillText(labelText, badgeX + 5, badgeY + badgeH / 2);
+          c.fillText(labelText, badgeX + 4, badgeY + badgeH / 2);
           c.restore();
         }
 
-        // Urutan render garis skenario:
-        // TP2 (+7%) - Sisi Kanan (Teal)
-        if (tp2Val) drawScenarioLine(tp2Val, '#14b8a6', `TP2: Rp ${fmtNumber(tp2Val)} (+${tp2Pct}%)`, true, true);
-        // TP1 (+4%) - Sisi Kanan (Emerald)
-        if (tp1Val) drawScenarioLine(tp1Val, '#10b981', `TP1: Rp ${fmtNumber(tp1Val)} (+${tp1Pct}%)`, true, true);
-        // Harga Asli Riil - Sisi Kanan (Amber Solid)
-        if (currentPrice > 0) drawScenarioLine(currentPrice, '#f59e0b', `Harga Asli: Rp ${fmtNumber(currentPrice)}`, false, true);
-        // Area Entry - Sisi Kiri (Sky Blue) - Kiri agar tidak bertabrakan dengan Harga Asli jika nilainya sama/dekat
+        // Urutan render garis skenario: HANYA SL, TP1, TP2 di kanan, dan Entry di kiri
+        if (tp2Val) drawScenarioLine(tp2Val, '#14b8a6', `TP2: Rp ${fmtNumber(tp2Val)}`, true, true);
+        if (tp1Val) drawScenarioLine(tp1Val, '#10b981', `TP1: Rp ${fmtNumber(tp1Val)}`, true, true);
         if (entryVal) drawScenarioLine(entryVal, '#38bdf8', `Entry: Rp ${fmtNumber(entryVal)}`, true, false);
-        // Batas Rugi (SL) - Sisi Kanan (Rose Red)
-        if (slVal) drawScenarioLine(slVal, '#f43f5e', `SL: Rp ${fmtNumber(slVal)} (${slPct}%)`, true, true);
+        if (slVal) drawScenarioLine(slVal, '#f43f5e', `SL: Rp ${fmtNumber(slVal)}`, true, true);
 
         c.restore();
       },
