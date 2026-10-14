@@ -71,9 +71,11 @@ def filter_smart_telegram_picks(
     Menyaring saham-saham pilihan yang paling ideal untuk modal terbatas (misal 10 Juta):
     1. Sinyal Akumulasi Smart Money (Big Accum, Silent Accum, Breakout, Foreign Inflow).
     2. Skor Smart Money tinggi (>= min_score).
-    3. Belum terbang tinggi (-2.5% <= perubahan harga <= max_pct_change, default +2.5%).
+    3. Belum terbang tinggi (-1.5% <= perubahan harga <= max_pct_change, default +2.5%).
     4. Likuid (Nilai transaksi harian >= Rp 1.0 Miliar - Filter 6).
-    5. Jarak ke modal bandar tidak boleh lebih dari 5% (diff_bandar_avg_pct <= 5.0%).
+    5. Jarak ke modal bandar aman (-1.0% <= diff_bandar_avg_pct <= +3.5%).
+    6. Bukan saham penny (< Rp 70) dan bukan Papan Pemantauan Khusus (FCA) / Akselerasi.
+    7. Closing Range >= 0.65 (menolak candle jarum/distribusi).
     """
     valid_triggers = {"BIG_ACCUMULATION", "SILENT_ACCUMULATION", "MARKUP_BREAKOUT", "FOREIGN_INFLOW"}
     candidates = []
@@ -83,27 +85,39 @@ def filter_smart_telegram_picks(
         if trig not in valid_triggers:
             continue
 
+        close_p = float(s.get("close", 0))
+        if close_p < 70:
+            continue
+
+        sec = str(s.get("sector", "")).lower()
+        if "pemantauan khusus" in sec or "akselerasi" in sec:
+            continue
+
         score = int(s.get("smart_money_score", 0))
         if score < min_score:
             continue
 
         pct = float(s.get("pct_change", 0))
-        if pct > max_pct_change or pct < -3.0:
+        if pct > max_pct_change or pct < -1.5:
             continue
 
         val_b = float(s.get("value_b_idr", 0))
         if val_b < min_value_b_idr:
             continue
 
+        cr = s.get("closing_range") or (float(s.get("closing_range_pct", 70)) / 100.0)
+        if cr is not None and float(cr) < 0.65:
+            continue
+
         plan = s.get("trading_plan") or {}
-        e_low = plan.get("entry_low")
+        e_low = plan.get("entry_low") or plan.get("entry_price")
         sl = plan.get("stop_loss")
         tp1 = plan.get("target_1")
         if not (e_low and sl and tp1):
             continue
 
         diff_bandar = float(plan.get("diff_bandar_avg_pct", s.get("diff_bandar_avg_pct", 0)))
-        if diff_bandar > 5.0:
+        if diff_bandar > 3.5 or diff_bandar < -1.0:
             continue
 
         candidates.append(s)

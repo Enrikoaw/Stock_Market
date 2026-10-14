@@ -43,7 +43,7 @@ class BacktestResultBucket:
 
 def run_historical_backtest(
     market_df: pd.DataFrame,
-    max_holding_bars: int = 10,
+    max_holding_bars: int = 5,
     min_liquidity_idr: float = 500_000_000,
 ) -> dict[str, Any]:
     """
@@ -93,14 +93,21 @@ def run_historical_backtest(
         # 6. Nilai Transaksi Harian Minimal Rp 1.0 Miliar (Value_IDR >= min_liquidity_idr)
         score_col = "Daily_SM_Score" if "Daily_SM_Score" in sub_latest.columns else "Smart_Money_Score"
         valid_triggers = ("MARKUP_BREAKOUT", "BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW")
+        sec_col = sub_latest["Sector"].astype(str).str.lower() if "Sector" in sub_latest.columns else pd.Series("", index=sub_latest.index)
 
         candidates = sub_latest[
-            (sub_latest["Close"] >= 50)
+            (sub_latest["Close"] >= 70)
+            & (~sec_col.str.contains("pemantauan khusus", na=False))
+            & (~sec_col.str.contains("akselerasi", na=False))
             & (sub_latest["Value_IDR"] >= min_liquidity_idr)
             & (sub_latest["Volume_Ratio"] >= 1.0)
+            & (sub_latest["Closing_Range"] >= 0.65)
+            & (sub_latest["Pct_Change"] >= -1.5)
+            & (sub_latest["Pct_Change"] <= 5.5)
             & (sub_latest["Trigger_Type"].isin(valid_triggers))
             & (sub_latest[score_col] >= 70)
-            & (sub_latest["Diff_VWAP_Pct"] <= 5.0)
+            & (sub_latest["Diff_VWAP_Pct"] >= -1.0)
+            & (sub_latest["Diff_VWAP_Pct"] <= 3.5)
         ]
 
         for cand in candidates.itertuples():
@@ -114,7 +121,7 @@ def run_historical_backtest(
 
             entry_high = close_p
             entry_low = close_p
-            sl_dist = max(entry_low * 0.025, min(entry_low * 0.075, 1.75 * atr14))
+            sl_dist = max(int(round(entry_low * 0.025)), min(int(round(entry_low * 0.040)), int(round(1.2 * atr14))))
             stop_loss = _round_idx_tick(entry_low - sl_dist)
             risk = max(1.0, entry_high - stop_loss)
             tp1 = _round_idx_tick(entry_high * 1.04)
@@ -174,10 +181,16 @@ def run_historical_backtest(
                 if bar["high"] >= tp2:
                     hit_tp2 = True
 
+                # Trailing Breakeven Stop: jika High mencapai +2.5% dari harga entry
+                if bar["high"] >= entry_price * 1.025:
+                    be_sl = _round_idx_tick(entry_price * 1.004)
+                    if be_sl > stop_loss:
+                        stop_loss = be_sl
+
                 hit_sl = bar["low"] <= stop_loss
                 hit_tp = bar["high"] >= tp1
 
-                # Di hari pertama entry, TP belum dihitung (konservatif)
+                # Di hari pertama entry, TP belum dihitung (mencegah look-ahead bias konservatif)
                 if b_idx == 0:
                     if hit_sl:
                         status = "LOSS"
@@ -186,7 +199,7 @@ def run_historical_backtest(
                     continue
 
                 if hit_sl and hit_tp:
-                    status = "LOSS"
+                    status = "WIN" if stop_loss >= entry_price else "LOSS"
                     exit_price = stop_loss
                     break
                 elif hit_tp:
@@ -203,8 +216,8 @@ def run_historical_backtest(
                                     break
                     break
                 elif hit_sl:
-                    status = "LOSS"
-                    exit_price = min(bar["open"], stop_loss)
+                    status = "WIN" if stop_loss >= entry_price else "LOSS"
+                    exit_price = min(bar["open"], stop_loss) if bar["open"] < stop_loss else stop_loss
                     break
 
             if status == "TIMEOUT" and bars_held > 0:

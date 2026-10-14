@@ -939,22 +939,45 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     df["Net_Foreign_IDR"] = df["Foreign_Buy_Val"] - df["Foreign_Sell_Val"]
     df["Net_Foreign_Pct"] = ((df["Net_Foreign_IDR"] / np.maximum(df["Value_IDR"], 1.0)) * 100.0).round(2)
 
+    # 5. Indikator Akumulasi OHLCV Murni:
+    # - On-Balance Volume (OBV) 5-Day Rising (OBV[-1] > OBV[-5])
+    # - Up/Down Volume Ratio 5-Day > 1.3 (Dominasi volume saat candle hijau)
+    if is_multi_day:
+        obv_dir = np.where(df["Close"] > df["Prev_Close"], 1.0, np.where(df["Close"] < df["Prev_Close"], -1.0, 0.0))
+        df["OBV_Delta"] = obv_dir * df["Volume_Lot"]
+        df["OBV"] = df.groupby("Ticker")["OBV_Delta"].cumsum()
+        df["OBV_5D_Rising"] = df.groupby("Ticker")["OBV"].transform(lambda s: s > s.shift(5)).fillna(True)
+
+        up_vol = np.where(df["Close"] >= df["Prev_Close"], df["Volume_Lot"], 0.0)
+        dn_vol = np.where(df["Close"] < df["Prev_Close"], df["Volume_Lot"], 0.0)
+        sum_up = df.assign(_up=up_vol).groupby("Ticker")["_up"].transform(lambda s: s.rolling(5, min_periods=1).sum())
+        sum_dn = df.assign(_dn=dn_vol).groupby("Ticker")["_dn"].transform(lambda s: s.rolling(5, min_periods=1).sum())
+        df["UpDown_Vol_Ratio_5D"] = (sum_up / np.maximum(sum_dn, 1.0)).round(2)
+    else:
+        df["OBV_5D_Rising"] = df["Pct_Change"] >= 0
+        df["UpDown_Vol_Ratio_5D"] = np.where(df["Pct_Change"] >= 0, 1.5, 0.8)
+
     # =========================================================================
     # SINGLE SOURCE OF TRUTH: 5 PILAR KUANTITATIF (MAKSIMUM 100 POIN)
     # =========================================================================
 
-    # Pilar 1: Volume Spike & VSA (25 Poin)
+    # Pilar 1: Volume Spike, VSA & Akumulasi Murni OHLCV (25 Poin)
     vol_pts = np.select(
         [df["Volume_Ratio"] >= 2.5, df["Volume_Ratio"] >= 1.8, df["Volume_Ratio"] >= 1.3, df["Volume_Ratio"] >= 1.0],
-        [16.0, 13.0, 10.0, 6.0],
-        default=2.0,
+        [12.0, 10.0, 7.0, 4.0],
+        default=1.0,
     )
     cr_pts = np.select(
-        [(df["Closing_Range"] >= 0.75) & (df["Pct_Change"] >= 0), df["Closing_Range"] >= 0.60, df["Closing_Range"] >= 0.45],
-        [9.0, 7.0, 4.0],
+        [(df["Closing_Range"] >= 0.75) & (df["Pct_Change"] >= 0), df["Closing_Range"] >= 0.65, df["Closing_Range"] >= 0.50],
+        [7.0, 5.0, 3.0],
         default=0.0,
     )
-    df["Pilar1_VSA_Score"] = np.clip(vol_pts + cr_pts, 0.0, 25.0).round(1)
+    pure_accum_pts = np.where(
+        df["OBV_5D_Rising"] & (df["UpDown_Vol_Ratio_5D"] >= 1.3),
+        6.0,
+        np.where(df["OBV_5D_Rising"] | (df["UpDown_Vol_Ratio_5D"] >= 1.1), 3.0, 0.0),
+    )
+    df["Pilar1_VSA_Score"] = np.clip(vol_pts + cr_pts + pure_accum_pts, 0.0, 25.0).round(1)
 
     # Pilar 2: Tren & Struktur MA20/MA50 (20 Poin)
     p_vs_ma20_pts = np.where(df["Close"] >= df["MA20"], 8.0, 0.0)
@@ -1011,35 +1034,63 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
     df["Daily_SM_Score"] = df["Smart_Money_Score"]
 
+    # Filter Keamanan Swing Pendek: Bukan Saham FCA/Akselerasi & Harga >= Rp 70
+    sec_lower = df["Sector"].astype(str).str.lower()
+    is_safe_swing = (
+        (df["Close"] >= 70)
+        & (~sec_lower.str.contains("pemantauan khusus", na=False))
+        & (~sec_lower.str.contains("akselerasi", na=False))
+    )
+
     # Klasifikasi Sinyal Kuantitatif (Trigger Type)
     c_dist = (
         ((df["Closing_Range"] <= 0.35) & (df["Pct_Change"] <= -1.5) & (df["Volume_Ratio"] >= 1.2))
         | (df["Smart_Money_Score"] <= 35)
     )
     c_markup = (
-        (df["Smart_Money_Score"] >= 74)
+        is_safe_swing
+        & (df["Smart_Money_Score"] >= 74)
         & (df["Volume_Ratio"] >= 1.6)
         & (df["Pct_Change"] >= 1.2)
+        & (df["Pct_Change"] <= 5.5)
         & (df["Closing_Range"] >= 0.65)
+        & (df["Diff_VWAP_Pct"] >= -1.0)
+        & (df["Diff_VWAP_Pct"] <= 3.5)
         & (df["Close"] >= df["MA20"])
     )
     c_silent = (
-        (df["Smart_Money_Score"] >= 65)
+        is_safe_swing
+        & (df["Smart_Money_Score"] >= 65)
         & (df["Is_Squeeze"])
-        & (df["Diff_VWAP_Pct"] >= -2.0)
+        & (df["Closing_Range"] >= 0.50)
+        & (df["Pct_Change"] >= -1.5)
+        & (df["Pct_Change"] <= 3.5)
+        & (df["Diff_VWAP_Pct"] >= -1.0)
         & (df["Diff_VWAP_Pct"] <= 3.5)
         & (df["Volume_Ratio"] <= 1.35)
     )
     c_big_accum = (
-        (df["Smart_Money_Score"] >= 68)
+        is_safe_swing
+        & (df["Smart_Money_Score"] >= 68)
         & (df["Volume_Ratio"] >= 1.3)
-        & (df["Diff_VWAP_Pct"] >= -1.5)
+        & (df["Closing_Range"] >= 0.65)
+        & (df["Pct_Change"] >= -1.5)
+        & (df["Pct_Change"] <= 5.5)
+        & (df["Diff_VWAP_Pct"] >= -1.0)
+        & (df["Diff_VWAP_Pct"] <= 3.5)
         & (df["Value_IDR"] >= 1_000_000_000)
     )
     c_foreign = (
-        (df["Smart_Money_Score"] >= 64)
+        is_safe_swing
+        & (df["Smart_Money_Score"] >= 64)
+        & (df["Closing_Range"] >= 0.65)
+        & (df["Pct_Change"] >= -1.5)
+        & (df["Pct_Change"] <= 5.5)
+        & (df["Diff_VWAP_Pct"] >= -1.0)
+        & (df["Diff_VWAP_Pct"] <= 3.5)
         & (df["Net_Foreign_Pct"] >= 12.0)
         & (df["Net_Foreign_IDR"] > 0)
+        & (df["Value_IDR"] >= 1_000_000_000)
     )
 
     df["Trigger_Type"] = np.select(
@@ -1071,6 +1122,8 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         spread_pct = round(float(latest["Spread_Pct"]), 2)
         atr14_val = max(1, int(round(float(latest["ATR14"]))))
         atr_pct = round(float(latest["ATR_Pct"]), 2)
+        obv_rising = bool(latest["OBV_5D_Rising"]) if "OBV_5D_Rising" in latest else True
+        updown_vol_ratio_5d = round(float(latest["UpDown_Vol_Ratio_5D"]), 2) if "UpDown_Vol_Ratio_5D" in latest else 1.2
 
         top3_bsr = round(float(latest["Top3_BSR"]), 2)
         top1_bsr = round(float(latest["Top1_BSR"]), 2)
@@ -1133,11 +1186,11 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         # 5-Pillar Quantitative Checklist
         checklist = [
             {
-                "title": "Pilar 1: Volume Spike & VSA",
+                "title": "Pilar 1: Volume Spike & VSA Murni",
                 "score": f"{pilar1_score}/25",
                 "status": "pass" if pilar1_score >= 17 else ("warn" if pilar1_score >= 10 else "fail"),
-                "metric": f"{vol_ratio}x Vol | CR {int(closing_range * 100)}%",
-                "detail": f"Volume {vol_ratio}x baseline MA20 dengan penutupan di {int(closing_range * 100)}% range bar harian ({vsa_pattern}).",
+                "metric": f"{vol_ratio}x Vol | CR {int(closing_range * 100)}% | Up/Down {updown_vol_ratio_5d}x",
+                "detail": f"Volume {vol_ratio}x baseline MA20 dengan penutupan di {int(closing_range * 100)}% range bar harian. Akumulasi OBV 5H {'Naik (Dominan Akumulasi)' if obv_rising else 'Turun/Datar'} dengan rasio volume naik/turun {updown_vol_ratio_5d}x ({vsa_pattern}).",
             },
             {
                 "title": "Pilar 2: Tren & Struktur MA20/MA50",
@@ -1173,7 +1226,8 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         entry_price = close_price
         entry_low = close_price
         entry_high = close_price
-        sl_distance = max(int(round(entry_price * 0.025)), min(int(round(entry_price * 0.075)), int(round(1.75 * atr14_val))))
+        # Batasi Stop Loss maksimal -3.5% s/d -4.0% (1.2 * ATR14) untuk Swing Pendek
+        sl_distance = max(int(round(entry_price * 0.025)), min(int(round(entry_price * 0.040)), int(round(1.2 * atr14_val))))
         stop_loss = _round_idx_tick(entry_price - sl_distance)
         risk_idr = max(1, entry_price - stop_loss)
         risk_pct = round((risk_idr / max(entry_price, 1)) * 100.0, 2)
@@ -1313,6 +1367,8 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             "atr14": atr14_val,
             "atr_pct": atr_pct,
             "is_squeeze": is_squeeze,
+            "obv_5d_rising": obv_rising,
+            "updown_vol_ratio_5d": updown_vol_ratio_5d,
             "price_vs_ma20_pct": price_vs_ma20_pct,
             "vsa_score": pilar1_score,
             "bandar_score": pilar2_score,

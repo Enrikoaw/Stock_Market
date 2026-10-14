@@ -307,26 +307,40 @@ function renderTodayCandidates(stocks) {
     return;
   }
 
-  // Filter kandidat terbaik untuk pemula:
+  // Filter kandidat terbaik untuk pemula (Safe Short-Term Swing):
   // 1. Skor Smart Money >= 70
   // 2. Turnover likuid (value_b_idr >= 1.0 Miliar)
-  // 3. Kenaikan belum berlebihan (-3% <= pct_change <= 7%)
-  // 4. TIDAK boleh yang sudah WIN atau LOSS di tracker!
-  //    (Saham yang sudah selesai TP atau kena SL tidak boleh direkomendasikan masuk lagi)
+  // 3. Harga saham >= Rp 70 & Bukan Papan Pemantauan Khusus / Akselerasi
+  // 4. Kenaikan belum di pucuk (-1.5% <= pct_change <= 5.5%)
+  // 5. Jarak ke modal bandar aman (-1.0% <= diff_bandar_avg_pct <= +3.5%)
+  // 6. Penutupan candle kuat (closing_range_pct >= 65%)
+  // 7. TIDAK boleh yang sudah WIN atau LOSS di tracker!
   let candidates = stocks.filter(s =>
     s.smart_money_score >= 70 &&
     (s.value_b_idr || 0) >= 1.0 &&
-    s.pct_change >= -3.0 &&
-    s.pct_change <= 7.0 &&
+    (s.close || 0) >= 70 &&
+    !String(s.sector || '').toLowerCase().includes('pemantauan khusus') &&
+    !String(s.sector || '').toLowerCase().includes('akselerasi') &&
+    s.pct_change >= -1.5 &&
+    s.pct_change <= 5.5 &&
+    (s.diff_bandar_avg_pct == null || (s.diff_bandar_avg_pct >= -1.0 && s.diff_bandar_avg_pct <= 3.5)) &&
+    (s.closing_range_pct == null || s.closing_range_pct >= 65) &&
     s.trigger_type !== 'DISTRIBUTION_WARNING' &&
     s.tracker_status !== 'WIN' &&
     s.tracker_status !== 'LOSS'
   );
 
-  // Fallback jika kriteria terlalu ketat: ambil top berdasarkan skor tertinggi yang bukan distribusi dan belum WIN/LOSS
+  // Fallback jika kriteria terlalu ketat: ambil top berdasarkan skor tertinggi yang bukan distribusi, bukan FCA/Penny, dan belum WIN/LOSS
   if (candidates.length < 3) {
     candidates = stocks
-      .filter(s => s.trigger_type !== 'DISTRIBUTION_WARNING' && s.tracker_status !== 'WIN' && s.tracker_status !== 'LOSS')
+      .filter(s =>
+        (s.close || 0) >= 70 &&
+        !String(s.sector || '').toLowerCase().includes('pemantauan khusus') &&
+        !String(s.sector || '').toLowerCase().includes('akselerasi') &&
+        s.trigger_type !== 'DISTRIBUTION_WARNING' &&
+        s.tracker_status !== 'WIN' &&
+        s.tracker_status !== 'LOSS'
+      )
       .sort((a, b) => b.smart_money_score - a.smart_money_score)
       .slice(0, 5);
   } else {

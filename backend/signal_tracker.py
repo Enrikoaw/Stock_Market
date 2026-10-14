@@ -121,8 +121,8 @@ class SignalTracker:
     def __init__(self, sqlite_path: Path) -> None:
         self.min_score = int(os.environ.get("TRACKER_MIN_SCORE", "70"))
         self.tp_level = 2 if os.environ.get("TRACKER_TP_LEVEL", "1").strip() == "2" else 1
-        self.entry_expiry_days = int(os.environ.get("TRACKER_ENTRY_EXPIRY_DAYS", "5"))
-        self.max_hold_days = int(os.environ.get("TRACKER_MAX_HOLD_DAYS", "20"))
+        self.entry_expiry_days = int(os.environ.get("TRACKER_ENTRY_EXPIRY_DAYS", "3"))
+        self.max_hold_days = int(os.environ.get("TRACKER_MAX_HOLD_DAYS", "5"))
         self.fee_roundtrip_pct = float(os.environ.get("TRACKER_FEE_PCT", "0.4"))
         self._lock = threading.RLock()
 
@@ -201,10 +201,12 @@ class SignalTracker:
                 trig = str(r.get("trigger_type") or "")
                 ticker = str(r.get("ticker") or "").upper()
                 s_date = str(r.get("signal_date") or "")
-                val_idr = val_map.get((ticker, s_date), 1_000_000_000.0)
+                sig_close = float(r.get("signal_close") or r.get("entry_high") or 0)
+                sec_lower = str(r.get("sector") or "").lower()
+                is_fca_or_penny = ("pemantauan khusus" in sec_lower) or ("akselerasi" in sec_lower) or (sig_close > 0 and sig_close < 70)
 
-                # 6 Filter: Skor >= 70, Sinyal Akumulasi Sah, Nilai Transaksi >= 1 Miliar
-                if score < self.min_score or trig not in TRACKABLE_TRIGGERS or val_idr < 1_000_000_000:
+                # 6 Filter: Skor >= 70, Sinyal Akumulasi Sah, Nilai Transaksi >= 1 Miliar, Bukan FCA/Penny (< 70)
+                if score < self.min_score or trig not in TRACKABLE_TRIGGERS or val_idr < 1_000_000_000 or is_fca_or_penny:
                     ids_to_del.append(r["id"])
 
             if ids_to_del:
@@ -241,28 +243,63 @@ class SignalTracker:
         if not plan:
             return False, f"{ticker}: trading plan tidak tersedia."
 
+        # Filter 1: Hard Stop Saham di bawah Rp 70 (Penny Stock terlalu berisiko untuk swing)
+        close_p = float(stock.get("close") or stock.get("signal_close") or 0)
+        if close_p < 70:
+            return False, f"{ticker}: Harga saham (Rp {close_p:,.0f}) < Rp 70 (saham gocap/penny berisiko tinggi diblokir)."
+
+        # Filter 2: Tolak Papan Pemantauan Khusus (FCA) & Akselerasi
+        sec = str(stock.get("sector", "")).lower()
+        if "pemantauan khusus" in sec or "akselerasi" in sec:
+            return False, f"{ticker}: Saham Papan Pemantauan Khusus (FCA) / Akselerasi diblokir demi keamanan modal."
+
         score_val = int(stock.get("smart_money_score", 0))
         if score_val < self.min_score:
             return False, f"{ticker}: Smart Money Score ({score_val}) belum memenuhi syarat minimal ({self.min_score}+)."
+
+        # Filter 3: Filter Pucuk Harian (-1.5% <= pct_change <= +5.5% — mencegah beli di pucuk candle)
+        pct_chg = stock.get("pct_change")
+        if pct_chg is not None:
+            try:
+                pct_val = float(pct_chg)
+                if pct_val < -1.5 or pct_val > 5.5:
+                    return False, f"{ticker}: Perubahan harga ({pct_val:+.2f}%) di luar batas ideal swing (-1.5% s/d +5.5% — mencegah kejar di pucuk)."
+            except (ValueError, TypeError):
+                pass
+
+        # Filter 4: Filter Closing Range (CR >= 0.65 — menolak candle ekor atas panjang / jarum distribusi)
+        cr_val = stock.get("closing_range")
+        if cr_val is None and "closing_range_pct" in stock:
+            try:
+                cr_val = float(stock["closing_range_pct"]) / 100.0
+            except (ValueError, TypeError):
+                pass
+        if cr_val is not None:
+            try:
+                if float(cr_val) < 0.65:
+                    return False, f"{ticker}: Closing Range ({float(cr_val):.2f}) < 0.65 (terdeteksi ekor atas panjang / tekanan jual bandar)."
+            except (ValueError, TypeError):
+                pass
 
         e_target = float(plan.get("entry_price") or plan.get("entry_high") or plan.get("entry_low") or stock.get("close", 0))
         e_low = e_target
         e_high = e_target
         sl = float(plan["stop_loss"])
         target = float(plan["target_2"] if self.tp_level == 2 else plan["target_1"])
-        # Filter Tambahan: Jarak harga ke modal rata-rata bandar tidak boleh lebih dari +5.0%
+
+        # Filter 5: Jarak harga ke modal rata-rata bandar (VWAP 5H) harus antara -1.0% s/d +3.5%
         diff_bandar = stock.get("diff_bandar_avg_pct")
         if diff_bandar is None and "diff_bandar_avg_pct" in plan:
             diff_bandar = plan.get("diff_bandar_avg_pct")
         if diff_bandar is not None:
             try:
                 diff_val = float(diff_bandar)
-                if diff_val > 5.0:
-                    return False, f"{ticker}: Jarak harga ke modal bandar ({diff_val:+.1f}%) melebihi batas toleransi aman (maks +5.0%)."
+                if diff_val < -1.0 or diff_val > 3.5:
+                    return False, f"{ticker}: Jarak harga ke modal bandar ({diff_val:+.1f}%) di luar batas toleransi aman (-1.0% s/d +3.5%)."
             except (ValueError, TypeError):
                 pass
 
-        # Filter ke-6: Nilai Transaksi Harian Minimal Rp 1.0 Miliar (Menolak Saham Gorengan Sepi / Tidak Likuid)
+        # Filter 6: Nilai Transaksi Harian Minimal Rp 1.0 Miliar (Menolak Saham Gorengan Sepi / Tidak Likuid)
         val_b = stock.get("value_b_idr")
         if val_b is None and "value_idr" in stock:
             try:
@@ -654,9 +691,11 @@ class SignalTracker:
                     self._close(r, date, sl, "LOSS", "SL tersentuh di hari yang sama dengan entry.", changes)
                     return
 
-                # Cek TP di hari yang sama
-                if h >= r["target"]:
-                    self._close(r, date, r["target"], "WIN", f"Target Price (Rp {r['target']:,.0f}) tersentuh di hari yang sama dengan entry (High Rp {h:,.0f}).", changes)
+                # Cek TP di hari yang sama: Mencegah Look-Ahead Bias Intraday!
+                # Jangan pernah menghitung TP (WIN) di candle harian yang sama KECUALI harga Open pagi itu
+                # memang sudah berada di dalam/bawah zona entry (o <= e_high).
+                if o <= e_high and h >= r["target"]:
+                    self._close(r, date, r["target"], "WIN", f"Target Price (Rp {r['target']:,.0f}) tersentuh di hari yang sama dengan entry (Open Rp {o:,.0f} <= Entry Rp {e_high:,.0f}).", changes)
                     return
 
                 return
@@ -679,13 +718,29 @@ class SignalTracker:
             # dan abaikan candle sebelum tanggal entry.
             if r.get("entry_date") and date < str(r["entry_date"]):
                 return
-            sl, tp = r["stop_loss"], r["target"]
+            sl, tp = float(r["stop_loss"]), float(r["target"])
+            entry_p = float(r["entry_price"])
+
+            # Breakeven Stop (Trailing SL): Jika High candle sudah naik menyentuh minimal +2.5% dari harga entry,
+            # naikkan stop_loss otomatis ke harga modal + biaya fee (entry * 1.004).
+            from backend.screener_engine import _round_idx_tick
+            if h >= entry_p * 1.025:
+                be_sl = _round_idx_tick(entry_p * (1.0 + self.fee_roundtrip_pct / 100.0))
+                if be_sl > sl:
+                    sl = be_sl
+                    r["stop_loss"] = be_sl
+                    r["note"] = f"Trailing Breakeven Stop aktif di Rp {be_sl:,.0f} (High Rp {h:,.0f} menyentuh +2.5%)."
 
             # 1. Stop Loss tersentuh
             if l <= sl:
                 exit_p = o if o < sl else sl
-                note = "Stop Loss tersentuh." if h < tp else "SL & TP tersentuh di hari yang sama — dihitung LOSS (konservatif)."
-                self._close(r, date, exit_p, "LOSS", note, changes)
+                if sl > entry_p:
+                    note = f"Trailing Breakeven Stop tersentuh di Rp {exit_p:,.0f} (mengamankan modal pasca rally +2.5%)."
+                    status = "WIN" if exit_p >= entry_p else "LOSS"
+                else:
+                    note = "Stop Loss tersentuh." if h < tp else "SL & TP tersentuh di hari yang sama — dihitung LOSS (konservatif)."
+                    status = "LOSS"
+                self._close(r, date, exit_p, status, note, changes)
                 return
 
             # 2. Target Price tersentuh
@@ -695,7 +750,6 @@ class SignalTracker:
                 return
 
             # 3. Belum tersentuh SL maupun TP -> tetap RUNNING dengan floating P/L terupdate
-            entry_p = float(r["entry_price"])
             r["last_close"] = c
             r["pnl_pct"] = round((c - entry_p) / entry_p * 100.0, 2)
             r["note"] = f"Running: Entry Rp {entry_p:,.0f}, Last Rp {c:,.0f} ({r['pnl_pct']:+.2f}%). High hari ini Rp {h:,.0f}."
