@@ -310,19 +310,23 @@ function renderTodayCandidates(stocks) {
   // Filter kandidat terbaik untuk pemula:
   // 1. Skor Smart Money >= 70
   // 2. Turnover likuid (value_b_idr >= 1.0 Miliar)
-  // 3. Kenaikan belum berlebihan (-2% <= pct_change <= 6%)
+  // 3. Kenaikan belum berlebihan (-3% <= pct_change <= 7%)
+  // 4. TIDAK boleh yang sudah WIN atau LOSS di tracker!
+  //    (Saham yang sudah selesai TP atau kena SL tidak boleh direkomendasikan masuk lagi)
   let candidates = stocks.filter(s =>
     s.smart_money_score >= 70 &&
     (s.value_b_idr || 0) >= 1.0 &&
     s.pct_change >= -3.0 &&
     s.pct_change <= 7.0 &&
-    s.trigger_type !== 'DISTRIBUTION_WARNING'
+    s.trigger_type !== 'DISTRIBUTION_WARNING' &&
+    s.tracker_status !== 'WIN' &&
+    s.tracker_status !== 'LOSS'
   );
 
-  // Fallback jika kriteria terlalu ketat: ambil top 3-5 berdasarkan skor tertinggi yang bukan distribusi
+  // Fallback jika kriteria terlalu ketat: ambil top berdasarkan skor tertinggi yang bukan distribusi dan belum WIN/LOSS
   if (candidates.length < 3) {
     candidates = stocks
-      .filter(s => s.trigger_type !== 'DISTRIBUTION_WARNING')
+      .filter(s => s.trigger_type !== 'DISTRIBUTION_WARNING' && s.tracker_status !== 'WIN' && s.tracker_status !== 'LOSS')
       .sort((a, b) => b.smart_money_score - a.smart_money_score)
       .slice(0, 5);
   } else {
@@ -333,9 +337,9 @@ function renderTodayCandidates(stocks) {
     container.innerHTML = `
       <div class="col-span-full p-8 rounded-2xl glass-panel text-center text-slate-300 text-xs space-y-2">
         <span class="text-3xl block">🛡️</span>
-        <div class="text-sm font-bold text-white">Pasar Sedang Defensif / Belum Ada Setup Ideal</div>
+        <div class="text-sm font-bold text-white">Pasar Sedang Defensif / Belum Ada Setup Baru Ideal</div>
         <p class="max-w-md mx-auto text-slate-400">
-          Sistem tidak menemukan saham yang memenuhi syarat keamanan pemula hari ini. Menahan diri di posisi Cash adalah keputusan cerdas saat pasar belum memberi peluang aman!
+          Semua saham yang terakumulasi kuat telah mencapai target (Take Profit) atau sedang berjalan di tab Pantauan.
         </p>
       </div>
     `;
@@ -360,10 +364,21 @@ function renderTodayCandidates(stocks) {
     const tp1Pct = plan.target_1_pct != null ? plan.target_1_pct : (((target1 - s.close) / s.close) * 100).toFixed(1);
     const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : (((target2 - s.close) / s.close) * 100).toFixed(1);
 
-    // Tingkat Risiko
-    let riskBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">Risiko Rendah</span>';
-    if (s.vol_ratio > 2.5 || s.pct_change > 4.5) {
-      riskBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-400/30">Risiko Sedang</span>';
+    // Tingkat Risiko / Status Pantauan
+    let statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">Risiko Rendah</span>';
+    if (s.tracker_status === 'RUNNING') {
+      statusPill = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/35">🚀 Posisi Aktif (${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%)</span>`;
+    } else if (s.tracker_status === 'WATCHLIST') {
+      statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-400/30">⏳ Menunggu Entry</span>';
+    } else if (s.vol_ratio > 2.5 || s.pct_change > 4.5) {
+      statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-400/30">Risiko Sedang</span>';
+    }
+
+    let entryLabel = 'Area Beli';
+    let entryValue = `${fmtNumber(entryLow)} - ${fmtNumber(entryHigh)}`;
+    if (s.tracker_status === 'RUNNING') {
+      entryLabel = 'Harga Beli Terkunci';
+      entryValue = `Rp ${fmtPrice(plan.entry_price || entryHigh)}`;
     }
 
     return `
@@ -401,15 +416,15 @@ function renderTodayCandidates(stocks) {
             <span class="text-white font-bold">${strength.label}</span>
             <span class="text-slate-400 text-[11px]">(Skor ${s.smart_money_score})</span>
           </div>
-          ${riskBadge}
+          ${statusPill}
         </div>
 
         <!-- Rencana Trading Terukur (Entry, SL, TP) -->
         <div class="p-3 rounded-xl glass-subcard border border-white/[0.06] space-y-2 text-xs">
           <div class="grid grid-cols-3 gap-1.5 text-center font-mono">
             <div class="p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
-              <div class="text-[10px] text-blue-300 font-sans font-semibold">Area Beli</div>
-              <div class="text-white font-bold text-[11px] mt-0.5">${fmtNumber(entryLow)} - ${fmtNumber(entryHigh)}</div>
+              <div class="text-[10px] text-blue-300 font-sans font-semibold">${entryLabel}</div>
+              <div class="text-white font-bold text-[11px] mt-0.5">${entryValue}</div>
             </div>
             <div class="p-2 rounded-lg bg-rose-500/10 border border-rose-400/20">
               <div class="text-[10px] text-rose-300 font-sans font-semibold">Batas Rugi (SL)</div>
@@ -998,11 +1013,12 @@ function renderScreenerTable(stocks) {
             ${fmtSignPct(s.pct_change)}
           </td>
 
-          <!-- Volume Spike Badge -->
+          <!-- Volume Spike Badge & Status Pantauan -->
           <td class="py-3 px-2 text-center font-mono">
             <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-amber-500/15 text-amber-300 border border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
               ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
             </span>
+            ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-amber-300 mt-1 font-mono bg-amber-500/10 px-1 py-0.5 rounded border border-amber-400/25">🏆 WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? `<span class="block text-[9px] font-bold text-emerald-300 mt-1 font-mono bg-emerald-500/10 px-1 py-0.5 rounded border border-emerald-400/25">🚀 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-300 mt-1 font-mono bg-blue-500/10 px-1 py-0.5 rounded border border-blue-400/25">⏳ WATCHLIST</span>' : ''}
           </td>
 
           <!-- Smart Money Score with Progress Bar -->
@@ -1120,32 +1136,91 @@ function renderInspectorPanel(d) {
   // Auto Trading Plan
   const plan = d.trading_plan;
   const biasEl = document.getElementById('planActionBias');
-  if (biasEl && plan) {
-    biasEl.textContent = plan.action_bias;
-    if (d.trigger_type === 'DISTRIBUTION_WARNING') {
-      biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-400/35 shadow-[0_0_12px_rgba(244,63,94,0.2)]';
-    } else {
-      biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/35 shadow-[0_0_12px_rgba(16,185,129,0.2)]';
-    }
-  }
-
+  const pel = document.getElementById('planEntryLabel');
   const pez = document.getElementById('planEntryZone');
-  if (pez && plan) pez.textContent = `${fmtPrice(plan.entry_low)} - ${fmtNumber(plan.entry_high)}`;
   const slEl = document.getElementById('planStopLoss');
-  if (slEl && plan) slEl.textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct}%)`;
   const tgtEl = document.getElementById('planTargets');
-  if (tgtEl && plan) tgtEl.textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct}%)`;
-
   const tgt2El = document.getElementById('planTarget2');
-  if (tgt2El && plan) {
-    if (plan.target_2 && plan.target_2 > 0) {
-      tgt2El.textContent = `${fmtNumber(plan.target_2)} (+${plan.target_2_pct}%)`;
-    } else {
-      tgt2El.textContent = '-';
+  const pr = document.getElementById('planRationale');
+  const btnWatch = document.getElementById('btnAddToWatchlist');
+
+  if (plan) {
+    const trackerSt = d.tracker_status || plan.status;
+    if (biasEl) {
+      biasEl.textContent = plan.action_bias;
+      if (trackerSt === 'WIN') {
+        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.25)]';
+      } else if (trackerSt === 'RUNNING') {
+        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/35 shadow-[0_0_12px_rgba(16,185,129,0.25)]';
+      } else if (trackerSt === 'LOSS' || d.trigger_type === 'DISTRIBUTION_WARNING') {
+        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-400/35 shadow-[0_0_12px_rgba(244,63,94,0.2)]';
+      } else {
+        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/35 shadow-[0_0_12px_rgba(16,185,129,0.2)]';
+      }
+    }
+
+    if (pel) {
+      if (trackerSt === 'WIN') {
+        pel.textContent = 'Harga Beli (Selesai)';
+      } else if (trackerSt === 'RUNNING') {
+        pel.textContent = 'Harga Beli (Aktif)';
+      } else if (trackerSt === 'WATCHLIST') {
+        pel.textContent = 'Area Beli (Antre)';
+      } else {
+        pel.textContent = 'Area Masuk';
+      }
+    }
+
+    if (pez) {
+      if (trackerSt === 'WIN') {
+        pez.innerHTML = `<span class="text-amber-300 font-bold">Rp ${fmtPrice(plan.entry_price || plan.entry_high)}</span>`;
+      } else if (trackerSt === 'RUNNING') {
+        pez.innerHTML = `<span class="text-emerald-300 font-bold">Rp ${fmtPrice(plan.entry_price || plan.entry_high)}</span>`;
+      } else {
+        pez.textContent = `${fmtPrice(plan.entry_low)} - ${fmtNumber(plan.entry_high)}`;
+      }
+    }
+
+    if (slEl) slEl.textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct != null ? plan.stop_loss_pct : -5}%)`;
+    if (tgtEl) tgtEl.textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct != null ? plan.target_1_pct : 4}%)`;
+
+    if (tgt2El) {
+      if (plan.target_2 && plan.target_2 > 0) {
+        tgt2El.textContent = `${fmtNumber(plan.target_2)} (+${plan.target_2_pct != null ? plan.target_2_pct : 7}%)`;
+      } else {
+        tgt2El.textContent = '-';
+      }
+    }
+
+    if (pr) {
+      const rr = plan.risk_reward ? ` (R:R = ${plan.risk_reward})` : '';
+      pr.textContent = `${plan.rationale || ''}${rr}`;
+    }
+
+    if (btnWatch) {
+      if (trackerSt === 'WIN') {
+        btnWatch.innerHTML = '<span>🏆</span><span>Target 1 Selesai</span>';
+        btnWatch.className = 'py-2 px-3 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm';
+        btnWatch.onclick = () => switchMainTab('watchlist');
+        btnWatch.title = 'Sinyal telah mencapai Target 1 di Pantauan (Klik untuk melihat)';
+      } else if (trackerSt === 'RUNNING') {
+        btnWatch.innerHTML = `<span>🚀</span><span>Posisi Aktif (${(plan.pnl_pct || 0) >= 0 ? '+' : ''}${plan.pnl_pct || 0}%)</span>`;
+        btnWatch.className = 'py-2 px-3 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm';
+        btnWatch.onclick = () => switchMainTab('watchlist');
+        btnWatch.title = 'Saham sedang dalam posisi berjalan di Pantauan (Klik untuk melihat)';
+      } else if (trackerSt === 'WATCHLIST') {
+        btnWatch.innerHTML = '<span>⏳</span><span>Di Watchlist (Antre)</span>';
+        btnWatch.className = 'py-2 px-3 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm';
+        btnWatch.onclick = () => switchMainTab('watchlist');
+        btnWatch.title = 'Sudah masuk antrean beli Watchlist (Klik untuk melihat)';
+      } else {
+        btnWatch.innerHTML = '<span>➕</span><span>Masuk Watchlist</span>';
+        btnWatch.className = 'py-2 px-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95';
+        btnWatch.onclick = addToWatchlist;
+        btnWatch.title = 'Masukkan saham ini ke Watchlist Tracker';
+      }
     }
   }
-  const pr = document.getElementById('planRationale');
-  if (pr && plan) pr.textContent = `${plan.rationale} (Risk/Reward = ${plan.risk_reward})`;
 
   // Checklist 5 Pilar
   const checklistEl = document.getElementById('inspChecklist');

@@ -71,6 +71,111 @@ STATE: dict = {
 TRACKER = SignalTracker(BASE_DIR / "data" / "tracker.db")
 
 
+def sync_tracker_to_analysis(analysis: dict | None) -> None:
+    """Sinkronkan status riil dari database tracker (WATCHLIST, RUNNING, WIN, LOSS)
+    ke objek saham dan trading_plan agar Tab Hari Ini, Screener, dan Inspector 100% konsisten dengan Pantauan."""
+    if not analysis or "stocks" not in analysis or "details" not in analysis:
+        return
+
+    sig_map = TRACKER.get_latest_signals_map()
+    if not sig_map:
+        return
+
+    for stock in analysis["stocks"]:
+        t = str(stock.get("ticker", "")).upper()
+        if t in sig_map:
+            sig = sig_map[t]
+            st = str(sig.get("status", "")).upper()
+            stock["tracker_status"] = st
+            stock["tracker_pnl_pct"] = sig.get("pnl_pct")
+            stock["tracker_entry_price"] = sig.get("entry_price")
+            stock["tracker_signal_date"] = sig.get("signal_date")
+
+            plan = stock.get("trading_plan") or {}
+            plan["status"] = st
+            plan["tracker_id"] = sig["id"]
+            plan["signal_date"] = sig.get("signal_date")
+            if sig.get("entry_low") is not None:
+                plan["entry_low"] = float(sig["entry_low"])
+            if sig.get("entry_high") is not None:
+                plan["entry_high"] = float(sig["entry_high"])
+            if sig.get("stop_loss") is not None:
+                plan["stop_loss"] = float(sig["stop_loss"])
+            if sig.get("target") is not None:
+                plan["target_1"] = float(sig["target"])
+            if sig.get("target_2") is not None:
+                plan["target_2"] = float(sig["target_2"])
+            if sig.get("entry_price"):
+                plan["entry_price"] = float(sig["entry_price"])
+            if sig.get("pnl_pct") is not None:
+                plan["pnl_pct"] = float(sig["pnl_pct"])
+
+            if st == "WIN":
+                pnl = sig.get("pnl_pct", 0)
+                plan["action_bias"] = f"🏆 TARGET TERCAPAI (WIN +{pnl}%)"
+                plan["rationale"] = f"Target untung (TP1) telah tercapai (+{pnl}%). Rencana trading selesai (Take Profit)."
+            elif st == "RUNNING":
+                pnl = sig.get("pnl_pct", 0)
+                plan["action_bias"] = f"🚀 POSISI AKTIF ({pnl:+.1f}%)"
+                plan["rationale"] = f"Posisi beli aktif sejak {sig.get('entry_date', sig.get('signal_date'))} @ Rp {float(sig.get('entry_price', 0)):,.0f}."
+            elif st == "WATCHLIST":
+                plan["action_bias"] = "⏳ MENUNGGU ENTRY (WATCHLIST)"
+                plan["rationale"] = f"Sinyal aktif di Watchlist sejak {sig.get('signal_date')}. Menunggu harga menyentuh area beli."
+            elif st == "LOSS":
+                pnl = sig.get("pnl_pct", 0)
+                plan["action_bias"] = f"🛑 CUT LOSS ({pnl}%)"
+                plan["rationale"] = f"Posisi ditutup disiplin batas rugi pada {sig.get('exit_date', sig.get('signal_date'))}."
+
+            stock["trading_plan"] = plan
+
+    for t, detail in analysis["details"].items():
+        t_up = str(t).upper()
+        if t_up in sig_map:
+            sig = sig_map[t_up]
+            st = str(sig.get("status", "")).upper()
+            detail["tracker_status"] = st
+            detail["tracker_pnl_pct"] = sig.get("pnl_pct")
+            detail["tracker_entry_price"] = sig.get("entry_price")
+            detail["tracker_signal_date"] = sig.get("signal_date")
+
+            plan = detail.get("trading_plan") or {}
+            plan["status"] = st
+            plan["tracker_id"] = sig["id"]
+            plan["signal_date"] = sig.get("signal_date")
+            if sig.get("entry_low") is not None:
+                plan["entry_low"] = float(sig["entry_low"])
+            if sig.get("entry_high") is not None:
+                plan["entry_high"] = float(sig["entry_high"])
+            if sig.get("stop_loss") is not None:
+                plan["stop_loss"] = float(sig["stop_loss"])
+            if sig.get("target") is not None:
+                plan["target_1"] = float(sig["target"])
+            if sig.get("target_2") is not None:
+                plan["target_2"] = float(sig["target_2"])
+            if sig.get("entry_price"):
+                plan["entry_price"] = float(sig["entry_price"])
+            if sig.get("pnl_pct") is not None:
+                plan["pnl_pct"] = float(sig["pnl_pct"])
+
+            if st == "WIN":
+                pnl = sig.get("pnl_pct", 0)
+                plan["action_bias"] = f"🏆 TARGET TERCAPAI (WIN +{pnl}%)"
+                plan["rationale"] = f"Target untung (TP1) telah tercapai (+{pnl}%). Rencana trading selesai (Take Profit)."
+            elif st == "RUNNING":
+                pnl = sig.get("pnl_pct", 0)
+                plan["action_bias"] = f"🚀 POSISI AKTIF ({pnl:+.1f}%)"
+                plan["rationale"] = f"Posisi beli aktif sejak {sig.get('entry_date', sig.get('signal_date'))} @ Rp {float(sig.get('entry_price', 0)):,.0f}."
+            elif st == "WATCHLIST":
+                plan["action_bias"] = "⏳ MENUNGGU ENTRY (WATCHLIST)"
+                plan["rationale"] = f"Sinyal aktif di Watchlist sejak {sig.get('signal_date')}. Menunggu harga menyentuh area beli."
+            elif st == "LOSS":
+                pnl = sig.get("pnl_pct", 0)
+                plan["action_bias"] = f"🛑 CUT LOSS ({pnl}%)"
+                plan["rationale"] = f"Posisi ditutup disiplin batas rugi pada {sig.get('exit_date', sig.get('signal_date'))}."
+
+            detail["trading_plan"] = plan
+
+
 def _process_tracker(analysis: dict, sync_live_network: bool = False) -> dict:
     """Evaluasi sinyal aktif dengan candle baru, lalu catat sinyal akumulasi baru ke Watchlist.
     Hanya berjalan untuk data pasar REAL (bukan simulasi / upload manual)."""
@@ -90,6 +195,7 @@ def _process_tracker(analysis: dict, sync_live_network: bool = False) -> dict:
             for k in ("entered", "win", "loss", "expired", "timeout"):
                 result[k] = max(result.get(k, 0), main_res.get(k, 0))
             result["added"] = TRACKER.auto_track(analysis)
+            sync_tracker_to_analysis(analysis)
 
         STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[Tracker] {result}")
@@ -301,6 +407,7 @@ def init_default_state() -> None:
     STATE["is_real_market"] = False
     STATE["analysis"] = analyze_smart_money_dataframe(enriched_900)
     STATE["last_sync_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sync_tracker_to_analysis(STATE["analysis"])
 
 
 init_default_state()
@@ -331,6 +438,7 @@ def get_screener_data(
         init_default_state()
 
     analysis = STATE["analysis"]
+    sync_tracker_to_analysis(analysis)
     stocks = list(analysis["stocks"])
 
     if trigger and isinstance(trigger, str) and trigger.upper() != "ALL":
@@ -397,6 +505,7 @@ def get_stock_detail(ticker: str) -> dict:
     if STATE["analysis"] is None:
         init_default_state()
 
+    sync_tracker_to_analysis(STATE["analysis"])
     key = ticker.strip().upper()
     details_map = STATE["analysis"]["details"]
     if key not in details_map:

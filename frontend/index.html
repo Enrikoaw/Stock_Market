@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=39.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=40.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -562,7 +562,7 @@
             <!-- Grid Harga Area Masuk, Batas Rugi, Target -->
             <div class="grid grid-cols-3 gap-2 text-center text-xs">
               <div class="p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
-                <div class="text-[10px] text-blue-300 font-semibold">Area Masuk</div>
+                <div id="planEntryLabel" class="text-[10px] text-blue-300 font-semibold">Area Masuk</div>
                 <div id="planEntryZone" class="font-mono font-bold text-white text-[11px] mt-0.5">-</div>
               </div>
               <div class="p-2 rounded-lg bg-rose-500/10 border border-rose-400/20">
@@ -583,6 +583,7 @@
             <!-- Tombol Aksi: Masuk Watchlist Tracker & Hitung Lot -->
             <div class="grid grid-cols-2 gap-2 pt-1">
               <button
+                id="btnAddToWatchlist"
                 onclick="addToWatchlist()"
                 class="py-2 px-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
                 title="Masukkan saham ini ke Watchlist Tracker"
@@ -1318,6 +1319,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=39.0"></script>
+  <script src="/static/app.js?v=40.0"></script>
 </body>
 </html>

@@ -344,6 +344,24 @@ class SignalTracker:
             ).scalars().all()
             return [str(t).upper() for t in rows]
 
+    def get_latest_signals_map(self) -> dict[str, dict]:
+        """Mengembalikan map ticker -> sinyal terbaru dari database tracker.
+        Memprioritaskan sinyal berstatus aktif (WATCHLIST, RUNNING), lalu sinyal selesai (WIN, LOSS)."""
+        with self._lock, self.engine.connect() as conn:
+            rows = conn.execute(
+                select(signals_table).order_by(signals_table.c.id.desc())
+            ).mappings().all()
+
+            result: dict[str, dict] = {}
+            for r in rows:
+                t = str(r["ticker"]).upper()
+                st = str(r["status"]).upper()
+                if t not in result:
+                    result[t] = dict(r)
+                elif result[t].get("status") not in ACTIVE_STATUSES and st in ACTIVE_STATUSES:
+                    result[t] = dict(r)
+            return result
+
     def sync_active_signals_live(self, extra_tickers: list[str] | None = None) -> dict:
         """Tarik harga & candle intraday/live terbaru secara cepat (< 3 detik) untuk saham yang aktif di Watchlist & Running (+ top screener), lalu evaluasi."""
         active_tickers = self.get_active_tickers()
