@@ -85,27 +85,23 @@ function switchMainTab(tabName) {
   const btnExplore = document.getElementById('tabNavExplore');
   const btnWatchlist = document.getElementById('tabNavWatchlist');
 
-  const activeBtnCls = "px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shadow-[0_0_12px_rgba(16,185,129,0.2)]";
-  const inactiveBtnCls = "px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5";
-
   if (secToday) secToday.classList.toggle('hidden', tabName !== 'today');
   if (secExplore) secExplore.classList.toggle('hidden', tabName !== 'explore');
   if (secWatchlist) secWatchlist.classList.toggle('hidden', tabName !== 'watchlist');
 
-  if (btnToday) btnToday.className = tabName === 'today' ? activeBtnCls : inactiveBtnCls;
-  if (btnExplore) btnExplore.className = tabName === 'explore' ? activeBtnCls : inactiveBtnCls;
-  if (btnWatchlist) btnWatchlist.className = tabName === 'watchlist' ? activeBtnCls : inactiveBtnCls;
+  // Desktop Header Tabs (Liquid Glass Pill with Glowing Neon Badges)
+  if (btnToday) btnToday.classList.toggle('active', tabName === 'today');
+  if (btnExplore) btnExplore.classList.toggle('active', tabName === 'explore');
+  if (btnWatchlist) btnWatchlist.classList.toggle('active', tabName === 'watchlist');
 
-  // Sinkronisasi tombol Navigasi Mobile (Bottom Bar)
+  // Mobile Bottom Bar Tabs (Liquid Glass Pill with Glowing Neon Badges)
   const mobToday = document.getElementById('mobileNavToday');
   const mobExplore = document.getElementById('mobileNavExplore');
   const mobWatchlist = document.getElementById('mobileNavWatchlist');
-  const mobActiveCls = "mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-emerald-400 bg-emerald-500/15 border border-emerald-400/30 transition active:scale-95";
-  const mobInactiveCls = "mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-slate-400 hover:text-white transition active:scale-95";
 
-  if (mobToday) mobToday.className = tabName === 'today' ? mobActiveCls : mobInactiveCls;
-  if (mobExplore) mobExplore.className = tabName === 'explore' ? mobActiveCls : mobInactiveCls;
-  if (mobWatchlist) mobWatchlist.className = tabName === 'watchlist' ? mobActiveCls : mobInactiveCls;
+  if (mobToday) mobToday.classList.toggle('active', tabName === 'today');
+  if (mobExplore) mobExplore.classList.toggle('active', tabName === 'explore');
+  if (mobWatchlist) mobWatchlist.classList.toggle('active', tabName === 'watchlist');
 
   if (tabName === 'today') {
     renderTodayCandidates(currentStocks);
@@ -1234,23 +1230,51 @@ function renderInspectorPanel(d) {
 
     if (btnWatch) {
       if (trackerSt === 'WIN') {
-        btnWatch.innerHTML = '<span>🏆</span><span>Target 1 Selesai</span>';
-        btnWatch.className = 'py-2 px-3 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm';
+        btnWatch.innerHTML = `
+          <span class="neon-icon-badge">
+            <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v3h10v-3c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34M7 4h10v6a5 5 0 0 1-10 0V4z"/>
+            </svg>
+          </span>
+          <span>Target 1 Selesai</span>
+        `;
+        btnWatch.className = 'liquid-glass-btn neon-amber active py-2 px-3 justify-center active:scale-95 w-full';
         btnWatch.onclick = () => switchMainTab('watchlist');
         btnWatch.title = 'Sinyal telah mencapai Target 1 di Pantauan (Klik untuk melihat)';
       } else if (trackerSt === 'RUNNING') {
-        btnWatch.innerHTML = `<span>🚀</span><span>Posisi Aktif (${(plan.pnl_pct || 0) >= 0 ? '+' : ''}${plan.pnl_pct || 0}%)</span>`;
-        btnWatch.className = 'py-2 px-3 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm';
+        btnWatch.innerHTML = `
+          <span class="neon-icon-badge">
+            <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09zM12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+            </svg>
+          </span>
+          <span>Posisi Aktif (${(plan.pnl_pct || 0) >= 0 ? '+' : ''}${plan.pnl_pct || 0}%)</span>
+        `;
+        btnWatch.className = 'liquid-glass-btn neon-emerald active py-2 px-3 justify-center active:scale-95 w-full';
         btnWatch.onclick = () => switchMainTab('watchlist');
         btnWatch.title = 'Saham sedang dalam posisi berjalan di Pantauan (Klik untuk melihat)';
       } else if (trackerSt === 'WATCHLIST') {
-        btnWatch.innerHTML = '<span>⏳</span><span>Di Watchlist (Antre)</span>';
-        btnWatch.className = 'py-2 px-3 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm';
+        btnWatch.innerHTML = `
+          <span class="neon-icon-badge">
+            <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </span>
+          <span>Di Watchlist (Antre)</span>
+        `;
+        btnWatch.className = 'liquid-glass-btn neon-blue active py-2 px-3 justify-center active:scale-95 w-full';
         btnWatch.onclick = () => switchMainTab('watchlist');
         btnWatch.title = 'Sudah masuk antrean beli Watchlist (Klik untuk melihat)';
       } else {
-        btnWatch.innerHTML = '<span>➕</span><span>Masuk Watchlist</span>';
-        btnWatch.className = 'py-2 px-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95';
+        btnWatch.innerHTML = `
+          <span class="neon-icon-badge">
+            <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </span>
+          <span>Masuk Watchlist</span>
+        `;
+        btnWatch.className = 'liquid-glass-btn neon-blue py-2 px-3 justify-center active:scale-95 w-full';
         btnWatch.onclick = addToWatchlist;
         btnWatch.title = 'Masukkan saham ini ke Watchlist Tracker';
       }

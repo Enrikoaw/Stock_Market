@@ -513,3 +513,164 @@ html.light .fixed-risk-banner {
   box-shadow: 0 4px 15px rgba(15, 23, 42, 0.04) !important;
 }
 
+/* =====================================================================
+   LIQUID GLASS PILL BUTTON WITH GLOWING NEON ICON BADGE
+   ===================================================================== */
+.liquid-glass-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.25), inset 0 -2px 6px rgba(0, 0, 0, 0.6);
+  padding: 0.35rem 0.85rem 0.35rem 0.42rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  text-decoration: none;
+  outline: none;
+  line-height: 1.2;
+}
+
+html.light .liquid-glass-btn {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #475569;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.85), inset 0 -1px 3px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.liquid-glass-btn:hover {
+  transform: translateY(-1px);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+html.light .liquid-glass-btn:hover {
+  color: #0f172a;
+  border-color: rgba(0, 0, 0, 0.22);
+}
+
+.liquid-glass-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* Lingkaran Ikon Neon Menyala (Glowing Circular Icon Badge) */
+.neon-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  transition: all 0.22s ease;
+}
+
+.neon-icon-badge svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  stroke: #090d16;
+  stroke-width: 2.5;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 1. Emerald (Hari Ini) */
+.liquid-glass-btn.neon-emerald .neon-icon-badge {
+  background: #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.85), 0 0 20px rgba(16, 185, 129, 0.4);
+}
+.liquid-glass-btn.neon-emerald:hover {
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 6px 16px -2px rgba(16, 185, 129, 0.45);
+}
+.liquid-glass-btn.neon-emerald.active {
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.55);
+  background: rgba(16, 185, 129, 0.12);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.4), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 8px 24px -2px rgba(16, 185, 129, 0.65);
+}
+
+/* 2. Cyan (Jelajah) */
+.liquid-glass-btn.neon-cyan .neon-icon-badge {
+  background: #06b6d4;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.85), 0 0 20px rgba(6, 182, 212, 0.4);
+}
+.liquid-glass-btn.neon-cyan:hover {
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 6px 16px -2px rgba(6, 182, 212, 0.45);
+}
+.liquid-glass-btn.neon-cyan.active {
+  color: #22d3ee;
+  border-color: rgba(6, 182, 212, 0.55);
+  background: rgba(6, 182, 212, 0.12);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.4), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 8px 24px -2px rgba(6, 182, 212, 0.65);
+}
+
+/* 3. Amber (Pantauan) */
+.liquid-glass-btn.neon-amber .neon-icon-badge {
+  background: #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.85), 0 0 20px rgba(245, 158, 11, 0.4);
+}
+.liquid-glass-btn.neon-amber:hover {
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 6px 16px -2px rgba(245, 158, 11, 0.45);
+}
+.liquid-glass-btn.neon-amber.active {
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.12);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.4), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 8px 24px -2px rgba(245, 158, 11, 0.65);
+}
+
+/* 4. Purple (Alat / Sync) */
+.liquid-glass-btn.neon-purple .neon-icon-badge {
+  background: #a855f7;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.85), 0 0 20px rgba(168, 85, 247, 0.4);
+}
+.liquid-glass-btn.neon-purple:hover {
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 6px 16px -2px rgba(168, 85, 247, 0.45);
+}
+.liquid-glass-btn.neon-purple.active {
+  color: #c084fc;
+  border-color: rgba(168, 85, 247, 0.55);
+  background: rgba(168, 85, 247, 0.12);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.4), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 8px 24px -2px rgba(168, 85, 247, 0.65);
+}
+
+/* 5. Blue (Action / Watchlist) */
+.liquid-glass-btn.neon-blue .neon-icon-badge {
+  background: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.85), 0 0 20px rgba(56, 189, 248, 0.4);
+}
+.liquid-glass-btn.neon-blue:hover {
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 6px 16px -2px rgba(56, 189, 248, 0.45);
+}
+.liquid-glass-btn.neon-blue.active {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.55);
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.4), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 8px 24px -2px rgba(56, 189, 248, 0.65);
+}
+
+/* Penyesuaian Tombol Navigasi Mobile */
+.mobile-nav-pill {
+  padding: 0.32rem 0.68rem 0.32rem 0.35rem !important;
+  font-size: 0.68rem !important;
+  gap: 0.35rem !important;
+}
+.mobile-nav-pill .neon-icon-badge {
+  width: 1.35rem !important;
+  height: 1.35rem !important;
+}
+.mobile-nav-pill .neon-icon-badge svg {
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+}
+
+

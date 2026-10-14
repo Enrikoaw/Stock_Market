@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=41.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=46.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -88,29 +88,42 @@
         </div>
 
         <!-- 3 Top Navigation Tabs (Desktop only; on mobile these are in bottom nav bar) -->
-        <nav class="hidden md:flex items-center bg-slate-900/60 p-1 rounded-xl border border-white/[0.08] shadow-inner" aria-label="Navigasi Utama">
+        <!-- 3 Top Navigation Tabs (Desktop only; on mobile these are in bottom nav bar) -->
+        <nav class="hidden md:flex items-center gap-1.5 p-1 rounded-full bg-slate-900/60 border border-white/[0.08]" aria-label="Navigasi Utama">
           <button
             id="tabNavToday"
             onclick="switchMainTab('today')"
-            class="px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+            class="liquid-glass-btn neon-emerald active"
           >
-            <span>🌟</span>
+            <span class="neon-icon-badge">
+              <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z"/>
+              </svg>
+            </span>
             <span>Hari Ini</span>
           </button>
           <button
             id="tabNavExplore"
             onclick="switchMainTab('explore')"
-            class="px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5"
+            class="liquid-glass-btn neon-cyan"
           >
-            <span>🔍</span>
+            <span class="neon-icon-badge">
+              <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </span>
             <span>Jelajah</span>
           </button>
           <button
             id="tabNavWatchlist"
             onclick="switchMainTab('watchlist')"
-            class="px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5"
+            class="liquid-glass-btn neon-amber"
           >
-            <span>⭐</span>
+            <span class="neon-icon-badge">
+              <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </span>
             <span>Pantauan</span>
           </button>
         </nav>
@@ -121,7 +134,7 @@
         <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" multiple class="hidden" />
 
         <!-- Status Bursa Jelas & Sadar Jeda/Libur -->
-        <div id="marketLivePill" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900/60 border border-white/[0.08] text-xs shadow-inner">
+        <div id="marketLivePill" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-900/60 border border-white/[0.08] text-xs shadow-inner">
           <span id="marketStatusDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span id="marketStatusText" class="font-bold text-emerald-300 text-[11px] sm:text-xs">BURSA LIVE</span>
           <span id="marketAutoTimer" class="font-mono text-[10px] sm:text-[11px] text-slate-300 border-l border-white/10 pl-2 hidden xs:inline sm:inline">Auto-Sync</span>
@@ -131,10 +144,14 @@
         <button
           id="btnUnifiedSync"
           onclick="triggerUnifiedSync()"
-          class="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95"
+          class="liquid-glass-btn neon-purple active:scale-95"
           title="Sinkronisasi seluruh 844 saham IDX secara menyeluruh & update Watchlist sekali klik"
         >
-          <span id="unifiedSyncIcon" class="inline-block">🔄</span>
+          <span id="unifiedSyncIcon" class="neon-icon-badge">
+            <svg id="unifiedSyncSvg" viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+            </svg>
+          </span>
           <span id="unifiedSyncLabel" class="hidden sm:inline">Sync</span>
         </button>
 
@@ -591,17 +608,28 @@
               <button
                 id="btnAddToWatchlist"
                 onclick="addToWatchlist()"
-                class="py-2 px-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                class="liquid-glass-btn neon-blue py-2 px-3 justify-center active:scale-95 w-full"
                 title="Masukkan saham ini ke Watchlist Tracker"
               >
-                <span>➕</span>
+                <span class="neon-icon-badge">
+                  <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                </span>
                 <span>Masuk Watchlist</span>
               </button>
               <button
                 onclick="openLotCalculatorModal()"
-                class="py-2 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                class="liquid-glass-btn neon-emerald py-2 px-3 justify-center active:scale-95 w-full"
               >
-                <span>🧮</span>
+                <span class="neon-icon-badge">
+                  <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="2" width="16" height="20" rx="2"/>
+                    <line x1="8" y1="6" x2="16" y2="6"/>
+                    <line x1="16" y1="14" x2="16" y2="18"/>
+                    <path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/>
+                  </svg>
+                </span>
                 <span>Hitung Lot</span>
               </button>
             </div>
@@ -1286,46 +1314,62 @@
   </div>
 
   <!-- MODERN MOBILE BOTTOM NAVIGATION BAR (md:hidden - THUMB ZONE ERGONOMIC) -->
-  <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 inset-x-0 h-16 bg-slate-950/95 backdrop-blur-xl border-t border-white/[0.08] px-3 flex items-center justify-around z-40 shadow-2xl" aria-label="Navigasi Mobile">
+  <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 inset-x-0 h-16 bg-slate-950/90 backdrop-blur-xl border-t border-white/[0.12] px-2 flex items-center justify-around z-40 shadow-2xl" aria-label="Navigasi Mobile">
     <button
       id="mobileNavToday"
       onclick="switchMainTab('today')"
-      class="mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-emerald-400 bg-emerald-500/15 border border-emerald-400/30 transition active:scale-95"
+      class="liquid-glass-btn neon-emerald mobile-nav-pill active"
       aria-label="Tab Hari Ini"
     >
-      <span class="text-base leading-none">🌟</span>
-      <span class="text-[10px] font-bold mt-1">Hari Ini</span>
+      <span class="neon-icon-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z"/>
+        </svg>
+      </span>
+      <span>Hari Ini</span>
     </button>
     <button
       id="mobileNavExplore"
       onclick="switchMainTab('explore')"
-      class="mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-slate-400 hover:text-white transition active:scale-95"
+      class="liquid-glass-btn neon-cyan mobile-nav-pill"
       aria-label="Tab Jelajah"
     >
-      <span class="text-base leading-none">🔍</span>
-      <span class="text-[10px] font-medium mt-1">Jelajah</span>
+      <span class="neon-icon-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </span>
+      <span>Jelajah</span>
     </button>
     <button
       id="mobileNavWatchlist"
       onclick="switchMainTab('watchlist')"
-      class="mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-slate-400 hover:text-white transition active:scale-95"
+      class="liquid-glass-btn neon-amber mobile-nav-pill"
       aria-label="Tab Pantauan"
     >
-      <span class="text-base leading-none">⭐</span>
-      <span class="text-[10px] font-medium mt-1">Pantauan</span>
+      <span class="neon-icon-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+      </span>
+      <span>Pantauan</span>
     </button>
     <button
       id="mobileNavSettings"
       onclick="openSettingsModal()"
-      class="mobile-nav-btn flex flex-col items-center justify-center w-16 h-12 rounded-xl text-slate-400 hover:text-white transition active:scale-95"
+      class="liquid-glass-btn neon-purple mobile-nav-pill"
       aria-label="Pengaturan dan Alat"
     >
-      <span class="text-base leading-none">⚙️</span>
-      <span class="text-[10px] font-medium mt-1">Alat</span>
+      <span class="neon-icon-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
+        </svg>
+      </span>
+      <span>Alat</span>
     </button>
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=45.0"></script>
+  <script src="/static/app.js?v=46.0"></script>
 </body>
 </html>
