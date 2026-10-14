@@ -95,20 +95,21 @@ def sync_tracker_to_analysis(analysis: dict | None) -> None:
             plan["status"] = st
             plan["tracker_id"] = sig["id"]
             plan["signal_date"] = sig.get("signal_date")
-            if sig.get("entry_low") is not None:
-                plan["entry_low"] = float(sig["entry_low"])
-            if sig.get("entry_high") is not None:
-                plan["entry_high"] = float(sig["entry_high"])
+            e_p = sig.get("entry_price") or sig.get("entry_high") or sig.get("entry_low")
+            if e_p:
+                plan["entry_price"] = float(e_p)
+                plan["entry_high"] = float(e_p)
+                plan["entry_low"] = float(e_p)
             if sig.get("stop_loss") is not None:
                 plan["stop_loss"] = float(sig["stop_loss"])
             if sig.get("target") is not None:
                 plan["target_1"] = float(sig["target"])
             if sig.get("target_2") is not None:
                 plan["target_2"] = float(sig["target_2"])
-            if sig.get("entry_price"):
-                plan["entry_price"] = float(sig["entry_price"])
             if sig.get("pnl_pct") is not None:
                 plan["pnl_pct"] = float(sig["pnl_pct"])
+            if sig.get("last_close") and float(sig["last_close"]) > 0:
+                stock["close"] = int(round(float(sig["last_close"])))
 
             if st == "WIN":
                 pnl = sig.get("pnl_pct", 0)
@@ -125,6 +126,9 @@ def sync_tracker_to_analysis(analysis: dict | None) -> None:
                 pnl = sig.get("pnl_pct", 0)
                 plan["action_bias"] = f"🛑 CUT LOSS ({pnl}%)"
                 plan["rationale"] = f"Posisi ditutup disiplin batas rugi pada {sig.get('exit_date', sig.get('signal_date'))}."
+            elif st in ("EXPIRED", "TIMEOUT", "CANCELLED"):
+                plan["action_bias"] = f"⏹️ KADALUARSA ({st})"
+                plan["rationale"] = f"Sinyal ditutup ({st}) karena melewati batas waktu toleransi."
 
             stock["trading_plan"] = plan
 
@@ -142,20 +146,28 @@ def sync_tracker_to_analysis(analysis: dict | None) -> None:
             plan["status"] = st
             plan["tracker_id"] = sig["id"]
             plan["signal_date"] = sig.get("signal_date")
-            if sig.get("entry_low") is not None:
-                plan["entry_low"] = float(sig["entry_low"])
-            if sig.get("entry_high") is not None:
-                plan["entry_high"] = float(sig["entry_high"])
+            e_p = sig.get("entry_price") or sig.get("entry_high") or sig.get("entry_low")
+            if e_p:
+                plan["entry_price"] = float(e_p)
+                plan["entry_high"] = float(e_p)
+                plan["entry_low"] = float(e_p)
             if sig.get("stop_loss") is not None:
                 plan["stop_loss"] = float(sig["stop_loss"])
             if sig.get("target") is not None:
                 plan["target_1"] = float(sig["target"])
             if sig.get("target_2") is not None:
                 plan["target_2"] = float(sig["target_2"])
-            if sig.get("entry_price"):
-                plan["entry_price"] = float(sig["entry_price"])
             if sig.get("pnl_pct") is not None:
                 plan["pnl_pct"] = float(sig["pnl_pct"])
+            if sig.get("last_close") and float(sig["last_close"]) > 0:
+                lc = int(round(float(sig["last_close"])))
+                detail["close"] = lc
+                if detail.get("history") and len(detail["history"]) > 0:
+                    detail["history"][-1]["close"] = lc
+                    if lc > detail["history"][-1].get("high", lc):
+                        detail["history"][-1]["high"] = lc
+                    if lc < detail["history"][-1].get("low", lc):
+                        detail["history"][-1]["low"] = lc
 
             if st == "WIN":
                 pnl = sig.get("pnl_pct", 0)
@@ -172,6 +184,9 @@ def sync_tracker_to_analysis(analysis: dict | None) -> None:
                 pnl = sig.get("pnl_pct", 0)
                 plan["action_bias"] = f"🛑 CUT LOSS ({pnl}%)"
                 plan["rationale"] = f"Posisi ditutup disiplin batas rugi pada {sig.get('exit_date', sig.get('signal_date'))}."
+            elif st in ("EXPIRED", "TIMEOUT", "CANCELLED"):
+                plan["action_bias"] = f"⏹️ KADALUARSA ({st})"
+                plan["rationale"] = f"Sinyal ditutup ({st}) karena melewati batas waktu toleransi."
 
             detail["trading_plan"] = plan
 
@@ -554,6 +569,7 @@ def _fetch_ticker_candles_blocking(ticker: str, period: str = "6mo") -> list[dic
 async def get_stock_candles(ticker: str, period: str = Query(default="6mo")) -> dict:
     if STATE["analysis"] is None:
         init_default_state()
+    sync_tracker_to_analysis(STATE["analysis"])
 
     key = ticker.strip().upper()
     details_map = STATE["analysis"]["details"]
@@ -572,6 +588,14 @@ async def get_stock_candles(ticker: str, period: str = Query(default="6mo")) -> 
             }
             for h in detail.get("history", [])
         ]
+
+    if candles and detail and detail.get("close"):
+        lc = int(round(float(detail["close"])))
+        candles[-1]["close"] = lc
+        if lc > candles[-1]["high"]:
+            candles[-1]["high"] = lc
+        if lc < candles[-1]["low"]:
+            candles[-1]["low"] = lc
 
     return {
         "ticker": key,

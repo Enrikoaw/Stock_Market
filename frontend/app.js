@@ -1216,12 +1216,12 @@ function renderInspectorPanel(d) {
       }
     }
 
-    if (slEl) slEl.textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct != null ? plan.stop_loss_pct : -5}%)`;
-    if (tgtEl) tgtEl.textContent = `${fmtNumber(plan.target_1)} (+${plan.target_1_pct != null ? plan.target_1_pct : 4}%)`;
+    if (slEl) slEl.textContent = `${fmtPrice(plan.stop_loss)} (${plan.stop_loss_pct != null ? plan.stop_loss_pct : -4}%)`;
+    if (tgtEl) tgtEl.textContent = `${fmtPrice(plan.target_1)} (+${plan.target_1_pct != null ? plan.target_1_pct : 4}%)`;
 
     if (tgt2El) {
       if (plan.target_2 && plan.target_2 > 0) {
-        tgt2El.textContent = `${fmtNumber(plan.target_2)} (+${plan.target_2_pct != null ? plan.target_2_pct : 7}%)`;
+        tgt2El.textContent = `${fmtPrice(plan.target_2)} (+${plan.target_2_pct != null ? plan.target_2_pct : 7}%)`;
       } else {
         tgt2El.textContent = '-';
       }
@@ -1329,26 +1329,51 @@ function renderInspectorChart(d) {
   const chartGridColor = isLight ? 'rgba(203, 213, 225, 0.65)' : 'rgba(51, 65, 85, 0.25)';
 
   if (activeChartTab === 'price') {
+    // 1. Sinkronkan harga penutupan candle terakhir dengan harga riil saat ini (d.close)
+    const currentPrice = Number(d.close || (hist.length > 0 ? hist[hist.length - 1].close : 0));
+    if (hist.length > 0 && currentPrice > 0) {
+      const lastBar = hist[hist.length - 1];
+      if (Number(lastBar.close) !== currentPrice) {
+        lastBar.close = currentPrice;
+        if (currentPrice > Number(lastBar.high || 0)) lastBar.high = currentPrice;
+        if (Number(lastBar.low || Infinity) > currentPrice) lastBar.low = currentPrice;
+      }
+    }
+
     const prices = hist.map((h) => Number(h.close));
     const ma20s = hist.map((h) => Number(h.ma20 || h.close));
     const vols = hist.map((h) => Number(h.volume_lot || 0));
     const allLows = hist.map((h) => Number(h.low || h.close));
     const allHighs = hist.map((h) => Number(h.high || h.close));
 
-    const plan = d.trading_plan;
-    const tp1Val = plan && plan.target_1 ? plan.target_1 : null;
-    const slVal = plan && plan.stop_loss ? plan.stop_loss : null;
-    const entryVal = plan && plan.entry_high ? plan.entry_high : d.close;
+    const plan = d.trading_plan || {};
+    // Ekstraksi seluruh parameter rencana trading yang konsisten dengan 1 harga entry
+    const entryVal = plan && (plan.entry_price || plan.entry_high || plan.entry_low)
+      ? Number(plan.entry_price || plan.entry_high || plan.entry_low)
+      : null;
+    const tp1Val = plan && plan.target_1 ? Number(plan.target_1) : null;
+    const tp2Val = plan && plan.target_2 ? Number(plan.target_2) : null;
+    const slVal = plan && plan.stop_loss ? Number(plan.stop_loss) : null;
+    const tp1Pct = plan.target_1_pct != null ? plan.target_1_pct : 4;
+    const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : 7;
+    const slPct = plan.stop_loss_pct != null ? plan.stop_loss_pct : -4;
 
-    // Pastikan batas harga mencakup TP dan SL agar garis terlihat di grafik
+    // Pastikan batas harga mencakup TP2, TP1, Harga Asli, Entry, dan SL agar tidak terpotong (clipped)
     const valCandidatesMin = [...allLows, ...ma20s.filter((v) => v > 0)];
-    if (slVal) valCandidatesMin.push(slVal);
-    const valCandidatesMax = [...allHighs, ...ma20s];
-    if (tp1Val) valCandidatesMax.push(tp1Val);
+    if (slVal && slVal > 0) valCandidatesMin.push(slVal);
+    if (entryVal && entryVal > 0) valCandidatesMin.push(entryVal);
+    if (currentPrice > 0) valCandidatesMin.push(currentPrice);
 
-    const rawMin = Math.min(...valCandidatesMin);
-    const rawMax = Math.max(...valCandidatesMax);
-    const pricePad = Math.max(2, Math.round((rawMax - rawMin) * 0.08));
+    const valCandidatesMax = [...allHighs, ...ma20s.filter((v) => v > 0)];
+    if (tp1Val && tp1Val > 0) valCandidatesMax.push(tp1Val);
+    if (tp2Val && tp2Val > 0) valCandidatesMax.push(tp2Val);
+    if (entryVal && entryVal > 0) valCandidatesMax.push(entryVal);
+    if (currentPrice > 0) valCandidatesMax.push(currentPrice);
+
+    const rawMin = valCandidatesMin.length > 0 ? Math.min(...valCandidatesMin) : 0;
+    const rawMax = valCandidatesMax.length > 0 ? Math.max(...valCandidatesMax) : 100;
+    const priceRange = Math.max(10, rawMax - rawMin);
+    const pricePad = Math.max(4, Math.round(priceRange * 0.12));
 
     const volColors = hist.map((h, i) => {
       const o = Number(h.open || h.close);
@@ -1408,33 +1433,90 @@ function renderInspectorChart(d) {
           c.strokeRect(x - bodyWidth / 2, topY, bodyWidth, boxH);
         });
 
-        // 2. Gambar Garis Skenario Horizontal (Target TP, Area Entry, Batas Rugi SL)
+        // 2. Gambar Garis Skenario Horizontal (TP2, TP1, Harga Asli, Entry, SL)
         const leftX = xScale.left;
         const rightX = xScale.right;
+        const drawnBadges = [];
 
-        function drawScenarioLine(val, strokeColor, labelText) {
-          if (!val) return;
+        function drawScenarioLine(val, strokeColor, labelText, isDashed = true, alignRight = true) {
+          if (!val || isNaN(val)) return;
           const y = yScale.getPixelForValue(val);
-          if (y < yScale.top || y > yScale.bottom) return;
+          if (y < yScale.top - 4 || y > yScale.bottom + 4) return;
 
+          // Garis Horizontal
+          c.save();
           c.beginPath();
-          c.setLineDash([5, 4]);
+          if (isDashed) {
+            c.setLineDash([5, 4]);
+            c.lineWidth = 1.6;
+          } else {
+            c.setLineDash([]);
+            c.lineWidth = 2.0;
+          }
           c.strokeStyle = strokeColor;
-          c.lineWidth = 1.6;
           c.moveTo(leftX, y);
           c.lineTo(rightX, y);
           c.stroke();
           c.setLineDash([]);
 
-          // Badge Label di Kiri Garis
-          c.font = 'bold 9px monospace';
+          // Badge Pill Box
+          c.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+          const textMetrics = c.measureText(labelText);
+          const badgeH = 15;
+          const badgeW = textMetrics.width + 10;
+          let badgeY = Math.max(yScale.top + 2, Math.min(yScale.bottom - badgeH - 2, y - badgeH / 2));
+
+          // Cek tabrakan vertikal dengan badge sebelumnya pada sisi yang sama
+          for (const b of drawnBadges) {
+            if (b.alignRight === alignRight && Math.abs(b.y - badgeY) < badgeH + 2) {
+              if (badgeY >= b.y) {
+                badgeY = b.y + badgeH + 2;
+              } else {
+                badgeY = b.y - badgeH - 2;
+              }
+            }
+          }
+          drawnBadges.push({ alignRight, y: badgeY });
+
+          let badgeX;
+          if (alignRight) {
+            badgeX = rightX - badgeW - 6;
+          } else {
+            badgeX = leftX + 6;
+          }
+
+          // Background Pill Badge
+          c.fillStyle = isLight ? '#ffffff' : '#090d16';
+          c.strokeStyle = strokeColor;
+          c.lineWidth = 1.2;
+          c.beginPath();
+          if (c.roundRect) {
+            c.roundRect(badgeX, badgeY, badgeW, badgeH, 3);
+          } else {
+            c.rect(badgeX, badgeY, badgeW, badgeH);
+          }
+          c.fill();
+          c.stroke();
+
+          // Label Text
           c.fillStyle = strokeColor;
-          c.fillText(labelText, leftX + 4, y - 3);
+          c.textAlign = 'left';
+          c.textBaseline = 'middle';
+          c.fillText(labelText, badgeX + 5, badgeY + badgeH / 2);
+          c.restore();
         }
 
-        if (tp1Val) drawScenarioLine(tp1Val, '#10b981', `TP1: Rp ${fmtNumber(tp1Val)}`);
-        if (entryVal) drawScenarioLine(entryVal, '#38bdf8', `Entry: Rp ${fmtNumber(entryVal)}`);
-        if (slVal) drawScenarioLine(slVal, '#f43f5e', `SL: Rp ${fmtNumber(slVal)}`);
+        // Urutan render garis skenario:
+        // TP2 (+7%) - Sisi Kanan (Teal)
+        if (tp2Val) drawScenarioLine(tp2Val, '#14b8a6', `TP2: Rp ${fmtNumber(tp2Val)} (+${tp2Pct}%)`, true, true);
+        // TP1 (+4%) - Sisi Kanan (Emerald)
+        if (tp1Val) drawScenarioLine(tp1Val, '#10b981', `TP1: Rp ${fmtNumber(tp1Val)} (+${tp1Pct}%)`, true, true);
+        // Harga Asli Riil - Sisi Kanan (Amber Solid)
+        if (currentPrice > 0) drawScenarioLine(currentPrice, '#f59e0b', `Harga Asli: Rp ${fmtNumber(currentPrice)}`, false, true);
+        // Area Entry - Sisi Kiri (Sky Blue) - Kiri agar tidak bertabrakan dengan Harga Asli jika nilainya sama/dekat
+        if (entryVal) drawScenarioLine(entryVal, '#38bdf8', `Entry: Rp ${fmtNumber(entryVal)}`, true, false);
+        // Batas Rugi (SL) - Sisi Kanan (Rose Red)
+        if (slVal) drawScenarioLine(slVal, '#f43f5e', `SL: Rp ${fmtNumber(slVal)} (${slPct}%)`, true, true);
 
         c.restore();
       },
@@ -1491,7 +1573,7 @@ function renderInspectorChart(d) {
                 const idx = context.dataIndex;
                 const h = hist[idx] || {};
                 if (context.dataset.label === 'Candle OHLC') {
-                  return `O: ${fmtNumber(h.open)} | H: ${fmtNumber(h.high)} | L: ${fmtNumber(h.low)} | C: ${fmtNumber(h.close)}`;
+                  return `O: Rp ${fmtNumber(h.open)} | H: Rp ${fmtNumber(h.high)} | L: Rp ${fmtNumber(h.low)} | C: Rp ${fmtNumber(h.close)}`;
                 }
                 if (context.dataset.label === 'MA20') {
                   return `MA20: Rp ${fmtNumber(h.ma20)}`;
@@ -1507,7 +1589,11 @@ function renderInspectorChart(d) {
             position: 'right',
             min: Math.max(0, rawMin - pricePad),
             max: rawMax + pricePad,
-            ticks: { color: chartTextColor, font: { size: 9 } },
+            ticks: {
+              color: chartTextColor,
+              font: { size: 9 },
+              callback: (val) => 'Rp ' + fmtNumber(val),
+            },
             grid: { color: chartGridColor },
           },
           yVol: {
