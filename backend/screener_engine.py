@@ -1222,18 +1222,18 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             },
         ]
 
-        # Trading Plan: 1 Harga Beli Tunggal (Buy Limit) agar jelas dan tidak membingungkan pemula
-        entry_price = close_price
-        entry_low = close_price
-        entry_high = close_price
-        # Batasi Stop Loss maksimal -3.5% s/d -4.0% (1.2 * ATR14) untuk Swing Pendek
-        sl_distance = max(int(round(entry_price * 0.025)), min(int(round(entry_price * 0.040)), int(round(1.2 * atr14_val))))
+        # Trading Plan: Harga Beli Diskon (Pullback -1.5% dari Close) & SL Proporsional
+        entry_price = _round_idx_tick(close_price * 0.985)
+        entry_low = entry_price
+        entry_high = entry_price
+        # Batasi Stop Loss proporsional -3.5% s/d -5.0% (1.4 * ATR14) untuk Swing Pendek
+        sl_distance = max(int(round(entry_price * 0.035)), min(int(round(entry_price * 0.050)), int(round(1.4 * atr14_val))))
         stop_loss = _round_idx_tick(entry_price - sl_distance)
         risk_idr = max(1, entry_price - stop_loss)
         risk_pct = round((risk_idr / max(entry_price, 1)) * 100.0, 2)
 
-        tp1 = _round_idx_tick(entry_price * 1.04)
-        tp2 = _round_idx_tick(entry_price * 1.07)
+        tp1 = _round_idx_tick(entry_price * 1.035)
+        tp2 = _round_idx_tick(entry_price * 1.065)
         if tp2 <= tp1:
             tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
         tp1_pct = round(((tp1 - entry_price) / max(entry_price, 1)) * 100.0, 2)

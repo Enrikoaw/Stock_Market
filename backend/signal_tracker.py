@@ -119,7 +119,7 @@ def _resolve_db_url(sqlite_path: Path) -> str:
 
 class SignalTracker:
     def __init__(self, sqlite_path: Path | str) -> None:
-        self.min_score = int(os.environ.get("TRACKER_MIN_SCORE", "70"))
+        self.min_score = int(os.environ.get("TRACKER_MIN_SCORE", "78"))
         self.tp_level = 2 if os.environ.get("TRACKER_TP_LEVEL", "1").strip() == "2" else 1
         self.entry_expiry_days = int(os.environ.get("TRACKER_ENTRY_EXPIRY_DAYS", "3"))
         self.max_hold_days = int(os.environ.get("TRACKER_MAX_HOLD_DAYS", "5"))
@@ -334,6 +334,30 @@ class SignalTracker:
             if dup:
                 return False, f"Sinyal {ticker} tanggal {signal_date} sudah pernah dicatat."
 
+            # Cooldown 5 Hari: Jika ticker sudah punya riwayat sinyal apa pun (termasuk WIN, LOSS, EXPIRED)
+            # dalam 5 hari terakhir, tolak untuk mencegah saham yang baru saja selesai dibeli lagi di pucuk.
+            recent_sigs = conn.execute(
+                select(signals_table.c.signal_date, signals_table.c.exit_date).where(
+                    signals_table.c.ticker == ticker
+                ).order_by(signals_table.c.id.desc())
+            ).all()
+
+            if recent_sigs and signal_date:
+                try:
+                    cur_d = datetime.strptime(signal_date, "%Y-%m-%d").date()
+                    for r_sig_date, r_exit_date in recent_sigs:
+                        ref_dates = []
+                        if r_sig_date:
+                            ref_dates.append(datetime.strptime(str(r_sig_date), "%Y-%m-%d").date())
+                        if r_exit_date:
+                            ref_dates.append(datetime.strptime(str(r_exit_date), "%Y-%m-%d").date())
+                        for ref_d in ref_dates:
+                            diff = (cur_d - ref_d).days
+                            if 0 <= diff <= 5:
+                                return False, f"{ticker}: Masih dalam masa cooldown ({diff} hari pasca riwayat sinyal {ref_d})."
+                except Exception:
+                    pass
+
             now = _now_str()
             conn.execute(
                 insert(signals_table).values(
@@ -363,27 +387,31 @@ class SignalTracker:
         return True, f"{ticker} masuk Watchlist (zona entry Rp {e_low:,.0f} - {e_high:,.0f}, SL {sl:,.0f}, TP {target:,.0f})."
 
     def auto_track(self, analysis: dict) -> int:
-        """Catat otomatis sinyal akumulasi (score >= min_score) dari sesi bursa yang terdeteksi.
-        Saham yang masih WATCHLIST / RUNNING tidak dimasukkan ulang saat berganti hari,
-        sehingga trading plan yang sudah terkunci tidak tertimpa sinyal baru."""
+        """Catat otomatis sinyal akumulasi terbaik (score >= min_score, maks 3 sinyal/hari) dari sesi bursa yang terdeteksi.
+        Saham yang masih WATCHLIST / RUNNING atau dalam masa cooldown 5 hari tidak dimasukkan ulang."""
         market_date = analysis.get("kpis", {}).get("latest_date")
         active_tickers = set(self.get_active_tickers())
         added = 0
-        for s in analysis.get("stocks", []):
-            ticker = str(s.get("ticker", "")).upper()
-            if not ticker or ticker in active_tickers:
-                continue
-            if s.get("trigger_type") not in TRACKABLE_TRIGGERS:
-                continue
-            if int(s.get("smart_money_score", 0)) < self.min_score:
-                continue
-            # Hanya catat sinyal dari tanggal analisis aktif
-            if s.get("date") != market_date:
-                continue
+        candidates = [
+            s for s in analysis.get("stocks", [])
+            if str(s.get("ticker", "")).upper()
+            and str(s.get("ticker", "")).upper() not in active_tickers
+            and s.get("trigger_type") in TRACKABLE_TRIGGERS
+            and int(s.get("smart_money_score", 0)) >= self.min_score
+            and (not market_date or s.get("date") == market_date)
+        ]
+        candidates.sort(
+            key=lambda x: (int(x.get("smart_money_score", 0)), float(x.get("vol_ratio") or x.get("volume_ratio") or 0.0)),
+            reverse=True,
+        )
+        max_daily = 3
+        for s in candidates:
+            if added >= max_daily:
+                break
             ok, _ = self.add_signal(s, source="AUTO")
             if ok:
                 added += 1
-                active_tickers.add(ticker)
+                active_tickers.add(str(s.get("ticker", "")).upper())
         return added
 
     def get_active_tickers(self) -> list[str]:
@@ -663,46 +691,60 @@ class SignalTracker:
         if r["status"] == "WATCHLIST":
             e_low, e_high, sl = r["entry_low"], r["entry_high"], r["stop_loss"]
 
-            # 1. Proteksi gap down di bawah Stop Loss pada pembukaan
-            if o <= sl:
+            # 1. Proteksi gap down di bawah Stop Loss atau > -1.5% di bawah harga entry pada pembukaan
+            if o <= sl or o < e_low * 0.985:
                 r.update(
                     status="EXPIRED",
                     exit_date=date,
                     exit_price=round(o, 2),
                     pnl_pct=0.0,
-                    note=f"Gap down @ Rp {o:,.0f} di bawah Stop Loss (Rp {sl:,.0f}) — entry dibatalkan demi keamanan modal.",
+                    note="Batal beli: Gap down saat pembukaan pasar (tekanan jual pagi).",
                 )
                 changes["expired"] += 1
                 return
 
-            # 2. Entry dieksekusi SEKALI saat Low menyentuh batas atas area beli (Entry High).
-            #    Simulasi Buy Limit di Entry High: jika open sudah di bawah Entry High, terisi di harga open.
-            if l <= e_high:
-                fill = min(o, e_high)
-                r.update(
-                    status="RUNNING",
-                    entry_date=date,
-                    entry_price=round(fill, 2),
-                    bars_held=0,
-                    last_close=c,
-                    pnl_pct=round((c - fill) / fill * 100.0, 2),
-                    note=f"Entry terkunci {date} @ Rp {fill:,.0f} (Low Rp {l:,.0f} menyentuh Entry High Rp {e_high:,.0f}).",
-                )
-                changes["entered"] += 1
-
-                # Konservatif: Cek SL di hari yang sama
-                if l <= sl:
-                    self._close(r, date, sl, "LOSS", "SL tersentuh di hari yang sama dengan entry.", changes)
+            # 2. Antrean Buy Limit di area entry (l <= e_high) dengan konfirmasi rebound
+            if l <= e_high and o >= e_low * 0.985:
+                # Jika di hari antre harga jebol SL tanpa rebound (l <= sl dan c <= sl), batalkan antrean
+                if l <= sl and c <= sl:
+                    r.update(
+                        status="EXPIRED",
+                        exit_date=date,
+                        exit_price=round(c, 2),
+                        pnl_pct=0.0,
+                        note="Batal beli: Support jebol disertai guyuran di hari antrean.",
+                    )
+                    changes["expired"] += 1
                     return
 
-                # Cek TP di hari yang sama: Mencegah Look-Ahead Bias Intraday!
-                # Jangan pernah menghitung TP (WIN) di candle harian yang sama KECUALI harga Open pagi itu
-                # memang sudah berada di dalam/bawah zona entry (o <= e_high).
-                if o <= e_high and h >= r["target"]:
-                    self._close(r, date, r["target"], "WIN", f"Target Price (Rp {r['target']:,.0f}) tersentuh di hari yang sama dengan entry (Open Rp {o:,.0f} <= Entry Rp {e_high:,.0f}).", changes)
-                    return
+                # Posisi masuk hanya jika candle penutupan tidak jebol di bawah Stop Loss (c > sl)
+                if c > sl:
+                    fill = min(o, e_high)
+                    r.update(
+                        status="RUNNING",
+                        entry_date=date,
+                        entry_price=round(fill, 2),
+                        bars_held=0,
+                        last_close=c,
+                        pnl_pct=round((c - fill) / fill * 100.0, 2),
+                        note=f"Entry terkunci {date} @ Rp {fill:,.0f} (Low Rp {l:,.0f} menyentuh Entry Rp {e_high:,.0f}).",
+                    )
+                    changes["entered"] += 1
 
-                return
+                    # Jika di hari entry target tercapai dan close tetap di atas/sama dengan entry fill -> langsung WIN
+                    if h >= r["target"] and c >= fill:
+                        tp_val = float(r["target"])
+                        self._close(
+                            r,
+                            date,
+                            tp_val,
+                            "WIN",
+                            f"Target Price (Rp {tp_val:,.0f}) tercapai di hari yang sama dengan entry (Close Rp {c:,.0f} >= Fill Rp {fill:,.0f}).",
+                            changes,
+                        )
+                        return
+
+                    return
 
             if not is_live_today:
                 r["bars_waited"] = int(r["bars_waited"] or 0) + 1
@@ -725,22 +767,22 @@ class SignalTracker:
             sl, tp = float(r["stop_loss"]), float(r["target"])
             entry_p = float(r["entry_price"])
 
-            # Breakeven Stop (Trailing SL): Jika High candle sudah naik menyentuh minimal +2.5% dari harga entry,
-            # naikkan stop_loss otomatis ke harga modal + biaya fee (entry * 1.004).
             from backend.screener_engine import _round_idx_tick
-            if h >= entry_p * 1.025:
-                be_sl = _round_idx_tick(entry_p * (1.0 + self.fee_roundtrip_pct / 100.0))
-                if be_sl > sl:
-                    sl = be_sl
-                    r["stop_loss"] = be_sl
-                    r["note"] = f"Trailing Breakeven Stop aktif di Rp {be_sl:,.0f} (High Rp {h:,.0f} menyentuh +2.5%)."
+            # Trailing Profit Pengunci Kemenangan: Jika posisi RUNNING menyentuh h >= entry_p * 1.02 (+2.0%),
+            # langsung naikkan stop_loss ke entry_p * 1.006 (+0.6% di atas modal)
+            if h >= entry_p * 1.020:
+                lock_sl = _round_idx_tick(entry_p * 1.006)
+                if lock_sl > sl:
+                    sl = lock_sl
+                    r["stop_loss"] = lock_sl
+                    r["note"] = f"Trailing Profit aktif di Rp {lock_sl:,.0f} (+0.6% mengunci modal, High Rp {h:,.0f} menyentuh +2.0%)."
 
             # 1. Stop Loss tersentuh
             if l <= sl:
                 exit_p = o if o < sl else sl
-                if sl > entry_p:
-                    note = f"Trailing Breakeven Stop tersentuh di Rp {exit_p:,.0f} (mengamankan modal pasca rally +2.5%)."
-                    status = "WIN" if exit_p >= entry_p else "LOSS"
+                if exit_p >= entry_p:
+                    note = f"Trailing Profit tersentuh di Rp {exit_p:,.0f} (mengamankan modal & profit pasca rally +2.0%)."
+                    status = "WIN"
                 else:
                     note = "Stop Loss tersentuh." if h < tp else "SL & TP tersentuh di hari yang sama — dihitung LOSS (konservatif)."
                     status = "LOSS"
@@ -883,9 +925,9 @@ class SignalTracker:
         with self._lock, self.engine.begin() as conn:
             return conn.execute(delete(signals_table)).rowcount
 
-    def rebuild_recent_days(self, market_df: pd.DataFrame, days: int = 12) -> dict:
+    def rebuild_recent_days(self, market_df: pd.DataFrame, days: int = 10) -> dict:
         """
-        Mengisi ulang database tracker.db dari riwayat pasar 12 hari bursa terakhir.
+        Mengisi ulang database tracker.db dari riwayat pasar 10 hari bursa terakhir.
         Menggunakan aturan kuantitatif terbaru & eksekusi instan (< 1.5 detik).
         """
         try:
@@ -912,7 +954,7 @@ class SignalTracker:
             # 2. Hitung seluruh indikator kuantitatif 1 kali saja di awal secara vektor
             df = compute_quantitative_dataframe(market_df)
 
-            # 3. Ambil 12 tanggal bursa terakhir
+            # 3. Ambil 10 tanggal bursa terakhir
             target_dates = sorted(df["Date"].dropna().astype(str).unique())[-days:]
 
             total_added = 0
@@ -953,15 +995,23 @@ class SignalTracker:
                 # b. Filter baris day_df = df[df["Date"] == dt] yang memenuhi syarat auto_track
                 day_df = df[df["Date"] == dt]
                 cand = day_df[(day_df["Trigger_Type"].isin(TRACKABLE_TRIGGERS)) & (day_df["Smart_Money_Score"] >= self.min_score)]
+                # Urutkan berdasarkan (Smart_Money_Score, Volume_Ratio) tertinggi dan batasi maksimal 3 saham terbaik per tanggal bursa
+                cand = cand.sort_values(by=["Smart_Money_Score", "Volume_Ratio"], ascending=[False, False])
+                day_added = 0
                 for r in cand.itertuples():
+                    if day_added >= 3:
+                        break
                     c_price = int(round(float(r.Close)))
-                    atr14_val = int(r.ATR14) if hasattr(r, "ATR14") and not pd.isna(r.ATR14) else max(1, int(round(c_price * 0.03)))
-                    sl_dist = max(int(round(c_price * 0.025)), min(int(round(c_price * 0.040)), int(round(1.2 * atr14_val))))
-                    sl = _round_idx_tick(c_price - sl_dist)
-                    tp1 = _round_idx_tick(c_price * 1.04)
-                    tp2 = _round_idx_tick(c_price * 1.07)
+                    entry_price = _round_idx_tick(c_price * 0.985)
+                    entry_low = entry_price
+                    entry_high = entry_price
+                    atr14_val = int(r.ATR14) if hasattr(r, "ATR14") and not pd.isna(r.ATR14) else max(1, int(round(entry_price * 0.03)))
+                    sl_dist = max(int(round(entry_price * 0.035)), min(int(round(entry_price * 0.050)), int(round(1.4 * atr14_val))))
+                    sl = _round_idx_tick(entry_price - sl_dist)
+                    tp1 = _round_idx_tick(entry_price * 1.035)
+                    tp2 = _round_idx_tick(entry_price * 1.065)
                     if tp2 <= tp1:
-                        tp2 = _round_idx_tick(tp1 + (2 if c_price >= 200 else 1))
+                        tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
 
                     diff_vwap = round(float(r.Diff_VWAP_Pct), 2) if hasattr(r, "Diff_VWAP_Pct") else 0.0
                     val_idr = float(r.Value_IDR) if hasattr(r, "Value_IDR") else 1_000_000_000.0
@@ -982,20 +1032,21 @@ class SignalTracker:
                         "trigger_type": trig_type,
                         "trigger_label": trig_lbl,
                         "trading_plan": {
-                            "entry_price": c_price,
-                            "entry_low": c_price,
-                            "entry_high": c_price,
+                            "entry_price": entry_price,
+                            "entry_low": entry_low,
+                            "entry_high": entry_high,
                             "stop_loss": sl,
-                            "stop_loss_pct": round(((sl - c_price) / max(c_price, 1)) * 100.0, 2),
+                            "stop_loss_pct": round(((sl - entry_price) / max(entry_price, 1)) * 100.0, 2),
                             "target_1": tp1,
-                            "target_1_pct": round(((tp1 - c_price) / max(c_price, 1)) * 100.0, 2),
+                            "target_1_pct": round(((tp1 - entry_price) / max(entry_price, 1)) * 100.0, 2),
                             "target_2": tp2,
-                            "target_2_pct": round(((tp2 - c_price) / max(c_price, 1)) * 100.0, 2),
+                            "target_2_pct": round(((tp2 - entry_price) / max(entry_price, 1)) * 100.0, 2),
                             "diff_bandar_avg_pct": diff_vwap,
                         },
                     }
                     ok, _ = self.add_signal(stock_obj, source="AUTO")
                     if ok:
+                        day_added += 1
                         total_added += 1
 
             return {

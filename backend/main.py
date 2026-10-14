@@ -860,11 +860,11 @@ def tracker_reset() -> dict:
         return {"status": "success", "message": f"{n} catatan sinyal dihapus. Cache pasar belum tersedia."}
 
     real_df = pd.read_csv(REAL_CACHE_CSV)
-    summary = TRACKER.rebuild_recent_days(real_df, days=12)
+    summary = TRACKER.rebuild_recent_days(real_df, days=10)
     sync_tracker_to_analysis(STATE.get("analysis"))
     return {
         "status": "success",
-        "message": f"Tracker berhasil di-rebuild dengan {summary.get('days_rebuilt', 12)} hari bursa terakhir ({summary.get('added', 0)} sinyal tercatat).",
+        "message": f"Tracker berhasil di-rebuild dengan {summary.get('days_rebuilt', 10)} hari bursa terakhir ({summary.get('added', 0)} sinyal tercatat).",
         "summary": summary,
     }
 
