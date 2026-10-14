@@ -108,6 +108,7 @@ function switchMainTab(tabName) {
   } else if (tabName === 'watchlist') {
     renderFavorites();
     loadTracker();
+    loadPortfolio();
   } else if (tabName === 'explore') {
     if (selectedStockDetail) {
       renderInspectorChart(selectedStockDetail);
@@ -793,6 +794,9 @@ async function loadScreenerData(preserveSelection = false) {
     }
 
     updateKPICards(data.kpis, trigger);
+    if (data.kpis && data.kpis.market_regime) {
+      renderMarketRegimeBadge(data.kpis.market_regime);
+    }
 
     currentStocks = data.stocks || [];
     if (!preserveSelection) currentPage = 1;
@@ -2349,6 +2353,7 @@ function openTelegramModal() {
   const chatInput = document.getElementById('telegramChatId');
   if (tokenInput && !tokenInput.value) tokenInput.value = token;
   if (chatInput && !chatInput.value) chatInput.value = chatId;
+  loadTelegramConfig();
   const modal = document.getElementById('telegramModal');
   if (modal) modal.classList.remove('hidden');
 }
@@ -2472,6 +2477,585 @@ async function sendTelegramRecommendations(token, chatId) {
 }
 
 // =====================================================================
+// PWA REGISTRATION
+// =====================================================================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('[PWA] Service Worker registration failed:', err);
+    });
+  });
+}
+
+// =====================================================================
+// REZIM PASAR IHSG (MARKET BREADTH)
+// =====================================================================
+let currentMarketRegime = null;
+
+function renderMarketRegimeBadge(regime) {
+  if (!regime) return;
+  currentMarketRegime = regime;
+
+  const dot = document.getElementById('regimeDot');
+  const label = document.getElementById('regimeLabel');
+
+  if (dot) {
+    dot.className = 'w-2 h-2 rounded-full animate-pulse ' +
+      (regime.color === 'emerald' ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' :
+       regime.color === 'rose' ? 'bg-rose-400 shadow-[0_0_8px_#f43f5e]' :
+       'bg-amber-400 shadow-[0_0_8px_#f59e0b]');
+  }
+
+  if (label) {
+    label.className = 'font-bold text-[11px] sm:text-xs ' +
+      (regime.color === 'emerald' ? 'text-emerald-300' :
+       regime.color === 'rose' ? 'text-rose-300' :
+       'text-amber-300');
+    label.textContent = `${regime.label} (${regime.breadth_ma20_pct}%)`;
+  }
+}
+
+async function loadMarketRegime() {
+  try {
+    const res = await fetch('/api/market-regime');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderMarketRegimeBadge(data);
+  } catch (err) {
+    console.warn('[MarketRegime] Gagal memuat rezim pasar:', err);
+  }
+}
+
+function openMarketRegimeModal() {
+  const modal = document.getElementById('marketRegimeModal');
+  if (!modal) return;
+
+  const regime = currentMarketRegime || {
+    status: 'NEUTRAL / CONSOLIDATION',
+    label: 'Netral / Konsolidasi',
+    color: 'amber',
+    allocation: 'Alokasi Modal 50% - 70% (Selektif)',
+    breadth_ma20_pct: 50.0,
+    breadth_ma50_pct: 50.0,
+    regime_note: 'Memuat data breadth bursa...',
+  };
+
+  const badge = document.getElementById('modalRegimeStatusBadge');
+  const title = document.getElementById('modalRegimeTitle');
+  const note = document.getElementById('modalRegimeNote');
+  const b20 = document.getElementById('modalBreadthMA20');
+  const b20Bar = document.getElementById('modalBreadthMA20Bar');
+  const b50 = document.getElementById('modalBreadthMA50');
+  const b50Bar = document.getElementById('modalBreadthMA50Bar');
+  const alloc = document.getElementById('modalRegimeAlloc');
+
+  if (badge) {
+    badge.textContent = regime.status;
+    badge.className = 'text-xs font-mono font-bold px-2.5 py-1 rounded-lg border ' +
+      (regime.color === 'emerald' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30' :
+       regime.color === 'rose' ? 'bg-rose-500/20 text-rose-300 border-rose-400/30' :
+       'bg-amber-500/20 text-amber-300 border-amber-400/30');
+  }
+
+  if (title) title.textContent = regime.label;
+  if (note) note.textContent = regime.regime_note;
+
+  if (b20) b20.textContent = `${regime.breadth_ma20_pct}%`;
+  if (b20Bar) b20Bar.style.width = `${Math.min(100, Math.max(0, regime.breadth_ma20_pct))}%`;
+
+  if (b50) b50.textContent = `${regime.breadth_ma50_pct}%`;
+  if (b50Bar) b50Bar.style.width = `${Math.min(100, Math.max(0, regime.breadth_ma50_pct))}%`;
+
+  if (alloc) alloc.textContent = regime.allocation;
+
+  modal.classList.remove('hidden');
+}
+
+function closeMarketRegimeModal() {
+  const modal = document.getElementById('marketRegimeModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+// =====================================================================
+// UNDUH LAPORAN FORWARD-TEST CSV (TRACKER EXPORT)
+// =====================================================================
+function exportTrackerCSV() {
+  showToast('📥 Mengunduh riwayat forward-test (CSV)...', 'info');
+  const status = activeTrackerTab || 'ALL';
+  window.location.href = `/api/tracker/export?status=${encodeURIComponent(status)}`;
+}
+
+// =====================================================================
+// SUB-TAB PANTAUAN: PAPER TRACKER vs PORTOFOLIO RIIL
+// =====================================================================
+let activePantauanSubTab = 'paper';
+
+function switchPantauanSubTab(tab) {
+  activePantauanSubTab = tab;
+
+  const btnPaper = document.getElementById('subTabBtnPaper');
+  const btnPortfolio = document.getElementById('subTabBtnPortfolio');
+  const secTracker = document.getElementById('trackerSection');
+  const secPortfolio = document.getElementById('portfolioSection');
+  const btnBuy = document.getElementById('btnOpenPortfolioBuyModal');
+
+  if (tab === 'paper') {
+    if (btnPaper) {
+      btnPaper.className = 'px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+    }
+    if (btnPortfolio) {
+      btnPortfolio.className = 'px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 text-slate-400 hover:text-white';
+    }
+    if (secTracker) secTracker.classList.remove('hidden');
+    if (secPortfolio) secPortfolio.classList.add('hidden');
+    if (btnBuy) btnBuy.classList.add('hidden');
+  } else {
+    if (btnPaper) {
+      btnPaper.className = 'px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 text-slate-400 hover:text-white';
+    }
+    if (btnPortfolio) {
+      btnPortfolio.className = 'px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+    }
+    if (secTracker) secTracker.classList.add('hidden');
+    if (secPortfolio) secPortfolio.classList.remove('hidden');
+    if (btnBuy) btnBuy.classList.remove('hidden');
+    loadPortfolio();
+  }
+}
+
+// =====================================================================
+// PORTOFOLIO RIIL (JURNAL SAYA) CONTROLLER
+// =====================================================================
+let currentPortfolioStatus = 'ALL';
+let portfolioTrades = [];
+
+async function loadPortfolio(status = currentPortfolioStatus) {
+  currentPortfolioStatus = status;
+  try {
+    const res = await fetch(`/api/portfolio?status=${encodeURIComponent(status)}&_t=${Date.now()}`);
+    if (!res.ok) throw new Error('Gagal mengambil data portofolio riil');
+    const data = await res.json();
+
+    const summary = data.summary || {};
+    portfolioTrades = data.trades || [];
+
+    // Render Summary Cards
+    const elCap = document.getElementById('portCapital');
+    const elHold = document.getElementById('portHoldingCount');
+    const elVal = document.getElementById('portCurrentVal');
+    const elFloatPnl = document.getElementById('portFloatingPnl');
+    const elFloatPct = document.getElementById('portFloatingPct');
+    const elRealPnl = document.getElementById('portRealizedPnl');
+    const elClosed = document.getElementById('portClosedCount');
+    const elWinRate = document.getElementById('portWinRate');
+    const elTotal = document.getElementById('portTotalCount');
+
+    if (elCap) elCap.textContent = fmtPrice(summary.total_capital_holding || 0);
+    if (elHold) elHold.textContent = `${summary.holding_count || 0} Posisi Aktif`;
+    if (elVal) elVal.textContent = fmtPrice(summary.total_value_holding || 0);
+
+    const fPnl = summary.floating_pnl_rp || 0;
+    const fPct = summary.floating_pnl_pct || 0;
+    if (elFloatPnl) {
+      elFloatPnl.textContent = `${fPnl >= 0 ? '+' : ''}${fmtPrice(fPnl)}`;
+      elFloatPnl.className = `text-lg sm:text-xl font-black font-mono mt-0.5 ${fPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+    }
+    if (elFloatPct) {
+      elFloatPct.textContent = `(${fPct >= 0 ? '+' : ''}${fPct.toFixed(2)}%)`;
+      elFloatPct.className = `text-[10px] font-mono mt-1 ${fPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+    }
+
+    const rPnl = summary.realized_pnl_rp || 0;
+    if (elRealPnl) {
+      elRealPnl.textContent = `${rPnl >= 0 ? '+' : ''}${fmtPrice(rPnl)}`;
+      elRealPnl.className = `text-lg sm:text-xl font-black font-mono mt-0.5 ${rPnl >= 0 ? 'text-emerald-300' : 'text-rose-400'}`;
+    }
+    if (elClosed) elClosed.textContent = `${summary.closed_count || 0} Trade Selesai`;
+
+    if (elWinRate) {
+      elWinRate.textContent = summary.win_rate !== null ? `${summary.win_rate}%` : '—';
+    }
+    if (elTotal) elTotal.textContent = String(summary.total_trades || 0);
+
+    // Render Table
+    renderPortfolioTable(portfolioTrades);
+  } catch (err) {
+    console.warn('[Portfolio] Error:', err);
+  }
+}
+
+function setPortfolioTab(status) {
+  currentPortfolioStatus = status;
+  document.querySelectorAll('#portfolioFilterTabs .portfolio-tab').forEach((btn) => {
+    const isAct = btn.dataset.status === status;
+    btn.className = isAct
+      ? 'portfolio-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white'
+      : 'portfolio-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white';
+  });
+  loadPortfolio(status);
+}
+
+function renderPortfolioTable(trades) {
+  const tbody = document.getElementById('portfolioTableBody');
+  if (!tbody) return;
+
+  if (!trades || trades.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="10" class="py-8 text-center text-slate-400">
+          Belum ada transaksi pada kategori ini. Klik "Catat Beli Saham" untuk mulai mencatat.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = trades.map((t) => {
+    const isHolding = t.status === 'HOLDING';
+    const pnlVal = t.pnl_rp || 0;
+    const pnlPct = t.pnl_pct || 0;
+    const pnlColor = pnlVal >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold';
+    const sign = pnlVal >= 0 ? '+' : '';
+
+    const statusBadge = isHolding
+      ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">HOLDING</span>'
+      : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-white/10">CLOSED</span>';
+
+    return `
+      <tr class="hover:bg-white/[0.03] transition">
+        <td class="py-3 pl-4 pr-2 font-mono font-bold text-white">
+          <div class="flex items-center gap-2">
+            ${getStockLogoImg(t.ticker, 'w-6 h-6')}
+            <div>
+              <span class="text-sm font-black text-white">${t.ticker}</span>
+              <div class="text-[10px] text-slate-400 font-sans truncate max-w-[120px]">${t.sector || 'IDX Emiten'}</div>
+            </div>
+          </div>
+        </td>
+        <td class="py-3 px-3 font-mono text-slate-300 text-[11px]">${t.entry_date}</td>
+        <td class="py-3 px-3 text-right font-mono text-white font-semibold">${fmtPrice(t.entry_price)}</td>
+        <td class="py-3 px-3 text-center font-mono font-bold text-sky-300">${t.lots} lot</td>
+        <td class="py-3 px-3 text-right font-mono text-slate-200">${fmtPrice(t.total_capital)}</td>
+        <td class="py-3 px-3 text-right font-mono text-white font-semibold">${fmtPrice(t.current_price)}</td>
+        <td class="py-3 px-3 text-right font-mono ${pnlColor}">
+          <div>${sign}${fmtPrice(pnlVal)}</div>
+          <div class="text-[10px]">${sign}${pnlPct.toFixed(2)}%</div>
+        </td>
+        <td class="py-3 px-3 text-center">${statusBadge}</td>
+        <td class="py-3 px-3 text-slate-300 text-[11px]">
+          <div class="font-medium text-white">${t.broker || 'Sekuritas'}</div>
+          <div class="text-slate-400 text-[10px] truncate max-w-[150px]">${t.notes || '-'}</div>
+        </td>
+        <td class="py-3 pl-1 pr-4 text-right">
+          <div class="flex items-center justify-end gap-1.5">
+            ${isHolding ? `
+              <button
+                onclick="openPortfolioSellModal(${t.id}, '${t.ticker}', ${t.entry_price}, ${t.lots})"
+                class="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-[11px] font-bold transition active:scale-95"
+                title="Jual dan realisasikan posisi"
+              >
+                Jual
+              </button>
+            ` : ''}
+            <button
+              onclick="deletePortfolioTrade(${t.id})"
+              class="px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-400/20 text-[11px] transition active:scale-95"
+              title="Hapus riwayat trade"
+            >
+              ✕
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openPortfolioBuyModal(ticker = '') {
+  const modal = document.getElementById('portfolioBuyModal');
+  if (!modal) return;
+
+  const tInput = document.getElementById('buyTickerInput');
+  const pInput = document.getElementById('buyPriceInput');
+  const lInput = document.getElementById('buyLotsInput');
+  const dInput = document.getElementById('buyDateInput');
+  const slInput = document.getElementById('buyStopLossInput');
+  const tpInput = document.getElementById('buyTargetInput');
+  const bInput = document.getElementById('buyBrokerInput');
+  const nInput = document.getElementById('buyNotesInput');
+
+  if (dInput) dInput.value = new Date().toISOString().split('T')[0];
+  if (lInput && !lInput.value) lInput.value = '5';
+  if (bInput && !bInput.value) bInput.value = 'Sekuritas';
+  if (nInput) nInput.value = '';
+
+  const clean = String(ticker || selectedTicker || '').trim().toUpperCase();
+  if (tInput) {
+    tInput.value = clean;
+    if (clean) handleBuyTickerInput(clean);
+  }
+
+  calcBuyTotalCapital();
+  modal.classList.remove('hidden');
+}
+
+function closePortfolioBuyModal() {
+  const modal = document.getElementById('portfolioBuyModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function handleBuyTickerInput(rawTicker) {
+  const ticker = String(rawTicker || '').trim().toUpperCase();
+  if (!ticker) return;
+
+  const pInput = document.getElementById('buyPriceInput');
+  const slInput = document.getElementById('buyStopLossInput');
+  const tpInput = document.getElementById('buyTargetInput');
+
+  const stock = currentStocks.find(s => s.ticker === ticker);
+  if (stock) {
+    const plan = stock.trading_plan || {};
+    if (pInput && (!pInput.value || pInput.value === '0')) {
+      pInput.value = plan.entry_price || plan.entry_high || stock.close;
+    }
+    if (slInput && !slInput.value && plan.stop_loss) {
+      slInput.value = plan.stop_loss;
+    }
+    if (tpInput && !tpInput.value && plan.target_1) {
+      tpInput.value = plan.target_1;
+    }
+  }
+  calcBuyTotalCapital();
+}
+
+function calcBuyTotalCapital() {
+  const p = parseFloat(document.getElementById('buyPriceInput')?.value) || 0;
+  const l = parseInt(document.getElementById('buyLotsInput')?.value) || 0;
+  const total = p * l * 100;
+  const prev = document.getElementById('buyTotalCapitalPreview');
+  if (prev) prev.textContent = fmtPrice(total);
+}
+
+async function handlePortfolioBuySubmit(e) {
+  e.preventDefault();
+  const ticker = document.getElementById('buyTickerInput')?.value.trim().toUpperCase();
+  const price = parseFloat(document.getElementById('buyPriceInput')?.value) || 0;
+  const lots = parseInt(document.getElementById('buyLotsInput')?.value) || 0;
+  const date = document.getElementById('buyDateInput')?.value || undefined;
+  const sl = parseFloat(document.getElementById('buyStopLossInput')?.value) || undefined;
+  const tp = parseFloat(document.getElementById('buyTargetInput')?.value) || undefined;
+  const broker = document.getElementById('buyBrokerInput')?.value.trim() || 'Sekuritas';
+  const notes = document.getElementById('buyNotesInput')?.value.trim() || '';
+
+  if (!ticker || price <= 0 || lots <= 0) {
+    showToast('Kode saham, harga beli, dan jumlah lot wajib diisi.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitBuyTrade');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/portfolio/buy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticker,
+        entry_price: price,
+        lots,
+        entry_date: date,
+        stop_loss: sl,
+        target_price: tp,
+        broker,
+        notes,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal mencatat transaksi.');
+
+    showToast(`✅ ${data.trade.message || 'Transaksi berhasil disimpan!'}`, 'success');
+    closePortfolioBuyModal();
+    await loadPortfolio();
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function openPortfolioSellModal(tradeId, ticker, entryPrice, lots) {
+  const modal = document.getElementById('portfolioSellModal');
+  if (!modal) return;
+
+  const idInput = document.getElementById('sellTradeId');
+  const tEl = document.getElementById('sellModalTicker');
+  const pEl = document.getElementById('sellModalEntryPrice');
+  const lEl = document.getElementById('sellModalLots');
+  const pInput = document.getElementById('sellPriceInput');
+  const dInput = document.getElementById('sellDateInput');
+  const nInput = document.getElementById('sellNotesInput');
+
+  if (idInput) idInput.value = tradeId;
+  if (tEl) tEl.textContent = ticker;
+  if (pEl) pEl.textContent = fmtPrice(entryPrice);
+  if (lEl) lEl.textContent = `${lots} lot`;
+  if (dInput) dInput.value = new Date().toISOString().split('T')[0];
+  if (nInput) nInput.value = '';
+
+  const stock = currentStocks.find(s => s.ticker === ticker);
+  if (pInput) {
+    pInput.value = stock ? stock.close : entryPrice;
+  }
+
+  calcSellRealizedPreview();
+  modal.classList.remove('hidden');
+}
+
+function closePortfolioSellModal() {
+  const modal = document.getElementById('portfolioSellModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function calcSellRealizedPreview() {
+  const pEl = document.getElementById('sellModalEntryPrice');
+  const lEl = document.getElementById('sellModalLots');
+  const exitInput = document.getElementById('sellPriceInput');
+  const prevEl = document.getElementById('sellRealizedPreview');
+
+  const entryStr = (pEl?.textContent || '0').replace(/[^0-9]/g, '');
+  const lotsStr = (lEl?.textContent || '0').replace(/[^0-9]/g, '');
+  const entry = parseFloat(entryStr) || 0;
+  const lots = parseInt(lotsStr) || 0;
+  const exit = parseFloat(exitInput?.value) || 0;
+
+  if (entry > 0 && lots > 0 && exit > 0) {
+    const diff = (exit - entry) * lots * 100;
+    const pct = ((exit - entry) / entry) * 100;
+    const sign = diff >= 0 ? '+' : '';
+    if (prevEl) {
+      prevEl.textContent = `${sign}${fmtPrice(diff)} (${sign}${pct.toFixed(2)}%)`;
+      prevEl.className = `font-mono font-bold text-sm ${diff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+    }
+  } else if (prevEl) {
+    prevEl.textContent = '-';
+  }
+}
+
+async function handlePortfolioSellSubmit(e) {
+  e.preventDefault();
+  const tradeId = parseInt(document.getElementById('sellTradeId')?.value) || 0;
+  const exitPrice = parseFloat(document.getElementById('sellPriceInput')?.value) || 0;
+  const exitDate = document.getElementById('sellDateInput')?.value || undefined;
+  const notes = document.getElementById('sellNotesInput')?.value.trim() || undefined;
+
+  if (!tradeId || exitPrice <= 0) {
+    showToast('Harga jual harus lebih dari Rp 0.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitSellTrade');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch(`/api/portfolio/sell/${tradeId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        exit_price: exitPrice,
+        exit_date: exitDate,
+        notes,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal merealisasikan penjualan.');
+
+    showToast(`💰 ${data.trade.message || 'Penjualan berhasil dicatat!'}`, 'success');
+    closePortfolioSellModal();
+    await loadPortfolio();
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function deletePortfolioTrade(tradeId) {
+  if (!confirm('Hapus catatan transaksi ini dari portofolio?')) return;
+  try {
+    const res = await fetch(`/api/portfolio/${tradeId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal menghapus transaksi.');
+    showToast(data.message, 'success');
+    await loadPortfolio();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// =====================================================================
+// TELEGRAM NOTIFIER CONFIGURATION (PERSISTENT & AUTO ALERTS)
+// =====================================================================
+async function loadTelegramConfig() {
+  try {
+    const res = await fetch('/api/telegram/config');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const tokenInput = document.getElementById('telegramBotToken');
+    const chatInput = document.getElementById('telegramChatId');
+    const autoNotify = document.getElementById('telegramAutoNotify');
+
+    if (tokenInput && data.bot_token) tokenInput.value = data.bot_token;
+    if (chatInput && data.chat_id) chatInput.value = data.chat_id;
+    if (autoNotify && data.auto_notify !== undefined) autoNotify.checked = data.auto_notify;
+  } catch (err) {
+    console.warn('[TelegramConfig] Error loading config:', err);
+  }
+}
+
+async function saveTelegramConfig() {
+  const token = document.getElementById('telegramBotToken')?.value.trim() || '';
+  const chatId = document.getElementById('telegramChatId')?.value.trim() || '';
+  const autoNotify = document.getElementById('telegramAutoNotify')?.checked ?? true;
+
+  if (!token || !chatId) {
+    showToast('Bot Token dan Chat ID wajib diisi.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnSaveTelegramConfig');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Menyimpan...';
+  }
+
+  try {
+    const res = await fetch('/api/telegram/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bot_token: token,
+        chat_id: chatId,
+        auto_notify: autoNotify,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal menyimpan konfigurasi.');
+
+    localStorage.setItem('smartflow_telegram_token', token);
+    localStorage.setItem('smartflow_telegram_chat_id', chatId);
+    showToast('✅ ' + data.message, 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Simpan Pengaturan';
+    }
+  }
+}
+
+// =====================================================================
 // GLOBAL KEYBOARD & BACKDROP MODAL HANDLERS
 // =====================================================================
 function closeAllModals() {
@@ -2482,6 +3066,9 @@ function closeAllModals() {
   closeGuideModal();
   closeTelegramModal();
   closeTradingViewModal();
+  closeMarketRegimeModal();
+  closePortfolioBuyModal();
+  closePortfolioSellModal();
 }
 
 window.addEventListener('keydown', (e) => {
@@ -2491,7 +3078,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Tutup modal jika user mengklik backdrop / area hitam di luar modal
-document.querySelectorAll('#settingsModal, #lotCalculatorModal, #glossaryModal, #uploadModal, #guideModal, #telegramModal, #tradingViewModal').forEach(modalEl => {
+document.querySelectorAll('#settingsModal, #lotCalculatorModal, #glossaryModal, #uploadModal, #guideModal, #telegramModal, #tradingViewModal, #marketRegimeModal, #portfolioBuyModal, #portfolioSellModal').forEach(modalEl => {
   modalEl.addEventListener('click', (e) => {
     if (e.target === modalEl) {
       modalEl.classList.add('hidden');
@@ -2508,7 +3095,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   switchMainTab(activeMainTab);
 
   // 2. Muat data awal secepat mungkin
-  await Promise.all([loadScreenerData(false), loadTracker()]);
+  await Promise.all([loadScreenerData(false), loadTracker(), loadPortfolio(), loadMarketRegime()]);
 
   // 3. Setup filter listeners di Tab Jelajah
   ['filterTrigger', 'filterVolRatio', 'filterMinScore', 'filterSortBy'].forEach((id) => {

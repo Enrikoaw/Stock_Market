@@ -627,7 +627,7 @@ class SignalTracker:
         """Proses candle harian (termasuk live intraday candle) untuk setiap sinyal aktif.
         Tidak lagi memanggil prune otomatis: trading plan sinyal aktif tetap terkunci."""
         today_str = now_wib().strftime("%Y-%m-%d")
-        changes = {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0}
+        changes = {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "events": []}
 
         with self._lock, self.engine.begin() as conn:
             rows = conn.execute(
@@ -701,6 +701,13 @@ class SignalTracker:
                     note="Batal beli: Gap down saat pembukaan pasar (tekanan jual pagi).",
                 )
                 changes["expired"] += 1
+                changes.setdefault("events", []).append({
+                    "event": "EXPIRED_GAP_DOWN",
+                    "ticker": r["ticker"],
+                    "price": round(o, 2),
+                    "pnl_pct": 0.0,
+                    "note": r["note"],
+                })
                 return
 
             # 2. Antrean Buy Limit di area entry (l <= e_high) dengan konfirmasi rebound
@@ -730,6 +737,13 @@ class SignalTracker:
                         note=f"Entry terkunci {date} @ Rp {fill:,.0f} (Low Rp {l:,.0f} menyentuh Entry Rp {e_high:,.0f}).",
                     )
                     changes["entered"] += 1
+                    changes.setdefault("events", []).append({
+                        "event": "RUNNING",
+                        "ticker": r["ticker"],
+                        "price": round(fill, 2),
+                        "pnl_pct": r["pnl_pct"],
+                        "note": r["note"],
+                    })
 
                     # Jika di hari entry target tercapai dan close tetap di atas/sama dengan entry fill -> langsung WIN
                     if h >= r["target"] and c >= fill:
@@ -817,6 +831,13 @@ class SignalTracker:
             note=note,
         )
         changes[status.lower()] = changes.get(status.lower(), 0) + 1
+        changes.setdefault("events", []).append({
+            "event": status,
+            "ticker": r["ticker"],
+            "price": round(exit_price, 2),
+            "pnl_pct": r["pnl_pct"],
+            "note": note,
+        })
 
     # ---------------------------------------------------------------- query
     def list_signals(self, status: str | None = None, sort_by: str = "id_desc", limit: int = 500) -> list[dict]:

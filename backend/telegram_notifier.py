@@ -12,6 +12,7 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 
@@ -221,7 +222,81 @@ def format_test_message() -> str:
     return (
         "🔔 <b>TES KONEKSI SMARTFLOW IDX BERHASIL!</b>\n\n"
         "Bot Telegram Anda telah sukses terhubung dengan sistem SmartFlow IDX.\n"
-        "Saat Anda menekan tombol <b>Kirim Sinyal Telegram</b> di web, saham-saham akumulasi terbaik "
-        "yang belum terbang akan langsung dikirimkan ke chat ini secara otomatis.\n\n"
+        "Notifikasi sinyal harian sore & alert pergerakan harga akan otomatis dikirimkan ke chat ini.\n\n"
         "<i>Selamat trading & disiplin selalu dengan Trading Plan!</i>"
     )
+
+
+def format_tracker_event_message(event_type: str, ticker: str, price: float, pnl_pct: float | None = None, note: str = "") -> str:
+    """Format notifikasi instan event pergerakan sinyal ke Telegram."""
+    if event_type == "WIN":
+        pnl_str = f"+{pnl_pct:.2f}%" if pnl_pct is not None else ""
+        return (
+            f"🏆 <b>TARGET TERCAPAI (WIN)!</b>\n\n"
+            f"Saham: <b>#{html.escape(ticker)}</b>\n"
+            f"Harga Exit: <b>Rp {price:,.0f}</b> ({pnl_str})\n"
+            f"Catatan: <i>{html.escape(note)}</i>\n\n"
+            f"🎯 <i>Sinyal berhasil mencapai target profit. Amankan modal!</i>"
+        )
+    elif event_type == "RUNNING":
+        return (
+            f"🚀 <b>POSISI ENTRY AKTIF!</b>\n\n"
+            f"Saham: <b>#{html.escape(ticker)}</b>\n"
+            f"Harga Beli: <b>Rp {price:,.0f}</b>\n"
+            f"Catatan: <i>{html.escape(note)}</i>\n\n"
+            f"🛡️ <i>Order beli diskon terjemput. Pantau trailing profit otomatis!</i>"
+        )
+    elif event_type == "EXPIRED_GAP_DOWN":
+        return (
+            f"🛑 <b>PROTEKSI ANTI GAP-DOWN AKTIF!</b>\n\n"
+            f"Saham: <b>#{html.escape(ticker)}</b>\n"
+            f"Harga Pembukaan: <b>Rp {price:,.0f}</b>\n"
+            f"Status: <b>Batal Beli (EXPIRED)</b>\n"
+            f"Catatan: <i>{html.escape(note)}</i>\n\n"
+            f"🛡️ <i>Modal Anda terselamatkan dari guyuran pembukaan pasar.</i>"
+        )
+    else:
+        return (
+            f"📢 <b>UPDATE SINYAL: #{html.escape(ticker)}</b>\n\n"
+            f"Status: <b>{html.escape(event_type)}</b>\n"
+            f"Harga: <b>Rp {price:,.0f}</b>\n"
+            f"Catatan: <i>{html.escape(note)}</i>"
+        )
+
+
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "telegram_config.json"
+
+
+def load_telegram_config() -> dict[str, Any]:
+    """Memuat konfigurasi telegram dari file data/telegram_config.json atau environment variables."""
+    cfg = {
+        "bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
+        "chat_id": os.environ.get("TELEGRAM_CHAT_ID", "").strip(),
+        "auto_notify": True,
+    }
+    if CONFIG_PATH.exists():
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                if isinstance(saved, dict):
+                    if saved.get("bot_token"):
+                        cfg["bot_token"] = saved["bot_token"].strip()
+                    if saved.get("chat_id"):
+                        cfg["chat_id"] = saved["chat_id"].strip()
+                    if "auto_notify" in saved:
+                        cfg["auto_notify"] = bool(saved["auto_notify"])
+        except Exception:
+            pass
+    return cfg
+
+
+def save_telegram_config(config: dict[str, Any]) -> bool:
+    """Menyimpan konfigurasi telegram ke data/telegram_config.json agar awet."""
+    try:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+        return True
+    except Exception:
+        return False
+

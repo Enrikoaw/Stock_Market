@@ -8,8 +8,14 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=47.0" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
+  <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
+  <link rel="stylesheet" href="/static/styles.css?v=48.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -132,6 +138,17 @@
       <!-- Right Header Actions: Status Bursa, Saklar Mode, Alat/Pengaturan, Tema -->
       <div class="flex items-center gap-1.5 sm:gap-2">
         <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" multiple class="hidden" />
+
+        <!-- Indikator Rezim Pasar IHSG (Market Breadth) -->
+        <button
+          id="btnMarketRegime"
+          onclick="openMarketRegimeModal()"
+          class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-900/60 hover:bg-slate-800/80 border border-white/[0.08] text-xs shadow-inner transition active:scale-95 cursor-pointer"
+          title="Klik untuk melihat Analisis Rezim Pasar IHSG & Panduan Alokasi Modal"
+        >
+          <span id="regimeDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="regimeLabel" class="font-bold text-emerald-300 text-[11px] sm:text-xs">Bullish Expansion (58%)</span>
+        </button>
 
         <!-- Status Bursa Jelas & Sadar Jeda/Libur -->
         <div id="marketLivePill" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-900/60 border border-white/[0.08] text-xs shadow-inner">
@@ -738,6 +755,38 @@
         </div>
       </div>
 
+      <!-- SUB-TAB SAKLAR: PAPER TRACKER vs PORTOFOLIO RIIL -->
+      <div class="flex items-center justify-between flex-wrap gap-2 pt-1">
+        <div class="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/80 border border-white/10">
+          <button
+            id="subTabBtnPaper"
+            onclick="switchPantauanSubTab('paper')"
+            class="px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
+          >
+            <span>🔬</span>
+            <span>Paper Tracker (Forward-Test)</span>
+          </button>
+          <button
+            id="subTabBtnPortfolio"
+            onclick="switchPantauanSubTab('portfolio')"
+            class="px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 text-slate-400 hover:text-white"
+          >
+            <span>💼</span>
+            <span>Portofolio Riil (Jurnal Saya)</span>
+          </button>
+        </div>
+
+        <!-- Tombol Tambah Transaksi Beli (Portofolio Riil) -->
+        <button
+          id="btnOpenPortfolioBuyModal"
+          onclick="openPortfolioBuyModal()"
+          class="hidden px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(16,185,129,0.35)] transition flex items-center gap-1.5 active:scale-95"
+        >
+          <span>＋</span>
+          <span>Catat Beli Saham</span>
+        </button>
+      </div>
+
       <!-- BAGIAN 2: HASIL UJI SINYAL (SIMULASI FORWARD-TEST) -->
       <div id="trackerSection" class="glass-panel rounded-2xl p-4 sm:p-5 space-y-4">
         
@@ -835,11 +884,22 @@
             <button
               id="btnEvalTracker"
               onclick="evaluateTracker()"
-              class="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition flex items-center gap-1.5"
+              class="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
               title="Evaluasi status sinyal simulasi sekarang"
             >
               <span>⚡</span>
               <span>Evaluasi Sekarang</span>
+            </button>
+            <button
+              id="btnExportTracker"
+              onclick="exportTrackerCSV()"
+              class="px-3 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
+              title="Unduh seluruh riwayat forward-test ke file CSV"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12" />
+              </svg>
+              <span>Unduh CSV</span>
             </button>
           </div>
         </div>
@@ -867,8 +927,97 @@
 
       </div>
 
+      <!-- BAGIAN 3: PORTOFOLIO RIIL (JURNAL SAYA) -->
+      <div id="portfolioSection" class="glass-panel rounded-2xl p-4 sm:p-5 space-y-4 hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-3.5">
+          <div>
+            <h2 class="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+              <span>💼</span>
+              <span>Jurnal &amp; Portofolio Riil Saya</span>
+            </h2>
+            <p class="text-xs text-slate-300 mt-0.5">
+              Catatan transaksi saham nyata yang Anda beli di sekuritas beserta live floating &amp; realized P/L terupdate.
+            </p>
+          </div>
+          <button
+            onclick="openPortfolioBuyModal()"
+            class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(16,185,129,0.35)] transition flex items-center gap-1.5 active:scale-95"
+          >
+            <span>＋</span>
+            <span>Catat Transaksi Beli</span>
+          </button>
+        </div>
 
-  </main>
+        <!-- Portfolio Summary KPI Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div class="p-3.5 rounded-xl glass-subcard text-center">
+            <div class="text-[11px] text-slate-300 font-medium">Modal Terpakai</div>
+            <div id="portCapital" class="text-lg sm:text-xl font-black font-mono text-white mt-0.5">Rp 0</div>
+            <div id="portHoldingCount" class="text-[10px] text-slate-400 mt-1">0 Posisi Aktif</div>
+          </div>
+          <div class="p-3.5 rounded-xl glass-subcard text-center">
+            <div class="text-[11px] text-slate-300 font-medium">Nilai Saat Ini</div>
+            <div id="portCurrentVal" class="text-lg sm:text-xl font-black font-mono text-sky-300 mt-0.5">Rp 0</div>
+            <div class="text-[10px] text-slate-400 mt-1">Estimasi Live</div>
+          </div>
+          <div class="p-3.5 rounded-xl glass-subcard text-center">
+            <div class="text-[11px] text-slate-300 font-medium">Floating P/L</div>
+            <div id="portFloatingPnl" class="text-lg sm:text-xl font-black font-mono text-emerald-400 mt-0.5">Rp 0</div>
+            <div id="portFloatingPct" class="text-[10px] font-mono text-emerald-400 mt-1">(+0.0%)</div>
+          </div>
+          <div class="p-3.5 rounded-xl glass-subcard text-center">
+            <div class="text-[11px] text-slate-300 font-medium">Realized P/L</div>
+            <div id="portRealizedPnl" class="text-lg sm:text-xl font-black font-mono text-emerald-300 mt-0.5">Rp 0</div>
+            <div id="portClosedCount" class="text-[10px] text-slate-400 mt-1">0 Trade Selesai</div>
+          </div>
+          <div class="p-3.5 rounded-xl glass-subcard text-center col-span-2 sm:col-span-1">
+            <div class="text-[11px] text-slate-300 font-medium">Win Rate Riil</div>
+            <div id="portWinRate" class="text-lg sm:text-xl font-black font-mono text-amber-300 mt-0.5">—</div>
+            <div class="text-[10px] text-slate-400 mt-1">Posisi Realized</div>
+          </div>
+        </div>
+
+        <!-- Portfolio Toolbar -->
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div class="flex items-center gap-1.5" id="portfolioFilterTabs">
+            <button data-status="ALL" onclick="setPortfolioTab('ALL')" class="portfolio-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white">Semua</button>
+            <button data-status="HOLDING" onclick="setPortfolioTab('HOLDING')" class="portfolio-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300">Sedang Dipegang (Holding)</button>
+            <button data-status="CLOSED" onclick="setPortfolioTab('CLOSED')" class="portfolio-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300">Sudah Dijual (Closed)</button>
+          </div>
+          <div class="text-xs text-slate-400">
+            Total Transaksi: <span id="portTotalCount" class="font-mono text-white font-bold">0</span>
+          </div>
+        </div>
+
+        <!-- Portfolio Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-900/80 border-y border-white/[0.08] text-slate-300 font-semibold select-none">
+                <th class="py-3 pl-4 pr-2">Saham</th>
+                <th class="py-3 px-3">Tgl Beli</th>
+                <th class="py-3 px-3 text-right">Harga Beli</th>
+                <th class="py-3 px-3 text-center">Lot</th>
+                <th class="py-3 px-3 text-right">Total Modal</th>
+                <th class="py-3 px-3 text-right">Harga Terkini</th>
+                <th class="py-3 px-3 text-right">Untung / Rugi (P/L)</th>
+                <th class="py-3 px-3 text-center">Status</th>
+                <th class="py-3 px-3">Sekuritas / Catatan</th>
+                <th class="py-3 pl-1 pr-4 text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="portfolioTableBody" class="divide-y divide-white/[0.06]">
+              <tr>
+                <td colspan="10" class="py-8 text-center text-slate-400">
+                  Belum ada transaksi di portofolio riil Anda. Klik "Catat Beli Saham" untuk mulai mencatat.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
 
   <!-- =====================================================================
        MODAL 1: PENGATURAN & ALAT TEKNIS (SYNC, TELEGRAM, UNGGAH, RUMUS, AUDIT)
@@ -1215,13 +1364,13 @@
       <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
           <span>✈️</span>
-          <span>Kirim Rekomendasi Saham ke Telegram</span>
+          <span>Integrasi &amp; Notifikasi Telegram Bot</span>
         </h3>
         <button onclick="closeTelegramModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
       </div>
 
       <p class="text-xs text-slate-300 leading-relaxed">
-        Sistem akan menyaring saham akumulasi sehat yang belum terbang jauh dan mengirimkan rencana harga masuk, batas rugi, dan target untung ke bot Telegram Anda.
+        Sistem mengirimkan rekomendasi saham akumulasi sore (16:15 WIB) serta notifikasi realtime (Target WIN, Entry Terjemput, &amp; Proteksi Anti Gap-Down) langsung ke bot Telegram Anda.
       </p>
 
       <div class="space-y-3 glass-subcard p-3.5 rounded-xl text-xs">
@@ -1244,24 +1393,340 @@
             class="w-full px-3 py-1.5 rounded-lg bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-sky-400"
           />
         </div>
+
+        <div class="pt-2 border-t border-white/5 flex items-center justify-between">
+          <label for="telegramAutoNotify" class="text-[11px] font-semibold text-white flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="telegramAutoNotify" checked class="w-4 h-4 rounded text-emerald-500 bg-slate-950/60 border-white/20 focus:ring-emerald-400 cursor-pointer" />
+            <span>Notifikasi Otomatis Realtime (Alert WIN, Entry &amp; 16:15 WIB)</span>
+          </label>
+        </div>
       </div>
 
-      <div class="flex items-center justify-between gap-2 pt-1 text-xs">
-        <button
-          id="btnTestTelegram"
-          onclick="testTelegramConnection()"
-          class="px-3.5 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 font-semibold transition"
-        >
-          Tes Koneksi Bot
-        </button>
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+        <div class="flex items-center gap-2">
+          <button
+            id="btnTestTelegram"
+            onclick="testTelegramConnection()"
+            class="px-3 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 font-semibold transition"
+          >
+            Tes Koneksi Bot
+          </button>
+          <button
+            id="btnSaveTelegramConfig"
+            onclick="saveTelegramConfig()"
+            class="px-3 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 font-semibold transition"
+          >
+            Simpan Pengaturan
+          </button>
+        </div>
         <button
           id="btnSaveAndSendTelegram"
           onclick="saveAndSendTelegram()"
-          class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-white font-bold shadow-[0_0_20px_rgba(14,165,233,0.4)] transition"
+          class="px-3.5 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-white font-bold shadow-[0_0_20px_rgba(14,165,233,0.4)] transition"
         >
-          Kirim Rekomendasi Sekarang
+          Kirim Sinyal Sekarang
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 8: REZIM PASAR IHSG & MARKET BREADTH
+       ===================================================================== -->
+  <div id="marketRegimeModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="glass-panel rounded-2xl max-w-lg w-full p-6 border border-white/15 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>🧭</span>
+          <span>Analisis Rezim Pasar IHSG (Market Breadth)</span>
+        </h3>
+        <button onclick="closeMarketRegimeModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+
+      <!-- Regime Hero Banner -->
+      <div id="modalRegimeCard" class="p-4 rounded-xl glass-subcard border border-white/10 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-slate-300 font-semibold">Status Rezim Pasar Saat Ini:</span>
+          <span id="modalRegimeStatusBadge" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">-</span>
+        </div>
+        <div id="modalRegimeTitle" class="text-lg font-black text-white">Memuat...</div>
+        <p id="modalRegimeNote" class="text-xs text-slate-300 leading-relaxed">-</p>
+      </div>
+
+      <!-- Breadth Gauges -->
+      <div class="space-y-3 glass-subcard p-4 rounded-xl text-xs">
+        <div>
+          <div class="flex items-center justify-between font-semibold mb-1">
+            <span class="text-slate-300">Market Breadth MA20 (Jangka Pendek):</span>
+            <span id="modalBreadthMA20" class="font-mono text-emerald-400 font-bold">- %</span>
+          </div>
+          <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div id="modalBreadthMA20Bar" class="h-full bg-emerald-400 transition-all duration-500" style="width: 50%"></div>
+          </div>
+          <span class="text-[10px] text-slate-400 mt-0.5 block">Persentase saham di BEI yang harganya bertahan di atas Moving Average 20 Hari.</span>
+        </div>
+
+        <div class="pt-2 border-t border-white/5">
+          <div class="flex items-center justify-between font-semibold mb-1">
+            <span class="text-slate-300">Market Breadth MA50 (Jangka Menengah):</span>
+            <span id="modalBreadthMA50" class="font-mono text-teal-400 font-bold">- %</span>
+          </div>
+          <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div id="modalBreadthMA50Bar" class="h-full bg-teal-400 transition-all duration-500" style="width: 50%"></div>
+          </div>
+          <span class="text-[10px] text-slate-400 mt-0.5 block">Persentase saham di BEI yang berada dalam tren naik di atas MA50.</span>
+        </div>
+      </div>
+
+      <!-- Allocation Guide -->
+      <div class="p-4 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
+        <div class="text-xs font-bold text-white flex items-center gap-1.5">
+          <span>💡</span>
+          <span>Panduan Alokasi Modal &amp; Taktik Trading</span>
+        </div>
+        <div id="modalRegimeAlloc" class="text-xs font-semibold text-emerald-300 bg-emerald-500/10 p-2 rounded-lg border border-emerald-400/20">
+          -
+        </div>
+        <ul class="text-[11px] text-slate-300 space-y-1 list-disc list-inside">
+          <li><strong>Bullish Expansion (&ge;55%):</strong> Alokasi 100% modal aktif. Agresif pada saham Breakout &amp; High Conviction (Skor 80+).</li>
+          <li><strong>Netral / Konsolidasi (40–55%):</strong> Alokasi 50%–70% modal. Fokus beli saat koreksi sehat (pullback) mendekati VWAP 5H.</li>
+          <li><strong>Bearish (&lt;40%):</strong> Alokasi 25% modal / perbanyak Cash. Batasi posisi, ketatkan Stop Loss disiplin.</li>
+        </ul>
+      </div>
+
+      <div class="pt-1 flex justify-end">
+        <button
+          onclick="closeMarketRegimeModal()"
+          class="px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white text-xs font-semibold transition"
+        >
+          Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 9: CATAT PEMBELIAN SAHAM (PORTOFOLIO RIIL)
+       ===================================================================== -->
+  <div id="portfolioBuyModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="glass-panel rounded-2xl max-w-md w-full p-6 border border-white/15 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>💼</span>
+          <span>Catat Beli Saham (Portofolio Riil)</span>
+        </h3>
+        <button onclick="closePortfolioBuyModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+
+      <form id="portfolioBuyForm" onsubmit="handlePortfolioBuySubmit(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Kode Saham (Ticker) *</label>
+          <input
+            id="buyTickerInput"
+            type="text"
+            required
+            placeholder="Contoh: BBCA, ASPI, ADRO"
+            oninput="this.value = this.value.toUpperCase(); handleBuyTickerInput(this.value);"
+            class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 font-mono font-bold text-white uppercase focus:outline-none focus:border-emerald-400"
+          />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Harga Beli (Rp) *</label>
+            <input
+              id="buyPriceInput"
+              type="number"
+              required
+              min="1"
+              step="1"
+              placeholder="Contoh: 8500"
+              oninput="calcBuyTotalCapital()"
+              class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 font-mono text-white focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Jumlah Lot (1 lot = 100 lbr) *</label>
+            <input
+              id="buyLotsInput"
+              type="number"
+              required
+              min="1"
+              step="1"
+              value="5"
+              oninput="calcBuyTotalCapital()"
+              class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 font-mono text-white focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+        </div>
+
+        <!-- Total Modal Preview -->
+        <div class="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/20 flex items-center justify-between text-xs">
+          <span class="text-emerald-300 font-medium">Total Nilai Pembelian:</span>
+          <span id="buyTotalCapitalPreview" class="font-mono font-bold text-white text-sm">Rp 0</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Stop Loss (SL Rp)</label>
+            <input
+              id="buyStopLossInput"
+              type="number"
+              min="1"
+              placeholder="Otomatis / Opsional"
+              class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 font-mono text-white focus:outline-none focus:border-rose-400"
+            />
+          </div>
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Target Untung (TP Rp)</label>
+            <input
+              id="buyTargetInput"
+              type="number"
+              min="1"
+              placeholder="Otomatis / Opsional"
+              class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 font-mono text-white focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Tanggal Beli</label>
+            <input
+              id="buyDateInput"
+              type="date"
+              class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-white focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Sekuritas / Broker</label>
+            <input
+              id="buyBrokerInput"
+              type="text"
+              placeholder="Ajaib / Stockbit / IPOT"
+              class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-white focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Catatan Pribadi</label>
+          <input
+            id="buyNotesInput"
+            type="text"
+            placeholder="Alasan beli, porsi modal, dll."
+            class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-white focus:outline-none focus:border-emerald-400"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onclick="closePortfolioBuyModal()"
+            class="px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white font-medium transition"
+          >
+            Batal
+          </button>
+          <button
+            type="submit"
+            id="btnSubmitBuyTrade"
+            class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold shadow-[0_0_15px_rgba(16,185,129,0.35)] transition"
+          >
+            Simpan ke Portofolio
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 10: JUAL / TUTUP POSISI (PORTOFOLIO RIIL)
+       ===================================================================== -->
+  <div id="portfolioSellModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="glass-panel rounded-2xl max-w-md w-full p-6 border border-white/15 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>💰</span>
+          <span>Jual Saham &amp; Realisasikan P/L</span>
+        </h3>
+        <button onclick="closePortfolioSellModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+
+      <!-- Trade Info Summary -->
+      <div class="p-3 rounded-xl glass-subcard text-xs space-y-1">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Saham:</span>
+          <span id="sellModalTicker" class="font-mono font-black text-white text-sm">-</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Harga Beli Awal:</span>
+          <span id="sellModalEntryPrice" class="font-mono text-white">-</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Jumlah Lot:</span>
+          <span id="sellModalLots" class="font-mono text-white">-</span>
+        </div>
+      </div>
+
+      <form id="portfolioSellForm" onsubmit="handlePortfolioSellSubmit(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="sellTradeId" />
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Harga Jual Eksekusi (Rp) *</label>
+          <input
+            id="sellPriceInput"
+            type="number"
+            required
+            min="1"
+            step="1"
+            placeholder="Contoh: 8900"
+            oninput="calcSellRealizedPreview()"
+            class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 font-mono font-bold text-white focus:outline-none focus:border-sky-400"
+          />
+        </div>
+
+        <!-- Realized Preview -->
+        <div class="p-2.5 rounded-xl bg-slate-950/60 border border-white/10 flex items-center justify-between text-xs">
+          <span class="text-slate-300 font-medium">Estimasi Realized P/L:</span>
+          <span id="sellRealizedPreview" class="font-mono font-bold text-white">-</span>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Tanggal Jual</label>
+          <input
+            id="sellDateInput"
+            type="date"
+            class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-white focus:outline-none focus:border-sky-400"
+          />
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Catatan Penjualan</label>
+          <input
+            id="sellNotesInput"
+            type="text"
+            placeholder="TP1 tercapai / kena trailing profit / dll."
+            class="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-white focus:outline-none focus:border-sky-400"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onclick="closePortfolioSellModal()"
+            class="px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white font-medium transition"
+          >
+            Batal
+          </button>
+          <button
+            type="submit"
+            id="btnSubmitSellTrade"
+            class="px-4 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold shadow-[0_0_15px_rgba(14,165,233,0.35)] transition"
+          >
+            Realisasikan Jual
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

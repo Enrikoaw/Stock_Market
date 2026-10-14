@@ -34,11 +34,15 @@ from excel_generator import (
     generate_900_idx_master_tickers_df,
 )
 from live_idx_fetcher import fetch_real_idx_market_data
+from portfolio_tracker import PortfolioTracker
 from signal_tracker import SignalTracker
 from telegram_notifier import (
     filter_smart_telegram_picks,
     format_telegram_broadcast,
     format_test_message,
+    format_tracker_event_message,
+    load_telegram_config,
+    save_telegram_config,
     send_telegram_message,
 )
 from screener_engine import (
@@ -69,6 +73,8 @@ STATE: dict = {
 }
 
 TRACKER = SignalTracker(BASE_DIR / "data" / "tracker.db")
+PORTFOLIO = PortfolioTracker(BASE_DIR / "data" / "tracker.db")
+LAST_DAILY_BROADCAST_DATE: str | None = None
 
 
 def sync_tracker_to_analysis(analysis: dict | None) -> None:
@@ -228,6 +234,23 @@ def _process_tracker(analysis: dict, sync_live_network: bool = False) -> dict:
             result["added"] = TRACKER.auto_track(analysis)
             sync_tracker_to_analysis(analysis)
 
+            # Kirim realtime Telegram Alert jika bot sudah terkonfigurasi
+            tg_cfg = load_telegram_config()
+            if tg_cfg.get("bot_token") and tg_cfg.get("chat_id") and tg_cfg.get("auto_notify", True):
+                for ev in main_res.get("events", []):
+                    if ev.get("event") in ("WIN", "EXPIRED_GAP_DOWN", "RUNNING"):
+                        alert_text = format_tracker_event_message(
+                            event_type=ev["event"],
+                            ticker=ev["ticker"],
+                            price=ev.get("price", 0.0),
+                            pnl_pct=ev.get("pnl_pct"),
+                            note=ev.get("note", ""),
+                        )
+                        try:
+                            send_telegram_message(tg_cfg["bot_token"], tg_cfg["chat_id"], alert_text)
+                        except Exception as tg_err:
+                            print(f"[TelegramAutoAlert] Gagal kirim notifikasi {ev['ticker']}: {tg_err}")
+
         STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[Tracker] {result}")
     except Exception as exc:
@@ -376,6 +399,27 @@ async def _background_market_session_worker() -> None:
                     await asyncio.to_thread(_run_sync_job_blocking)
                 finally:
                     STATE["is_syncing"] = False
+
+            # Auto-Broadcast Penutupan Pasar (16:15 WIB) ke Telegram
+            global LAST_DAILY_BROADCAST_DATE
+            from datetime import time as dtime
+            now_wib = _get_now_wib()
+            today_str = now_wib.strftime("%Y-%m-%d")
+            if now_wib.weekday() < 5 and not _is_idx_holiday(now_wib.date()):
+                if dtime(16, 15) <= now_wib.time() <= dtime(16, 35) and LAST_DAILY_BROADCAST_DATE != today_str:
+                    tg_cfg = load_telegram_config()
+                    if tg_cfg.get("bot_token") and tg_cfg.get("chat_id") and tg_cfg.get("auto_notify", True):
+                        try:
+                            print(f"[MarketWorker] Auto-broadcasting Top Picks Penutupan Bursa ({today_str}) ke Telegram...")
+                            stocks = STATE["analysis"]["stocks"] if STATE.get("analysis") else []
+                            market_date = STATE["analysis"]["kpis"]["latest_date"] if STATE.get("analysis") else today_str
+                            picks = filter_smart_telegram_picks(stocks=stocks, max_picks=3, max_pct_change=2.5, min_score=70)
+                            bcast_text = format_telegram_broadcast(picks, market_date)
+                            await asyncio.to_thread(send_telegram_message, tg_cfg["bot_token"], tg_cfg["chat_id"], bcast_text)
+                            LAST_DAILY_BROADCAST_DATE = today_str
+                            print("[MarketWorker] Broadcast Telegram penutupan pasar berhasil dikirim.")
+                        except Exception as tg_err:
+                            print(f"[MarketWorker] Error broadcast Telegram: {tg_err}")
         except Exception as exc:
             print(f"[MarketWorker] Error: {exc}")
 
@@ -869,6 +913,156 @@ def tracker_reset() -> dict:
     }
 
 
+@app.get("/api/tracker/export")
+def export_tracker_csv(status: str = Query(default="ALL")) -> Response:
+    """Download riwayat lengkap performa sinyal (Paper Tracker) dalam format CSV."""
+    rows = TRACKER.list_signals(status=status, limit=5000)
+    if not rows:
+        content = "id,ticker,status,signal_date,entry_date,exit_date,entry_price,exit_price,target,stop_loss,pnl_pct,score,trigger_type,note\n"
+    else:
+        df_export = pd.DataFrame(rows)
+        cols = [
+            "id", "ticker", "status", "signal_date", "entry_date", "exit_date",
+            "entry_price", "exit_price", "target", "stop_loss", "pnl_pct",
+            "score", "trigger_type", "bars_held", "note"
+        ]
+        export_cols = [c for c in cols if c in df_export.columns]
+        content = df_export[export_cols].to_csv(index=False)
+
+    dt_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"smartflow_tracker_forward_test_{dt_str}.csv"
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ===================== MARKET REGIME (BREADTH IHSG) =====================
+
+
+@app.get("/api/market-regime")
+def get_market_regime() -> dict:
+    """Mengembalikan status rezim pasar IHSG berdasarkan persentase emiten di atas MA20 dan MA50."""
+    if STATE["analysis"] is None:
+        init_default_state()
+    kpis = STATE["analysis"]["kpis"] if STATE["analysis"] else {}
+    return kpis.get("market_regime", {
+        "status": "NEUTRAL / CONSOLIDATION",
+        "label": "Netral / Konsolidasi",
+        "color": "amber",
+        "allocation": "Alokasi Modal 50% - 70%",
+        "breadth_ma20_pct": 50.0,
+        "breadth_ma50_pct": 50.0,
+        "regime_note": "Menunggu kalkulasi breadth pasar...",
+    })
+
+
+# ===================== REAL PORTFOLIO JOURNAL =====================
+
+
+class PortfolioBuyRequest(BaseModel):
+    ticker: str
+    entry_price: float
+    lots: int
+    entry_date: Optional[str] = None
+    stop_loss: Optional[float] = None
+    target_price: Optional[float] = None
+    broker: Optional[str] = "Sekuritas"
+    notes: Optional[str] = ""
+    sector: Optional[str] = ""
+
+
+class PortfolioSellRequest(BaseModel):
+    exit_price: float
+    exit_date: Optional[str] = None
+    notes: Optional[str] = None
+
+
+def _get_live_prices_map() -> dict[str, float]:
+    price_map: dict[str, float] = {}
+    if STATE.get("analysis") and "details" in STATE["analysis"]:
+        for t, d in STATE["analysis"]["details"].items():
+            c = d.get("close")
+            if c:
+                price_map[str(t).upper()] = float(c)
+    elif STATE.get("analysis") and "stocks" in STATE["analysis"]:
+        for s in STATE["analysis"]["stocks"]:
+            t = s.get("ticker")
+            c = s.get("close")
+            if t and c:
+                price_map[str(t).upper()] = float(c)
+    return price_map
+
+
+@app.get("/api/portfolio")
+def get_portfolio_trades(status: str = Query(default="ALL")) -> dict:
+    """Daftar riil transaksi portofolio pengguna beserta live floating P/L."""
+    live_prices = _get_live_prices_map()
+    trades = PORTFOLIO.list_trades(status=status, live_prices_map=live_prices)
+    summary = PORTFOLIO.summary(live_prices_map=live_prices)
+    return {"status": "success", "summary": summary, "trades": trades}
+
+
+@app.get("/api/portfolio/summary")
+def get_portfolio_summary() -> dict:
+    """Ringkasan ekuitas, floating profit/loss, realized profit, dan win-rate portofolio riil."""
+    live_prices = _get_live_prices_map()
+    return PORTFOLIO.summary(live_prices_map=live_prices)
+
+
+@app.post("/api/portfolio/buy")
+def portfolio_buy(req: PortfolioBuyRequest) -> dict:
+    """Catat pembelian riil saham di sekuritas."""
+    try:
+        sector = req.sector
+        if not sector and STATE.get("analysis") and "details" in STATE["analysis"]:
+            det = STATE["analysis"]["details"].get(req.ticker.upper(), {})
+            sector = det.get("sector", "")
+
+        trade = PORTFOLIO.add_trade(
+            ticker=req.ticker,
+            entry_price=req.entry_price,
+            lots=req.lots,
+            entry_date=req.entry_date,
+            stop_loss=req.stop_loss,
+            target_price=req.target_price,
+            broker=req.broker,
+            notes=req.notes,
+            sector=sector,
+        )
+        return {"status": "success", "trade": trade}
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve)) from ve
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gagal mencatat transaksi: {exc}") from exc
+
+
+@app.post("/api/portfolio/sell/{trade_id}")
+def portfolio_sell(trade_id: int, req: PortfolioSellRequest) -> dict:
+    """Catat penjualan / take profit / cut loss saham."""
+    try:
+        trade = PORTFOLIO.close_trade(
+            trade_id=trade_id,
+            exit_price=req.exit_price,
+            exit_date=req.exit_date,
+            notes=req.notes,
+        )
+        return {"status": "success", "trade": trade}
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve)) from ve
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gagal merealisasikan penjualan: {exc}") from exc
+
+
+@app.delete("/api/portfolio/{trade_id}")
+def portfolio_delete(trade_id: int) -> dict:
+    """Hapus transaksi dari portofolio."""
+    if not PORTFOLIO.delete_trade(trade_id):
+        raise HTTPException(status_code=404, detail="Data transaksi tidak ditemukan.")
+    return {"status": "success", "message": "Catatan transaksi berhasil dihapus."}
+
+
 # ===================== TELEGRAM NOTIFIER =====================
 
 
@@ -885,15 +1079,41 @@ class TelegramSendRequest(BaseModel):
     min_score: int = 70
 
 
+class TelegramConfigSaveRequest(BaseModel):
+    bot_token: Optional[str] = None
+    chat_id: Optional[str] = None
+    auto_notify: Optional[bool] = True
+
+
 @app.get("/api/telegram/config")
 def get_telegram_config() -> dict:
-    env_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-    env_chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    cfg = load_telegram_config()
+    token = cfg.get("bot_token", "")
+    masked_token = f"{token[:5]}...{token[-4:]}" if len(token) > 10 else ("***" if token else "")
     return {
-        "configured": bool(env_token and env_chat),
-        "has_env_token": bool(env_token),
-        "has_env_chat": bool(env_chat),
+        "configured": bool(cfg.get("bot_token") and cfg.get("chat_id")),
+        "bot_token": token,
+        "masked_token": masked_token,
+        "chat_id": cfg.get("chat_id", ""),
+        "auto_notify": cfg.get("auto_notify", True),
     }
+
+
+@app.post("/api/telegram/config")
+def save_telegram_config_endpoint(req: TelegramConfigSaveRequest) -> dict:
+    cfg = {
+        "bot_token": (req.bot_token or "").strip(),
+        "chat_id": (req.chat_id or "").strip(),
+        "auto_notify": bool(req.auto_notify),
+    }
+    if cfg["bot_token"]:
+        os.environ["TELEGRAM_BOT_TOKEN"] = cfg["bot_token"]
+    if cfg["chat_id"]:
+        os.environ["TELEGRAM_CHAT_ID"] = cfg["chat_id"]
+    ok = save_telegram_config(cfg)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Gagal menyimpan konfigurasi Telegram ke file disk.")
+    return {"status": "success", "message": "Konfigurasi Telegram berhasil disimpan permanen!", "config": cfg}
 
 
 @app.post("/api/telegram/test")
@@ -962,6 +1182,30 @@ async def send_smart_telegram_recommendations(req: TelegramSendRequest) -> dict:
             for p in picks
         ],
     }
+
+
+# ===================== PROGRESSIVE WEB APP (PWA) =====================
+
+
+@app.get("/manifest.json")
+def serve_manifest() -> FileResponse:
+    manifest_file = FRONTEND_DIR / "manifest.json"
+    if not manifest_file.exists():
+        raise HTTPException(status_code=404, detail="manifest.json tidak ditemukan")
+    return FileResponse(str(manifest_file), media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+def serve_service_worker() -> Response:
+    sw_file = FRONTEND_DIR / "sw.js"
+    if not sw_file.exists():
+        raise HTTPException(status_code=404, detail="sw.js tidak ditemukan")
+    content = sw_file.read_text(encoding="utf-8")
+    return Response(
+        content=content,
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+    )
 
 
 if FRONTEND_DIR.exists():

@@ -1448,18 +1448,39 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
     latest_dt = max((s["date"] for s in stocks_result), default="2026-10-08")
     latest_day_df = df[df["Date"] == latest_dt]
     if not latest_day_df.empty:
+        breadth_ma20 = float((latest_day_df["Close"] >= latest_day_df["MA20"]).mean() * 100.0)
         breadth_ma50 = float((latest_day_df["Close"] >= latest_day_df["MA50"]).mean() * 100.0)
     else:
+        breadth_ma20 = 50.0
         breadth_ma50 = 50.0
 
-    is_regime_bullish = breadth_ma50 >= 48.0
+    if breadth_ma20 >= 55.0:
+        regime_status = "BULLISH / RISK-ON"
+        regime_label = "Bullish Expansion"
+        regime_color = "emerald"
+        regime_alloc = "Alokasi Modal 100% (Porsi Penuh)"
+        regime_note = f"Market Breadth: {breadth_ma20:.1f}% emiten di atas MA20. Bursa kondusif untuk strategi Breakout & Trend Following."
+    elif breadth_ma20 >= 40.0:
+        regime_status = "NEUTRAL / CONSOLIDATION"
+        regime_label = "Netral / Konsolidasi"
+        regime_color = "amber"
+        regime_alloc = "Alokasi Modal 50% - 70% (Selektif)"
+        regime_note = f"Market Breadth: {breadth_ma20:.1f}% emiten di atas MA20. Bursa bergerak mendatar/selektif. Utamakan saham dengan skor VSA tertinggi (85+) dekat VWAP."
+    else:
+        regime_status = "BEARISH / RISK-OFF"
+        regime_label = "Bearish / Tekanan Jual"
+        regime_color = "rose"
+        regime_alloc = "Alokasi Modal 25% / Wait & See"
+        regime_note = f"Market Breadth: {breadth_ma20:.1f}% emiten di atas MA20. Mayoritas emiten tertekan di bawah MA20. Kurangi risiko per trade dan prioritaskan perlindungan modal."
+
     market_regime = {
-        "status": "BULLISH / RISK-ON" if is_regime_bullish else "BEARISH / RISK-OFF",
+        "status": regime_status,
+        "label": regime_label,
+        "color": regime_color,
+        "allocation": regime_alloc,
+        "breadth_ma20_pct": round(breadth_ma20, 1),
         "breadth_ma50_pct": round(breadth_ma50, 1),
-        "regime_note": (
-            f"Market Breadth: {breadth_ma50:.1f}% emiten di atas MA50. "
-            + ("Kondisi bursa kondusif untuk strategi Breakout & Trend Following." if is_regime_bullish else "Bursa konsolidasi/tertekan. Prioritaskan Silent Accumulation dekat VWAP & kurangi risiko per trade.")
-        ),
+        "regime_note": regime_note,
     }
 
     kpis = {
