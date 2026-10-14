@@ -23,8 +23,8 @@ from backend.screener_engine import analyze_smart_money_dataframe
 from backend.signal_tracker import SignalTracker
 
 DATA_DIR = BASE_DIR / "data"
-USER_EXCEL_DIR = DATA_DIR / "user_excel"
-MASTER_UPLOADED_CSV = USER_EXCEL_DIR / "master_uploaded_idx.csv"
+# Disamakan dengan backend/main.py agar daftar saham yang dipantau identik
+MASTER_UPLOADED_CSV = DATA_DIR / "master_uploaded_tickers.csv"
 REAL_CACHE_CSV = DATA_DIR / "real_idx_market_latest.csv"
 TRACKER_DB_PATH = DATA_DIR / "tracker.db"
 
@@ -52,7 +52,6 @@ def main() -> None:
     tracker = SignalTracker(TRACKER_DB_PATH)
     eval_res = tracker.evaluate(analysis["details"])
     added_count = tracker.auto_track(analysis)
-    tracker.prune_over_bandar_signals(analysis["details"])
 
     print(f"[AutoMarketSync] Evaluasi Tracker Selesai: {eval_res} | Sinyal Baru Ditambahkan: {added_count}")
 

@@ -348,14 +348,17 @@ function renderTodayCandidates(stocks) {
     const reasonText = getHumanExplanation(s);
     const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
 
-    // Rencana trading sederhana
-    const entryLow = Math.round(s.close * 0.985);
-    const entryHigh = Math.round(s.close * 1.015);
-    const stopLoss = Math.round(s.close * 0.95);
-    const target1 = Math.round(s.close * 1.06);
+    // Ambil Trading Plan terukur langsung dari backend (TP1 +4%, TP2 +7%, SL ATR14)
+    const plan = s.trading_plan || {};
+    const entryLow = plan.entry_low || Math.round(s.close * 0.99);
+    const entryHigh = plan.entry_high || s.close;
+    const stopLoss = plan.stop_loss || Math.round(s.close * 0.93);
+    const target1 = plan.target_1 || Math.round(s.close * 1.04);
+    const target2 = plan.target_2 || Math.round(s.close * 1.07);
 
-    const slPct = (((stopLoss - s.close) / s.close) * 100).toFixed(1);
-    const tpPct = (((target1 - s.close) / s.close) * 100).toFixed(1);
+    const slPct = plan.stop_loss_pct != null ? plan.stop_loss_pct : (((stopLoss - s.close) / s.close) * 100).toFixed(1);
+    const tp1Pct = plan.target_1_pct != null ? plan.target_1_pct : (((target1 - s.close) / s.close) * 100).toFixed(1);
+    const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : (((target2 - s.close) / s.close) * 100).toFixed(1);
 
     // Tingkat Risiko
     let riskBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">Risiko Rendah</span>';
@@ -391,7 +394,7 @@ function renderTodayCandidates(stocks) {
           </div>
         </div>
 
-        <!-- Kekuatan Smart Money (Bahasa Biasa) -->
+        <!-- Kekuatan Smart Money -->
         <div class="p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-between text-xs">
           <div class="flex items-center gap-1.5">
             <span class="font-mono ${strength.color}">${strength.dots}</span>
@@ -401,37 +404,23 @@ function renderTodayCandidates(stocks) {
           ${riskBadge}
         </div>
 
-        <!-- Kenapa Masuk Radar? (Narasi Ramah) -->
-        <div class="space-y-1">
-          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-            <span>💡</span>
-            <span>Kenapa Masuk Radar?</span>
-          </div>
-          <p class="text-xs text-slate-300 leading-relaxed">
-            ${reasonText}
-          </p>
-        </div>
-
-        <!-- Skenario Trading Sederhana -->
+        <!-- Rencana Trading Terukur (Entry, SL, TP) -->
         <div class="p-3 rounded-xl glass-subcard border border-white/[0.06] space-y-2 text-xs">
-          <div class="flex items-center justify-between text-[10px]">
-            <span class="font-bold text-slate-400 uppercase tracking-wider">Skenario Terukur:</span>
-            <span class="text-slate-400 font-medium">Bukan Perintah Beli</span>
-          </div>
           <div class="grid grid-cols-3 gap-1.5 text-center font-mono">
-            <div class="p-1.5 rounded-lg bg-blue-500/10 border border-blue-400/20">
+            <div class="p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
               <div class="text-[10px] text-blue-300 font-sans font-semibold">Area Beli</div>
-              <div class="text-white font-bold text-[11px] mt-0.5">${fmtNumber(entryLow)}-${fmtNumber(entryHigh)}</div>
+              <div class="text-white font-bold text-[11px] mt-0.5">${fmtNumber(entryLow)} - ${fmtNumber(entryHigh)}</div>
             </div>
-            <div class="p-1.5 rounded-lg bg-rose-500/10 border border-rose-400/20">
+            <div class="p-2 rounded-lg bg-rose-500/10 border border-rose-400/20">
               <div class="text-[10px] text-rose-300 font-sans font-semibold">Batas Rugi (SL)</div>
               <div class="text-rose-300 font-bold text-[11px] mt-0.5">${fmtNumber(stopLoss)} (${slPct}%)</div>
             </div>
-            <div class="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-400/20">
-              <div class="text-[10px] text-emerald-300 font-sans font-semibold">Target 1 (TP1)</div>
-              <div class="text-emerald-300 font-bold text-[11px] mt-0.5">${fmtNumber(target1)} (+${tpPct}%)</div>
+            <div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-400/20">
+              <div class="text-[10px] text-emerald-300 font-sans font-semibold">Target (TP1)</div>
+              <div class="text-emerald-300 font-bold text-[11px] mt-0.5">${fmtNumber(target1)} (+${tp1Pct}%)</div>
             </div>
           </div>
+          ${target2 > 0 ? `<div class="text-[10px] text-slate-400 font-mono text-center pt-0.5">TP2: <span class="text-emerald-300 font-semibold">${fmtNumber(target2)} (+${tp2Pct}%)</span> · Disiplin SL ATR14</div>` : ''}
         </div>
 
         <!-- Tombol Aksi -->
@@ -961,7 +950,7 @@ function renderScreenerTable(stocks) {
   if (!pageStocks.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="py-10 text-center text-slate-400">
+        <td colspan="6" class="py-10 text-center text-slate-400">
           Tidak ada saham yang memenuhi filter kriteria saat ini. Coba longgarkan filter di atas.
         </td>
       </tr>
@@ -1650,74 +1639,52 @@ async function handleLoadLocalPath() {
 // =====================================================================
 // SYNC CEPAT & FULL LIVE DATA
 // =====================================================================
-async function syncFastMarketData() {
-  if (isSyncingFast) return;
-  isSyncingFast = true;
-  const btn = document.getElementById('btnSyncFast');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = '⏳ Memeriksa...';
+let isUnifiedSyncing = false;
+
+async function triggerUnifiedSync() {
+  if (isUnifiedSyncing) {
+    showToast('Sinkronisasi data pasar sedang berlangsung...', 'info');
+    return;
   }
+  isUnifiedSyncing = true;
+  const navBtn = document.getElementById('btnUnifiedSync');
+  const navIcon = document.getElementById('unifiedSyncIcon');
+  const navLabel = document.getElementById('unifiedSyncLabel');
+  const modalBtn = document.getElementById('btnSyncLiveModal');
+
+  if (navBtn) navBtn.disabled = true;
+  if (navIcon) navIcon.classList.add('animate-spin');
+  if (navLabel) navLabel.textContent = 'Syncing...';
+  if (modalBtn) {
+    modalBtn.disabled = true;
+    modalBtn.textContent = '⏳ Memperbarui 844 Saham...';
+  }
+
+  showToast('🔄 Menarik pembaruan seluruh 844 saham IDX secara paralel...', 'info');
+
   try {
-    showToast('⚡ Mengevaluasi harga live Screener, Watchlist & Running...');
-    const res = await fetch('/api/sync-fast', { method: 'POST', cache: 'no-store' });
+    const res = await fetch('/api/sync', { method: 'POST', cache: 'no-store' });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Gagal sync cepat');
-    showToast(data.message || '⚡ Status Screener, Watchlist & Running berhasil diperbarui!');
+    if (!res.ok) throw new Error(data.detail || 'Gagal sinkronisasi data bursa');
+
+    showToast(data.message || '✅ Sinkronisasi seluruh saham IDX selesai!', 'success');
     await Promise.all([loadScreenerData(true), loadTracker()]);
   } catch (err) {
-    showToast(err.message, 'error');
+    showToast(`Error sync: ${err.message}`, 'error');
   } finally {
-    isSyncingFast = false;
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '⚡ Sync Kilat (< 2 Detik)';
+    isUnifiedSyncing = false;
+    if (navBtn) navBtn.disabled = false;
+    if (navIcon) navIcon.classList.remove('animate-spin');
+    if (navLabel) navLabel.textContent = 'Sync';
+    if (modalBtn) {
+      modalBtn.disabled = false;
+      modalBtn.innerHTML = '<span>🔄</span><span>Sinkronisasi Menyeluruh Seluruh Saham IDX</span>';
     }
   }
 }
 
-async function syncLiveMarketData() {
-  const btn = document.getElementById('btnSyncLive');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = '⏳ Sync Background...';
-  }
-  try {
-    showToast('🚀 Memulai unduh paralel 844 saham di background (~30s)...');
-    const res = await fetch('/api/sync-live', { method: 'POST', cache: 'no-store' });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || 'Gagal sinkronisasi live data');
-    }
-    showToast(data.message);
-
-    let pollCount = 0;
-    const pollInterval = setInterval(async () => {
-      pollCount++;
-      try {
-        const hRes = await fetch(`/api/health?_t=${Date.now()}`, { cache: 'no-store' });
-        const hData = await hRes.json();
-        if (!hData.is_syncing || pollCount >= 20) {
-          clearInterval(pollInterval);
-          if (btn) {
-            btn.disabled = false;
-            btn.textContent = '🌐 Full Sync 844 Saham';
-          }
-          await Promise.all([loadScreenerData(true), loadTracker()]);
-          showToast('✅ Pembaruan seluruh 844 saham IDX selesai!', 'success');
-        }
-      } catch {
-        // ignore polling error
-      }
-    }, 6000);
-  } catch (err) {
-    showToast(err.message, 'error');
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '🌐 Full Sync 844 Saham';
-    }
-  }
-}
+const syncFastMarketData = triggerUnifiedSync;
+const syncLiveMarketData = triggerUnifiedSync;
 
 // =====================================================================
 // LIVE MARKET SESSION AUTO-SYNC & ANTI-SLEEP ENGINE

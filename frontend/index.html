@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=38.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=39.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -127,6 +127,17 @@
           <span id="marketAutoTimer" class="font-mono text-[10px] sm:text-[11px] text-slate-300 border-l border-white/10 pl-2 hidden xs:inline sm:inline">Auto-Sync</span>
         </div>
 
+        <!-- Tombol Sync Menyeluruh Sekali Klik (844 Saham BEI) -->
+        <button
+          id="btnUnifiedSync"
+          onclick="triggerUnifiedSync()"
+          class="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95"
+          title="Sinkronisasi seluruh 844 saham IDX secara menyeluruh & update Watchlist sekali klik"
+        >
+          <span id="unifiedSyncIcon" class="inline-block">🔄</span>
+          <span id="unifiedSyncLabel" class="hidden sm:inline">Sync</span>
+        </button>
+
         <!-- Saklar Mode Pemula / Mode Mahir -->
         <button
           id="btnToggleMode"
@@ -218,14 +229,10 @@
       <!-- Header Kandidat Hari Ini -->
       <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
         <div>
-          <h2 class="text-base sm:text-lg font-extrabold text-white flex flex-wrap items-center gap-2">
+          <h2 class="text-base sm:text-lg font-extrabold text-white flex items-center gap-2">
             <span>🎯</span>
             <span>Kandidat Saham Pilihan Hari Ini</span>
-            <span class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">✓ Teruji 6 Bulan (875 Emiten BEI)</span>
           </h2>
-          <p class="text-xs text-slate-300">
-            Disusun dalam bahasa biasa dengan rencana area masuk, batas rugi, dan target yang terukur.
-          </p>
         </div>
         <div class="flex items-center gap-2">
           <button
@@ -254,43 +261,6 @@
         </div>
       </div>
 
-      <!-- Kartu "Belajar Cepat 2 Menit untuk Pemula" -->
-      <div class="pt-2">
-        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-          <span>💡</span>
-          <span>Pagar Pengaman &amp; Edukasi 2 Menit</span>
-        </h3>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div class="p-4 rounded-xl glass-subcard border border-white/[0.07] space-y-1.5">
-            <div class="flex items-center gap-2 text-rose-400 font-bold text-xs">
-              <span>🛑</span>
-              <span>Kenapa Wajib Batas Rugi (Stop Loss)?</span>
-            </div>
-            <p class="text-xs text-slate-300 leading-relaxed">
-              Agar kerugian terukur dan modal Anda terlindungi. Jangan biarkan kerugian kecil berubah jadi "nyangkut" bulanan atau tahunan.
-            </p>
-          </div>
-          <div class="p-4 rounded-xl glass-subcard border border-white/[0.07] space-y-1.5">
-            <div class="flex items-center gap-2 text-amber-400 font-bold text-xs">
-              <span>⚖️</span>
-              <span>Kenapa Jangan Semua Modal di 1 Saham?</span>
-            </div>
-            <p class="text-xs text-slate-300 leading-relaxed">
-              Batasi risiko maksimal 1–2% dari total modal per transaksi. Jika modal Rp 10 Juta, risiko maksimal per trade adalah Rp 100–200 ribu.
-            </p>
-          </div>
-          <div class="p-4 rounded-xl glass-subcard border border-white/[0.07] space-y-1.5">
-            <div class="flex items-center gap-2 text-emerald-400 font-bold text-xs">
-              <span>📈</span>
-              <span>Kenapa Volume Transaksi Itu Penting?</span>
-            </div>
-            <p class="text-xs text-slate-300 leading-relaxed">
-              Kenaikan harga tanpa lonjakan volume mudah berbalik arah. Kenaikan dengan volume besar menandakan perputaran modal nyata di pasar.
-            </p>
-          </div>
-        </div>
-      </div>
-
     </section>
 
     <!-- =====================================================================
@@ -298,10 +268,6 @@
          ===================================================================== -->
     <section id="sectionExplore" class="space-y-4 hidden">
 
-      <!-- Quick filter helper notice (Mode Mahir) -->
-      <div id="quickFilterNotice" class="hidden text-xs text-slate-400 px-1">
-        Klik kartu KPI di bawah untuk memfilter cepat daftar saham berdasarkan kondisi pasar.
-      </div>
 
       <!-- 4 KPI SUMMARY CARDS (Ditampilkan di Mode Mahir atau disembunyikan di Mode Pemula) -->
       <div id="kpiContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -471,19 +437,17 @@
             <table class="w-full text-left border-collapse text-xs">
               <thead class="sticky top-0 bg-slate-900/90 backdrop-blur-md border-b border-white/[0.08] text-slate-300 font-semibold select-none z-10">
                 <tr id="screenerTableHeader">
-                  <!-- Header diisi oleh app.js (Mode Pemula vs Mode Mahir) -->
                   <th class="py-3 pl-4 pr-2">Saham</th>
                   <th class="py-3 px-2 text-right">Harga</th>
                   <th class="py-3 px-2 text-right">Perubahan</th>
-                  <th class="py-3 px-2 text-center">Sinyal</th>
-                  <th class="py-3 px-2 text-center">Kekuatan</th>
-                  <th class="py-3 px-2 text-center">Risiko</th>
-                  <th class="py-3 pl-2 pr-4 text-center">Favorit</th>
+                  <th class="py-3 px-2 text-center">Volume / Sinyal</th>
+                  <th class="py-3 px-2 text-right">Skor VSA</th>
+                  <th class="py-3 pl-2 pr-4 text-left">Profil VSA &amp; VWAP 5H</th>
                 </tr>
               </thead>
               <tbody id="screenerTableBody" class="divide-y divide-white/[0.05]">
                 <tr>
-                  <td colspan="7" class="py-12 text-center text-slate-300">
+                  <td colspan="6" class="py-12 text-center text-slate-300">
                     Memuat daftar saham bursa...
                   </td>
                 </tr>
@@ -559,16 +523,6 @@
             </span>
           </div>
 
-          <!-- 1. BAGIAN "SINGKATNYA" (Bahasa Manusia Awam) -->
-          <div id="inspSummaryCard" class="p-3.5 rounded-xl glass-subcard border border-white/[0.07] space-y-1.5">
-            <div class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-              <span>💡</span>
-              <span>Singkatnya:</span>
-            </div>
-            <p id="inspPlainExplanation" class="text-xs text-slate-200 leading-relaxed">
-              Pilih salah satu saham untuk melihat ulasan kondisi teknis dan skenario harganya.
-            </p>
-          </div>
 
           <!-- 2. GRAFIK DENGAN GARIS HORIZONTAL AREA MASUK, BATAS RUGI & TARGET -->
           <div class="space-y-2">
@@ -626,14 +580,24 @@
               <span id="planRationale" class="text-slate-300 truncate max-w-[180px]">-</span>
             </div>
 
-            <!-- Tombol Hitung Lot Cepat untuk Saham Ini -->
-            <button
-              onclick="openLotCalculatorModal()"
-              class="w-full py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
-            >
-              <span>🧮</span>
-              <span>Hitung Berapa Lot Boleh Saya Beli</span>
-            </button>
+            <!-- Tombol Aksi: Masuk Watchlist Tracker & Hitung Lot -->
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <button
+                onclick="addToWatchlist()"
+                class="py-2 px-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                title="Masukkan saham ini ke Watchlist Tracker"
+              >
+                <span>➕</span>
+                <span>Masuk Watchlist</span>
+              </button>
+              <button
+                onclick="openLotCalculatorModal()"
+                class="py-2 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+              >
+                <span>🧮</span>
+                <span>Hitung Lot</span>
+              </button>
+            </div>
           </div>
 
           <!-- 4. RINCIAN 5 PILAR KUANTITATIF (Mode Mahir atau Ekspansi) -->
@@ -760,87 +724,6 @@
           </div>
         </div>
 
-        <!-- KARTU VALIDASI HISTORIS 6 BULAN (106.377 CANDLE RIIL) -->
-        <div class="p-4 rounded-xl glass-subcard border border-emerald-500/25 bg-gradient-to-r from-emerald-950/30 via-slate-900/60 to-slate-950/80 space-y-3">
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] pb-2.5">
-            <div class="flex items-center gap-2">
-              <span class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 flex items-center justify-center font-bold text-xs">✓</span>
-              <div>
-                <div class="text-xs font-bold text-white flex flex-wrap items-center gap-2">
-                  <span>Hasil Uji Historis 6 Bulan Terverifikasi</span>
-                  <span class="text-[10px] font-mono px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">122 Hari Bursa · 875 Emiten BEI</span>
-                </div>
-                <p class="text-[11px] text-slate-300 mt-0.5">
-                  Simulasi walk-forward tanpa look-ahead bias pada 106.377 baris data candle riil (13 April – 13 Oktober 2026).
-                </p>
-              </div>
-            </div>
-            <button
-              onclick="openGuideModal()"
-              class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-[11px] text-slate-300 hover:text-white transition border border-white/10 flex items-center gap-1"
-            >
-              <span>📖</span>
-              <span>Rincian Metodologi</span>
-            </button>
-          </div>
-
-          <!-- KESIMPULAN PROBABILITAS SISTEM ANALISA (HASIL UJI 6 BULAN - 6 FILTER & TAKE PROFIT CEPAT) -->
-          <div class="p-3 sm:p-3.5 rounded-xl bg-slate-950/70 border border-emerald-500/30 space-y-2.5">
-            <div class="flex flex-wrap items-center justify-between gap-1.5 text-xs">
-              <div class="flex items-center gap-1.5 font-bold text-white">
-                <span class="text-sm">🎯</span>
-                <span>Kesimpulan Probabilitas Sistem Analisa (6 Filter &amp; Take Profit Cepat)</span>
-              </div>
-              <div class="flex items-center gap-2 font-mono font-bold text-xs">
-                <span class="text-emerald-400">57,6% WIN</span>
-                <span class="text-slate-500">vs</span>
-                <span class="text-rose-400">42,4% LOSS</span>
-              </div>
-            </div>
-
-            <!-- Visual Bar Win (57.6%) vs Loss (42.4%) -->
-            <div class="w-full bg-rose-500/30 rounded-full h-3 overflow-hidden flex shadow-inner" title="Rasio Probabilitas Win (57,6%) vs Loss (42,4%)">
-              <div class="bg-gradient-to-r from-emerald-500 to-emerald-400 h-full flex items-center justify-center text-[9px] font-mono font-bold text-slate-950" style="width: 57.6%">57,6% WIN</div>
-              <div class="bg-gradient-to-r from-rose-500 to-rose-600 h-full flex items-center justify-center text-[9px] font-mono font-bold text-white" style="width: 42.4%">42,4% LOSS</div>
-            </div>
-
-            <!-- Penjelasan Mengapa Sistem Menang Secara Statistik -->
-            <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300 bg-white/[0.02] p-2 rounded-lg border border-white/5">
-              <div class="flex items-center gap-1.5">
-                <span class="text-emerald-400 font-bold">💡 Keunggulan Matematis Cuan Cepat:</span>
-                <span>Win Rate melonjak ke <strong class="text-emerald-300 font-mono">57,6%</strong> dengan rata-rata untung <strong class="text-emerald-300 font-mono">+4,96%</strong> (TP1) &amp; <strong class="text-teal-300 font-mono">1.591 trade</strong> tembus TP2 (+7%).</span>
-              </div>
-              <div class="flex items-center gap-1.5 font-mono text-[10px]">
-                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">Target Cepat: +4% &amp; +7%</span>
-                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 font-bold">Hold: ~4,6 Hari</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 4 Metrik Kunci Uji 6 Bulan (6 Filter Wajib) -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
-            <div class="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-              <div class="text-[10px] text-slate-400 font-medium">Win Rate Target 1 (TP1 +4%)</div>
-              <div class="text-base sm:text-lg font-black font-mono text-emerald-400 mt-0.5">57,6%</div>
-              <div class="text-[10px] text-emerald-300/80">2.391 trade (avg +4,96%)</div>
-            </div>
-            <div class="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-              <div class="text-[10px] text-slate-400 font-medium">Target 2 (TP2 +7%)</div>
-              <div class="text-base sm:text-lg font-black font-mono text-teal-300 mt-0.5">1.591</div>
-              <div class="text-[10px] text-teal-300/80">32,2% trade tembus TP2</div>
-            </div>
-            <div class="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-              <div class="text-[10px] text-slate-400 font-medium">Batas Rugi Terjaga (SL)</div>
-              <div class="text-base sm:text-lg font-black font-mono text-rose-300 mt-0.5">-7,19%</div>
-              <div class="text-[10px] text-slate-400">Disiplin Cut Loss ATR14</div>
-            </div>
-            <div class="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-              <div class="text-[10px] text-slate-400 font-medium">Perputaran Modal (Hold)</div>
-              <div class="text-base sm:text-lg font-black font-mono text-amber-300 mt-0.5">~4,6 Hari</div>
-              <div class="text-[10px] text-amber-300/80">Modal berputar cepat</div>
-            </div>
-          </div>
-        </div>
 
         <!-- KPI Tracker: Win Rate, Sinyal Menunggu, Posisi Berjalan, Selesai Target, Kena Batas Rugi -->
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -912,7 +795,7 @@
             <select id="trackerSortSelect" onchange="changeTrackerSort(this.value)" class="px-3 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200">
               <option value="pnl_desc">Urutkan: Profit Tertinggi</option>
               <option value="pnl_asc">Urutkan: Drawdown / Terendah</option>
-              <option value="id_desc">Urutkan: Sinyal Terbaru</option>
+              <option value="date_desc">Urutkan: Sinyal Terbaru</option>
               <option value="score_desc">Urutkan: Skor Tertinggi</option>
             </select>
             <button
@@ -950,11 +833,6 @@
 
       </div>
 
-    <!-- PITA EDUKASI & PERINGATAN RISIKO (STATIS, ELEGAN & TIDAK MENUTUPI MENU) -->
-    <aside class="mt-8 mb-4 p-4 rounded-2xl glass-panel border border-white/[0.08] text-center text-xs text-slate-300 flex flex-wrap items-center justify-center gap-2 shadow-sm" aria-label="Peringatan Risiko">
-      <span class="text-base shrink-0">⚠️</span>
-      <span class="leading-relaxed"><b class="text-white">Peringatan Risiko:</b> Informasi di dasbor ini adalah alat bantu analisis teknis kuantitatif, bukan ajakan membeli atau menjual. Harga saham berfluktuasi. Disarankan selalu menentukan batas rugi (Stop Loss) sebelum membeli.</span>
-    </aside>
 
   </main>
 
@@ -979,22 +857,16 @@
             <span>Sinkronisasi Data Bursa (BEI)</span>
           </div>
           <p class="text-slate-300 leading-relaxed">
-            Pembaruan harga dan volume saham langsung dari server bursa BEI.
+            Pembaruan seluruh 844 saham BEI secara menyeluruh &amp; evaluasi otomatis Watchlist Tracker sekali klik.
           </p>
-          <div class="flex flex-wrap gap-2 pt-1">
+          <div class="pt-1">
             <button
-              id="btnSyncFast"
-              onclick="syncFastMarketData(); closeSettingsModal();"
-              class="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 font-semibold transition"
+              id="btnModalUnifiedSync"
+              onclick="triggerUnifiedSync(); closeSettingsModal();"
+              class="w-full py-2 px-3 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 font-bold transition flex items-center justify-center gap-2"
             >
-              ⚡ Sync Kilat (&lt; 2 Detik)
-            </button>
-            <button
-              id="btnSyncLive"
-              onclick="syncLiveMarketData(); closeSettingsModal();"
-              class="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 font-medium transition"
-            >
-              🌐 Full Sync 844 Saham
+              <span>🔄</span>
+              <span>Sync Seluruh 844 Saham Sekarang</span>
             </button>
           </div>
         </div>
@@ -1446,6 +1318,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=38.0"></script>
+  <script src="/static/app.js?v=39.0"></script>
 </body>
 </html>

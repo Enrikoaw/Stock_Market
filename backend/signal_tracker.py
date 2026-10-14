@@ -314,10 +314,16 @@ class SignalTracker:
         return True, f"{ticker} masuk Watchlist (zona entry Rp {e_low:,.0f} - {e_high:,.0f}, SL {sl:,.0f}, TP {target:,.0f})."
 
     def auto_track(self, analysis: dict) -> int:
-        """Catat otomatis sinyal akumulasi (score >= min_score) dari sesi bursa yang terdeteksi."""
+        """Catat otomatis sinyal akumulasi (score >= min_score) dari sesi bursa yang terdeteksi.
+        Saham yang masih WATCHLIST / RUNNING tidak dimasukkan ulang saat berganti hari,
+        sehingga trading plan yang sudah terkunci tidak tertimpa sinyal baru."""
         market_date = analysis.get("kpis", {}).get("latest_date")
+        active_tickers = set(self.get_active_tickers())
         added = 0
         for s in analysis.get("stocks", []):
+            ticker = str(s.get("ticker", "")).upper()
+            if not ticker or ticker in active_tickers:
+                continue
             if s.get("trigger_type") not in TRACKABLE_TRIGGERS:
                 continue
             if int(s.get("smart_money_score", 0)) < self.min_score:
@@ -328,6 +334,7 @@ class SignalTracker:
             ok, _ = self.add_signal(s, source="AUTO")
             if ok:
                 added += 1
+                active_tickers.add(ticker)
         return added
 
     def get_active_tickers(self) -> list[str]:
@@ -477,54 +484,19 @@ class SignalTracker:
                         conn.execute(update(signals_table).where(signals_table.c.id == row["id"]).values(**upd))
                         continue
 
-                # 2. Sinkronkan Zona Entry, SL, TP dengan Auto Trading Plan (kecuali bila berubah jadi DISTRIBUTION_WARNING saat RUNNING)
-                plan = d.get("trading_plan") or {}
-                if not plan:
-                    continue
-
+                # 2. Trading plan (Entry, SL, TP) & Entry Price TERKUNCI sejak sinyal dicatat.
+                #    Hanya harga terakhir & P/L (dari entry_price terkunci) yang diperbarui.
                 upd: dict[str, Any] = {}
                 if cur_close > 0 and float(row.get("last_close") or 0) != cur_close:
                     upd["last_close"] = cur_close
                 if d.get("sector") and row.get("sector") != d.get("sector"):
                     upd["sector"] = str(d["sector"])[:200]
-
-                if not is_dist_warning:
-                    p_low, p_high = sorted([float(plan["entry_low"]), float(plan["entry_high"])])
-                    p_sl = float(plan["stop_loss"])
-                    p_tp = float(plan["target_2"] if self.tp_level == 2 else plan["target_1"])
-                    p_tp2 = float(plan.get("target_2", p_tp))
-
-                    if float(row.get("entry_low") or 0) != p_low:
-                        upd["entry_low"] = p_low
-                    if float(row.get("entry_high") or 0) != p_high:
-                        upd["entry_high"] = p_high
-                    if float(row.get("stop_loss") or 0) != p_sl:
-                        upd["stop_loss"] = p_sl
-                    if float(row.get("target") or 0) != p_tp:
-                        upd["target"] = p_tp
-                    if float(row.get("target_2") or 0) != p_tp2:
-                        upd["target_2"] = p_tp2
-                    if cur_score >= self.min_score and row_score != cur_score:
-                        upd["score"] = cur_score
-                    if d.get("trigger_type") in TRACKABLE_TRIGGERS and row.get("trigger_type") != d.get("trigger_type"):
-                        upd["trigger_type"] = str(d["trigger_type"])
-                        upd["trigger_label"] = str(d.get("trigger_label", d["trigger_type"]))
-
-                    if st in ("RUNNING", "WIN", "LOSS"):
-                        ep = float(row.get("entry_price") or p_high)
-                        if ep < p_low or ep > p_high:
-                            ep = p_high
-                            upd["entry_price"] = ep
-                        if st == "RUNNING" and ep > 0 and cur_close > 0:
-                            new_pnl = round((cur_close - ep) / ep * 100.0, 2)
-                            if float(row.get("pnl_pct") or 0) != new_pnl:
-                                upd["pnl_pct"] = new_pnl
-                        elif st == "WIN" and ep > 0:
-                            upd["exit_price"] = p_tp
-                            upd["pnl_pct"] = round((p_tp - ep) / ep * 100.0, 2)
-                        elif st == "LOSS" and ep > 0:
-                            upd["exit_price"] = p_sl
-                            upd["pnl_pct"] = round((p_sl - ep) / ep * 100.0, 2)
+                if st == "RUNNING" and not is_dist_warning:
+                    ep = float(row.get("entry_price") or 0)
+                    if ep > 0 and cur_close > 0:
+                        new_pnl = round((cur_close - ep) / ep * 100.0, 2)
+                        if float(row.get("pnl_pct") or 0) != new_pnl:
+                            upd["pnl_pct"] = new_pnl
 
                 # 3. Peringatan Dini (Early Exit Warning) bila saham RUNNING mendadak didistribusi
                 if st == "RUNNING" and is_dist_warning:
@@ -557,8 +529,8 @@ class SignalTracker:
 
     # ------------------------------------------------------------- evaluate
     def evaluate(self, details: dict[str, dict]) -> dict:
-        """Proses candle harian (termasuk live intraday candle) untuk setiap sinyal aktif."""
-        self.prune_over_bandar_signals(details)
+        """Proses candle harian (termasuk live intraday candle) untuk setiap sinyal aktif.
+        Tidak lagi memanggil prune otomatis: trading plan sinyal aktif tetap terkunci."""
         today_str = now_wib().strftime("%Y-%m-%d")
         changes = {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0}
 
@@ -636,15 +608,10 @@ class SignalTracker:
                 changes["expired"] += 1
                 return
 
-            # 2. Cek apakah zona entry tersentuh: Low menyentuh zona (l <= e_high) dan High >= e_low
-            if l <= e_high and h >= e_low:
-                if o > e_high:
-                    fill = e_high
-                elif o < e_low:
-                    fill = e_low
-                else:
-                    fill = o
-
+            # 2. Entry dieksekusi SEKALI saat Low menyentuh batas atas area beli (Entry High).
+            #    Simulasi Buy Limit di Entry High: jika open sudah di bawah Entry High, terisi di harga open.
+            if l <= e_high:
+                fill = min(o, e_high)
                 r.update(
                     status="RUNNING",
                     entry_date=date,
@@ -652,7 +619,7 @@ class SignalTracker:
                     bars_held=0,
                     last_close=c,
                     pnl_pct=round((c - fill) / fill * 100.0, 2),
-                    note=f"Zona entry tersentuh {date} @ Rp {fill:,.0f} (Low Rp {l:,.0f}, High Rp {h:,.0f}).",
+                    note=f"Entry terkunci {date} @ Rp {fill:,.0f} (Low Rp {l:,.0f} menyentuh Entry High Rp {e_high:,.0f}).",
                 )
                 changes["entered"] += 1
 
@@ -682,6 +649,10 @@ class SignalTracker:
             return
 
         if r["status"] == "RUNNING":
+            # Entry Price & tanggal masuk sudah terkunci: jangan evaluasi ulang entry,
+            # dan abaikan candle sebelum tanggal entry.
+            if r.get("entry_date") and date < str(r["entry_date"]):
+                return
             sl, tp = r["stop_loss"], r["target"]
 
             # 1. Stop Loss tersentuh
@@ -727,25 +698,25 @@ class SignalTracker:
         if status and status.upper() != "ALL":
             q = q.where(signals_table.c.status == status.upper())
 
-        sort_by_clean = (sort_by or "id_desc").lower().strip()
-        if sort_by_clean == "pnl_desc":
+        sort_by_clean = (sort_by or "date_desc").lower().strip()
+        if sort_by_clean in ("pnl_desc", "pnl"):
             q = q.order_by(signals_table.c.pnl_pct.desc().nulls_last(), signals_table.c.id.desc())
         elif sort_by_clean == "pnl_asc":
             q = q.order_by(signals_table.c.pnl_pct.asc().nulls_last(), signals_table.c.id.desc())
-        elif sort_by_clean == "score_desc":
+        elif sort_by_clean in ("score_desc", "score"):
             q = q.order_by(signals_table.c.score.desc(), signals_table.c.id.desc())
         elif sort_by_clean == "score_asc":
             q = q.order_by(signals_table.c.score.asc(), signals_table.c.id.desc())
-        elif sort_by_clean == "date_desc":
+        elif sort_by_clean in ("date_desc", "date", "id_desc", "id"):
             q = q.order_by(signals_table.c.signal_date.desc(), signals_table.c.id.desc())
-        elif sort_by_clean == "date_asc":
+        elif sort_by_clean in ("date_asc", "id_asc"):
             q = q.order_by(signals_table.c.signal_date.asc(), signals_table.c.id.asc())
-        elif sort_by_clean == "ticker_asc":
+        elif sort_by_clean in ("ticker_asc", "ticker"):
             q = q.order_by(signals_table.c.ticker.asc())
         elif sort_by_clean == "ticker_desc":
             q = q.order_by(signals_table.c.ticker.desc())
         else:
-            q = q.order_by(signals_table.c.id.desc())
+            q = q.order_by(signals_table.c.signal_date.desc(), signals_table.c.id.desc())
 
         q = q.limit(limit)
         with self.engine.connect() as conn:
