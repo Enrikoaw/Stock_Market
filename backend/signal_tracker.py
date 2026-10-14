@@ -161,15 +161,21 @@ class SignalTracker:
                     new_tp2 = _round_idx_tick(new_tp1 + (2 if e_high >= 200 else 1))
                 cur_tp1 = float(r.get("target") or 0)
                 cur_tp2 = float(r.get("target_2") or 0)
-                if cur_tp1 != new_tp1 or cur_tp2 != new_tp2:
+                if cur_tp1 != new_tp1 or cur_tp2 != new_tp2 or float(r.get("entry_low") or 0) != e_high:
                     conn.execute(
                         update(signals_table)
                         .where(signals_table.c.id == r["id"])
-                        .values(target=new_tp1, target_2=new_tp2, updated_at=_now_str())
+                        .values(target=new_tp1, target_2=new_tp2, entry_low=e_high, updated_at=_now_str())
                     )
                     updated += 1
+            # Samakan entry_low = entry_high untuk seluruh baris agar format 1 harga beli seragam
+            conn.execute(
+                update(signals_table)
+                .where(signals_table.c.entry_low != signals_table.c.entry_high)
+                .values(entry_low=signals_table.c.entry_high)
+            )
         if updated > 0:
-            print(f"[Tracker] Berhasil memperbarui {updated} sinyal aktif ke target TP1 (+4%) & TP2 (+7%).")
+            print(f"[Tracker] Berhasil memperbarui {updated} sinyal aktif ke target TP1 (+4%) & TP2 (+7%) dan 1 harga beli tunggal.")
         return updated
 
     def cleanup_non_compliant_signals(self) -> int:
@@ -239,7 +245,9 @@ class SignalTracker:
         if score_val < self.min_score:
             return False, f"{ticker}: Smart Money Score ({score_val}) belum memenuhi syarat minimal ({self.min_score}+)."
 
-        e_low, e_high = sorted([float(plan["entry_low"]), float(plan["entry_high"])])
+        e_target = float(plan.get("entry_price") or plan.get("entry_high") or plan.get("entry_low") or stock.get("close", 0))
+        e_low = e_target
+        e_high = e_target
         sl = float(plan["stop_loss"])
         target = float(plan["target_2"] if self.tp_level == 2 else plan["target_1"])
         # Filter Tambahan: Jarak harga ke modal rata-rata bandar tidak boleh lebih dari +5.0%
@@ -740,16 +748,12 @@ class SignalTracker:
         with self.engine.connect() as conn:
             rows = [dict(r) for r in conn.execute(q).mappings().all()]
         for r in rows:
-            e_high = float(r.get("entry_high") or 0)
-            e_low = float(r.get("entry_low") or 0)
-            if e_high > 0 and (e_high - e_low) / e_high > 0.015:
-                step = 1 if e_high < 200 else 2 if e_high < 500 else 5 if e_high < 2000 else 10 if e_high < 5000 else 25
-                tight_low = max(50, int(round((e_high * 0.99) / step) * step))
-                if tight_low >= e_high and e_high > 50:
-                    tight_low = max(50, int(e_high - step))
-                r["entry_low"] = float(tight_low)
-            if r["status"] == "WATCHLIST" and r["entry_high"]:
-                r["dist_to_entry_pct"] = round((r["last_close"] - r["entry_high"]) / r["entry_high"] * 100.0, 2)
+            e_high = float(r.get("entry_high") or r.get("entry_price") or 0)
+            r["entry_low"] = e_high
+            r["entry_high"] = e_high
+            r["entry_price_target"] = e_high
+            if r["status"] == "WATCHLIST" and e_high > 0:
+                r["dist_to_entry_pct"] = round((float(r.get("last_close") or 0) - e_high) / e_high * 100.0, 2)
         return rows
 
     def stats(self) -> dict:

@@ -178,7 +178,7 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
             f"⚡ <b>Sinyal:</b> {trigger_lbl} | <b>Closing Range:</b> {cr}%\n"
             f"📊 <b>Vol Spike:</b> {vol_ratio:.1f}x MA20 | <b>Nilai Transaksi:</b> Rp {val_b:.2f}M\n\n"
             f"🎯 <b>TRADING PLAN (Take Profit Cepat):</b>\n"
-            f"• <b>Zona Entry:</b> <code>Rp {e_low:,} – {e_high:,}</code>\n"
+            f"• <b>Harga Beli:</b> <code>Rp {e_high:,}</code>\n"
             f"• <b>Stop Loss (SL):</b> <code>Rp {sl:,} ({sl_pct:.1f}%)</code>\n"
             f"• <b>Target TP1 (+4%):</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code> ➜ <b>{tp1_win}% Win / {tp1_loss}% Loss</b>\n"
             f"• <b>Target TP2 (+7%):</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code> ➜ <b>{tp2_win}% Win</b>\n"
@@ -190,7 +190,7 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
         "━━━━━━━━━━━━━━━━━━━\n"
         "💡 <b>Panduan Modal 10 Juta:</b>\n"
         "• Pilih maksimal 2 saham, porsi Rp 3–5 juta per saham.\n"
-        "• Pasang Buy Limit di Zona Entry saat koreksi.\n"
+        "• Pasang Buy Limit di Harga Beli saat koreksi.\n"
         "• Take Profit Cepat: TP1 di +4% (Amankan modal), TP2 di +7% (Realisasi profit penuh).\n"
         "• Wajib pasang Automatic Stop Loss di aplikasi sekuritas."
     )

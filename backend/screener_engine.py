@@ -1169,19 +1169,21 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             },
         ]
 
-        # Trading Plan Berbasis ATR(14) & Quick Profit (TP1 +4%, TP2 +7%)
-        entry_low, entry_high = _tight_entry_zone(close_price, 0.01)
-        sl_distance = max(int(round(entry_low * 0.025)), min(int(round(entry_low * 0.075)), int(round(1.75 * atr14_val))))
-        stop_loss = _round_idx_tick(entry_low - sl_distance)
-        risk_idr = max(1, entry_high - stop_loss)
-        risk_pct = round((risk_idr / max(entry_high, 1)) * 100.0, 2)
+        # Trading Plan: 1 Harga Beli Tunggal (Buy Limit) agar jelas dan tidak membingungkan pemula
+        entry_price = close_price
+        entry_low = close_price
+        entry_high = close_price
+        sl_distance = max(int(round(entry_price * 0.025)), min(int(round(entry_price * 0.075)), int(round(1.75 * atr14_val))))
+        stop_loss = _round_idx_tick(entry_price - sl_distance)
+        risk_idr = max(1, entry_price - stop_loss)
+        risk_pct = round((risk_idr / max(entry_price, 1)) * 100.0, 2)
 
-        tp1 = _round_idx_tick(entry_high * 1.04)
-        tp2 = _round_idx_tick(entry_high * 1.07)
+        tp1 = _round_idx_tick(entry_price * 1.04)
+        tp2 = _round_idx_tick(entry_price * 1.07)
         if tp2 <= tp1:
-            tp2 = _round_idx_tick(tp1 + (2 if entry_high >= 200 else 1))
-        tp1_pct = round(((tp1 - entry_high) / max(entry_high, 1)) * 100.0, 2)
-        tp2_pct = round(((tp2 - entry_high) / max(entry_high, 1)) * 100.0, 2)
+            tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
+        tp1_pct = round(((tp1 - entry_price) / max(entry_price, 1)) * 100.0, 2)
+        tp2_pct = round(((tp2 - entry_price) / max(entry_price, 1)) * 100.0, 2)
         rr_ratio = round(tp2_pct / max(risk_pct, 0.1), 1)
 
         if trigger_type == "DISTRIBUTION_WARNING":
@@ -1236,6 +1238,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
 
         trading_plan = {
             "action_bias": action_bias,
+            "entry_price": entry_price,
             "entry_low": entry_low,
             "entry_high": entry_high,
             "stop_loss": stop_loss,

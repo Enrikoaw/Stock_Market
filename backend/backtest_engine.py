@@ -113,7 +113,7 @@ def run_historical_backtest(
             atr14 = float(cand.ATR14) if hasattr(cand, "ATR14") and not np.isnan(cand.ATR14) else max(1.0, close_p * 0.03)
 
             entry_high = close_p
-            entry_low = round(close_p * 0.99)
+            entry_low = close_p
             sl_dist = max(entry_low * 0.025, min(entry_low * 0.075, 1.75 * atr14))
             stop_loss = _round_idx_tick(entry_low - sl_dist)
             risk = max(1.0, entry_high - stop_loss)

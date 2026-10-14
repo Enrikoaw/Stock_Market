@@ -374,8 +374,8 @@ function renderTodayCandidates(stocks) {
       statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-400/30">Risiko Sedang</span>';
     }
 
-    let entryLabel = 'Area Beli';
-    let entryValue = `${fmtNumber(entryLow)} - ${fmtNumber(entryHigh)}`;
+    let entryLabel = 'Harga Beli';
+    let entryValue = `Rp ${fmtPrice(plan.entry_price || entryHigh)}`;
     if (s.tracker_status === 'RUNNING') {
       entryLabel = 'Harga Beli Terkunci';
       entryValue = `Rp ${fmtPrice(plan.entry_price || entryHigh)}`;
@@ -1165,19 +1165,20 @@ function renderInspectorPanel(d) {
       } else if (trackerSt === 'RUNNING') {
         pel.textContent = 'Harga Beli (Aktif)';
       } else if (trackerSt === 'WATCHLIST') {
-        pel.textContent = 'Area Beli (Antre)';
+        pel.textContent = 'Harga Beli (Antre)';
       } else {
-        pel.textContent = 'Area Masuk';
+        pel.textContent = 'Harga Beli';
       }
     }
 
     if (pez) {
+      const targetBuy = plan.entry_price || plan.entry_high || plan.entry_low;
       if (trackerSt === 'WIN') {
-        pez.innerHTML = `<span class="text-amber-300 font-bold">Rp ${fmtPrice(plan.entry_price || plan.entry_high)}</span>`;
+        pez.innerHTML = `<span class="text-amber-300 font-bold">Rp ${fmtPrice(targetBuy)}</span>`;
       } else if (trackerSt === 'RUNNING') {
-        pez.innerHTML = `<span class="text-emerald-300 font-bold">Rp ${fmtPrice(plan.entry_price || plan.entry_high)}</span>`;
+        pez.innerHTML = `<span class="text-emerald-300 font-bold">Rp ${fmtPrice(targetBuy)}</span>`;
       } else {
-        pez.textContent = `${fmtPrice(plan.entry_low)} - ${fmtNumber(plan.entry_high)}`;
+        pez.innerHTML = `<span class="text-white font-bold">Rp ${fmtPrice(targetBuy)}</span>`;
       }
     }
 
@@ -2091,8 +2092,8 @@ function renderTrackerTable(rows) {
         <!-- Tanggal Sinyal -->
         <td class="py-3.5 px-3 font-sans font-medium text-slate-200 text-xs">${r.signal_date}</td>
 
-        <!-- Area Masuk -->
-        <td class="py-3.5 px-3 text-right font-mono text-slate-200 font-semibold text-xs">${fmtNumber(r.entry_low)} - ${fmtNumber(r.entry_high)}</td>
+        <!-- Harga Beli -->
+        <td class="py-3.5 px-3 text-right font-mono text-white font-bold text-xs">${fmtPrice(r.entry_high || r.entry_low || r.entry_price)}</td>
 
         <!-- SL / TP -->
         <td class="py-3.5 px-3 text-right font-mono text-white font-semibold text-xs">
