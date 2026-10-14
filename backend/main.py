@@ -106,6 +106,14 @@ def sync_tracker_to_analysis(analysis: dict | None) -> None:
                 plan["target_1"] = float(sig["target"])
             if sig.get("target_2") is not None:
                 plan["target_2"] = float(sig["target_2"])
+            if e_p and float(e_p) > 0:
+                base_ep = float(e_p)
+                if plan.get("stop_loss"):
+                    plan["stop_loss_pct"] = round(((plan["stop_loss"] - base_ep) / base_ep) * 100.0, 2)
+                if plan.get("target_1"):
+                    plan["target_1_pct"] = round(((plan["target_1"] - base_ep) / base_ep) * 100.0, 2)
+                if plan.get("target_2"):
+                    plan["target_2_pct"] = round(((plan["target_2"] - base_ep) / base_ep) * 100.0, 2)
             if sig.get("pnl_pct") is not None:
                 plan["pnl_pct"] = float(sig["pnl_pct"])
             if sig.get("last_close") and float(sig["last_close"]) > 0:
@@ -157,6 +165,14 @@ def sync_tracker_to_analysis(analysis: dict | None) -> None:
                 plan["target_1"] = float(sig["target"])
             if sig.get("target_2") is not None:
                 plan["target_2"] = float(sig["target_2"])
+            if e_p and float(e_p) > 0:
+                base_ep = float(e_p)
+                if plan.get("stop_loss"):
+                    plan["stop_loss_pct"] = round(((plan["stop_loss"] - base_ep) / base_ep) * 100.0, 2)
+                if plan.get("target_1"):
+                    plan["target_1_pct"] = round(((plan["target_1"] - base_ep) / base_ep) * 100.0, 2)
+                if plan.get("target_2"):
+                    plan["target_2_pct"] = round(((plan["target_2"] - base_ep) / base_ep) * 100.0, 2)
             if sig.get("pnl_pct") is not None:
                 plan["pnl_pct"] = float(sig["pnl_pct"])
             if sig.get("last_close") and float(sig["last_close"]) > 0:

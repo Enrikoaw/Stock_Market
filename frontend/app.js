@@ -1858,6 +1858,7 @@ async function triggerUnifiedSync() {
   isUnifiedSyncing = true;
   const navBtn = document.getElementById('btnUnifiedSync');
   const navIcon = document.getElementById('unifiedSyncIcon');
+  const navLabel = document.getElementById('unifiedSyncLabel');
   const modalBtn = document.getElementById('btnModalUnifiedSync') || document.getElementById('btnSyncLiveModal');
 
   if (navBtn) navBtn.disabled = true;
@@ -2179,7 +2180,7 @@ function renderTrackerTable(rows) {
   tbody.innerHTML = rows
     .map((r) => {
       const statusCls = TRACKER_STATUS_STYLE[r.status] || TRACKER_STATUS_STYLE.EXPIRED;
-      const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT'].includes(r.status);
+      const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT', 'CANCELLED'].includes(r.status);
       const exitOrLast = isClosed && r.exit_price
         ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-400">${r.exit_date || ''}</div>`
         : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-400">last</div>`;
@@ -2188,7 +2189,7 @@ function renderTrackerTable(rows) {
         : r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined
         ? `<span class="text-slate-400">-</span><div class="text-[10px] text-blue-300">jarak ${fmtPctOrDash(r.dist_to_entry_pct)}</div>`
         : '<span class="text-slate-400">-</span>';
-      const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' ? null : r.pnl_pct;
+      const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' || r.status === 'CANCELLED' ? null : r.pnl_pct;
 
       let isHighFlyer = false;
       if (r.status === 'RUNNING' && pnl !== null && pnl >= 2.0) {

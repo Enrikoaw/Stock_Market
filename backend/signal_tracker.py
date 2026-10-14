@@ -201,6 +201,7 @@ class SignalTracker:
                 trig = str(r.get("trigger_type") or "")
                 ticker = str(r.get("ticker") or "").upper()
                 s_date = str(r.get("signal_date") or "")
+                val_idr = val_map.get((ticker, s_date), 1_000_000_000.0)
                 sig_close = float(r.get("signal_close") or r.get("entry_high") or 0)
                 sec_lower = str(r.get("sector") or "").lower()
                 is_fca_or_penny = ("pemantauan khusus" in sec_lower) or ("akselerasi" in sec_lower) or (sig_close > 0 and sig_close < 70)
@@ -856,6 +857,7 @@ class SignalTracker:
             "loss": len(losses),
             "expired": len(by_status("EXPIRED")),
             "timeout": len(timeouts),
+            "cancelled": len(by_status("CANCELLED")),
             "decided": decided,
             "win_rate": round(len(wins) / decided * 100.0, 1) if decided else None,
             "avg_win_pct": round(mean(win_p), 2) if win_p else None,
