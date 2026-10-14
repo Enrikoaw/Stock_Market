@@ -482,7 +482,9 @@ def get_screener_data(
 
     sort_key_map = {
         "score": lambda x: (x["smart_money_score"], x["vol_ratio"]),
+        "score_desc": lambda x: (x["smart_money_score"], x["vol_ratio"]),
         "vol_ratio": lambda x: (x["vol_ratio"], x["smart_money_score"]),
+        "vwap": lambda x: (-abs(float(x.get("diff_bandar_avg_pct", 0) or 0)), x["smart_money_score"]),
         "top3_bsr": lambda x: (x["top3_bsr"], x["smart_money_score"]),
         "foreign": lambda x: (x["net_foreign_pct"], x["smart_money_score"]),
         "pct_change": lambda x: (x["pct_change"], x["smart_money_score"]),

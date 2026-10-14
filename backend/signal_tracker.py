@@ -776,7 +776,10 @@ class SignalTracker:
     def list_signals(self, status: str | None = None, sort_by: str = "id_desc", limit: int = 500) -> list[dict]:
         q = select(signals_table)
         if status and status.upper() != "ALL":
-            q = q.where(signals_table.c.status == status.upper())
+            if status.upper() == "CLOSED_OTHER":
+                q = q.where(signals_table.c.status.in_(("EXPIRED", "TIMEOUT", "CANCELLED")))
+            else:
+                q = q.where(signals_table.c.status == status.upper())
 
         sort_by_clean = (sort_by or "date_desc").lower().strip()
         if sort_by_clean in ("pnl_desc", "pnl"):

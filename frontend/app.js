@@ -389,10 +389,10 @@ function renderTodayCandidates(stocks) {
     }
 
     let entryLabel = 'Harga Beli';
-    let entryValue = `Rp ${fmtPrice(plan.entry_price || entryHigh)}`;
+    let entryValue = fmtPrice(plan.entry_price || entryHigh);
     if (s.tracker_status === 'RUNNING') {
       entryLabel = 'Harga Beli Terkunci';
-      entryValue = `Rp ${fmtPrice(plan.entry_price || entryHigh)}`;
+      entryValue = fmtPrice(plan.entry_price || entryHigh);
     }
 
     return `
@@ -491,11 +491,11 @@ function openLotCalculatorModal() {
   if (selectedStockDetail) {
     const entryInput = document.getElementById('calcModalEntry');
     const stopInput = document.getElementById('calcModalStop');
-    if (entryInput) entryInput.value = selectedStockDetail.close;
-    if (stopInput) {
-      const sl = selectedStockDetail.trading_plan ? selectedStockDetail.trading_plan.stop_loss : Math.round(selectedStockDetail.close * 0.95);
-      stopInput.value = sl;
-    }
+    const plan = selectedStockDetail.trading_plan || {};
+    const entry = plan.entry_price || plan.entry_high || selectedStockDetail.close;
+    const sl = plan.stop_loss || Math.round(entry * 0.96);
+    if (entryInput) entryInput.value = entry;
+    if (stopInput) stopInput.value = sl;
   }
   runModalLotCalculation();
 }
@@ -519,8 +519,10 @@ function openLotCalculatorForStockDetails(ticker, price, stopLoss) {
 function openLotCalculatorForTicker(ticker) {
   const s = currentStocks.find(x => x.ticker === ticker);
   if (s) {
-    const sl = Math.round(s.close * 0.95);
-    openLotCalculatorForStockDetails(s.ticker, s.close, sl);
+    const plan = s.trading_plan || {};
+    const entry = plan.entry_price || plan.entry_high || s.close;
+    const sl = plan.stop_loss || Math.round(entry * 0.96);
+    openLotCalculatorForStockDetails(s.ticker, entry, sl);
   } else {
     openLotCalculatorModal();
   }
@@ -540,31 +542,49 @@ function runModalLotCalculation() {
   const lotEl = document.getElementById('resLotCount');
   const valEl = document.getElementById('resTotalVal');
   const riskEl = document.getElementById('resMaxRisk');
+  const profitEl = document.getElementById('resTargetProfit');
 
   if (entry <= stop) {
     if (lotEl) lotEl.textContent = '0 Lot (Batas Rugi harus < Harga Beli!)';
     if (valEl) valEl.textContent = 'Rp 0';
     if (riskEl) riskEl.textContent = 'Periksa kembali harga batas rugi';
+    if (profitEl) profitEl.textContent = 'Rp 0';
     return;
   }
 
-  const perShareRisk = entry - stop;
+  // Biaya Fee Sekuritas (~0.15% Beli + 0.25% Jual = 0.40% Roundtrip)
+  const feeBuyPct = 0.0015;
+  const feeSellPct = 0.0025;
+  const feeRoundtripPct = feeBuyPct + feeSellPct; // 0.0040 (0.4%)
+
+  // Risiko per lembar saham = penurunan harga ke SL + fee sekuritas
+  const perShareRisk = (entry - stop) + (entry * feeRoundtripPct);
   const maxRiskRp = capital * (riskPct / 100);
 
   let lots = 0;
   if (perShareRisk > 0 && entry > 0) {
     const lotsByRisk = Math.floor(maxRiskRp / (perShareRisk * 100));
-    const lotsByCap = Math.floor(capital / (entry * 100));
+    const lotsByCap = Math.floor(capital / (entry * (1 + feeBuyPct) * 100));
     lots = Math.max(0, Math.min(lotsByRisk, lotsByCap));
   }
 
-  const totalCost = lots * entry * 100;
-  const actualRiskRp = lots * perShareRisk * 100;
+  const grossCost = lots * entry * 100;
+  const buyFee = grossCost * feeBuyPct;
+  const totalCost = Math.round(grossCost + buyFee);
+  const actualRiskRp = Math.round(lots * perShareRisk * 100);
   const actualRiskPct = capital > 0 ? ((actualRiskRp / capital) * 100).toFixed(1) : '0.0';
+
+  // Estimasi Target Profit TP1 (+4% dari harga entry) setelah dikurangi fee sekuritas roundtrip 0.4%
+  const tp1Price = Math.round(entry * 1.04);
+  const grossProfit = lots * (tp1Price - entry) * 100;
+  const totalFee = (grossCost * feeBuyPct) + (lots * tp1Price * 100 * feeSellPct);
+  const netProfit = Math.max(0, Math.round(grossProfit - totalFee));
+  const netProfitPct = totalCost > 0 ? ((netProfit / totalCost) * 100).toFixed(1) : '0.0';
 
   if (lotEl) lotEl.textContent = `${fmtNumber(lots)} Lot (${fmtNumber(lots * 100)} Lembar)`;
   if (valEl) valEl.textContent = fmtPrice(totalCost);
-  if (riskEl) riskEl.textContent = `${fmtPrice(actualRiskRp)} (${actualRiskPct}% dari modal)`;
+  if (riskEl) riskEl.textContent = `${fmtPrice(actualRiskRp)} (${actualRiskPct}% modal)`;
+  if (profitEl) profitEl.textContent = `${fmtPrice(netProfit)} (+${netProfitPct}% net)`;
 }
 
 // =====================================================================
@@ -751,7 +771,7 @@ async function loadScreenerData(preserveSelection = false) {
   const trigger = document.getElementById('filterTrigger')?.value || 'ALL';
   const minVol = document.getElementById('filterVolRatio')?.value || '1.0';
   const minScore = document.getElementById('filterMinScore')?.value || '0';
-  const sortBy = document.getElementById('filterSortBy')?.value || 'score_desc';
+  const sortBy = document.getElementById('filterSortBy')?.value || 'score';
   const search = document.getElementById('filterSearch')?.value.trim() || '';
 
   const params = new URLSearchParams({
@@ -1188,11 +1208,11 @@ function renderInspectorPanel(d) {
     if (pez) {
       const targetBuy = plan.entry_price || plan.entry_high || plan.entry_low;
       if (trackerSt === 'WIN') {
-        pez.innerHTML = `<span class="text-amber-300 font-bold">Rp ${fmtPrice(targetBuy)}</span>`;
+        pez.innerHTML = `<span class="text-amber-300 font-bold">${fmtPrice(targetBuy)}</span>`;
       } else if (trackerSt === 'RUNNING') {
-        pez.innerHTML = `<span class="text-emerald-300 font-bold">Rp ${fmtPrice(targetBuy)}</span>`;
+        pez.innerHTML = `<span class="text-emerald-300 font-bold">${fmtPrice(targetBuy)}</span>`;
       } else {
-        pez.innerHTML = `<span class="text-white font-bold">Rp ${fmtPrice(targetBuy)}</span>`;
+        pez.innerHTML = `<span class="text-white font-bold">${fmtPrice(targetBuy)}</span>`;
       }
     }
 
@@ -1739,8 +1759,7 @@ async function triggerUnifiedSync() {
   isUnifiedSyncing = true;
   const navBtn = document.getElementById('btnUnifiedSync');
   const navIcon = document.getElementById('unifiedSyncIcon');
-  const navLabel = document.getElementById('unifiedSyncLabel');
-  const modalBtn = document.getElementById('btnSyncLiveModal');
+  const modalBtn = document.getElementById('btnModalUnifiedSync') || document.getElementById('btnSyncLiveModal');
 
   if (navBtn) navBtn.disabled = true;
   if (navIcon) navIcon.classList.add('animate-spin');
@@ -1843,9 +1862,8 @@ function initLiveMarketAutoSync() {
   if (autoSyncTimerId) clearInterval(autoSyncTimerId);
   autoSyncTimerId = setInterval(async () => {
     updateMarketLiveStatusUI();
-    if (isIDXMarketOpenNow() && !isSyncingFast) {
+    if (isIDXMarketOpenNow()) {
       try {
-        await fetch('/api/sync-fast', { method: 'POST', cache: 'no-store' }).catch(() => {});
         await Promise.all([loadScreenerData(true), loadTracker()]);
       } catch (err) {
         console.debug('Background market auto-update:', err);
@@ -2030,7 +2048,16 @@ function renderTrackerStats(data) {
   }
 
   // Tab counts
-  const counts = { ALL: s.total, WATCHLIST: s.watchlist, RUNNING: s.running, WIN: s.win, LOSS: s.loss, EXPIRED: s.expired, TIMEOUT: s.timeout };
+  const counts = {
+    ALL: s.total,
+    WATCHLIST: s.watchlist,
+    RUNNING: s.running,
+    WIN: s.win,
+    LOSS: s.loss,
+    CLOSED_OTHER: (s.expired || 0) + (s.timeout || 0) + (s.cancelled || 0),
+    EXPIRED: s.expired,
+    TIMEOUT: s.timeout,
+  };
   document.querySelectorAll('#trackerTabs .tracker-tab').forEach((btn) => {
     const tab = btn.dataset.tab;
     const label = btn.textContent.replace(/\s*\d+$/, '').trim();

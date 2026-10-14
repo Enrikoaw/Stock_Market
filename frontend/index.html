@@ -427,9 +427,13 @@
               <option value="80" class="bg-slate-900 text-white">Skor &ge; 80 (Sangat Kuat)</option>
             </select>
 
-            <!-- Hidden input preservations -->
-            <input type="hidden" id="filterVolRatio" value="0" />
-            <input type="hidden" id="filterSortBy" value="score" />
+            <!-- Sort By Selector -->
+            <select id="filterSortBy" class="px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
+              <option value="score" class="bg-slate-900 text-white">Urutkan: Skor Tertinggi</option>
+              <option value="vol_ratio" class="bg-slate-900 text-white">Urutkan: Lonjakan Volume</option>
+              <option value="vwap" class="bg-slate-900 text-white">Urutkan: Jarak VWAP Terdekat</option>
+              <option value="pct_change" class="bg-slate-900 text-white">Urutkan: % Kenaikan</option>
+            </select>
           </div>
 
           <!-- Table Container -->
@@ -998,10 +1002,11 @@
         </div>
 
         <!-- Output Kalkulasi -->
-        <div id="calcModalResult" class="p-3 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 space-y-1 mt-2">
+        <div id="calcModalResult" class="p-3 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 space-y-1.5 mt-2">
           <div class="font-bold text-sm text-white">Rekomendasi Beli: <span id="resLotCount" class="text-emerald-400 text-base">40 Lot</span></div>
-          <div class="text-[11px] text-slate-300">Total Nilai Beli: <span id="resTotalVal" class="text-white font-mono font-semibold">Rp 4.000.000</span></div>
-          <div class="text-[11px] text-slate-300">Risiko Maksimal: <span id="resMaxRisk" class="text-rose-300 font-mono font-semibold">Rp 200.000</span> (2% modal)</div>
+          <div class="text-[11px] text-slate-300">Total Nilai Beli: <span id="resTotalVal" class="text-white font-mono font-semibold">Rp 4.000.000</span> <span class="text-[10px] text-slate-400">(inc. fee beli 0.15%)</span></div>
+          <div class="text-[11px] text-slate-300">Risiko Maksimal: <span id="resMaxRisk" class="text-rose-300 font-mono font-semibold">Rp 200.000</span> <span class="text-[10px] text-slate-400">(inc. fee roundtrip 0.40%)</span></div>
+          <div class="text-[11px] text-slate-300">Potensi Untung (TP1 +4%): <span id="resTargetProfit" class="text-emerald-300 font-mono font-semibold">Rp 144.000</span> <span class="text-[10px] text-emerald-400/80">(net setelah fee)</span></div>
         </div>
       </div>
     </div>
@@ -1319,6 +1324,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=43.0"></script>
+  <script src="/static/app.js?v=44.0"></script>
 </body>
 </html>
