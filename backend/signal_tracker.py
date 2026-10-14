@@ -118,13 +118,16 @@ def _resolve_db_url(sqlite_path: Path) -> str:
 
 
 class SignalTracker:
-    def __init__(self, sqlite_path: Path) -> None:
+    def __init__(self, sqlite_path: Path | str) -> None:
         self.min_score = int(os.environ.get("TRACKER_MIN_SCORE", "70"))
         self.tp_level = 2 if os.environ.get("TRACKER_TP_LEVEL", "1").strip() == "2" else 1
         self.entry_expiry_days = int(os.environ.get("TRACKER_ENTRY_EXPIRY_DAYS", "3"))
         self.max_hold_days = int(os.environ.get("TRACKER_MAX_HOLD_DAYS", "5"))
         self.fee_roundtrip_pct = float(os.environ.get("TRACKER_FEE_PCT", "0.4"))
         self._lock = threading.RLock()
+
+        if isinstance(sqlite_path, str):
+            sqlite_path = Path(sqlite_path)
 
         sqlite_path.parent.mkdir(parents=True, exist_ok=True)
         url = _resolve_db_url(sqlite_path)
@@ -592,7 +595,7 @@ class SignalTracker:
         return removed
 
     # ------------------------------------------------------------- evaluate
-    def evaluate(self, details: dict[str, dict]) -> dict:
+    def evaluate(self, details: dict[str, dict], force_final: bool = False) -> dict:
         """Proses candle harian (termasuk live intraday candle) untuk setiap sinyal aktif.
         Tidak lagi memanggil prune otomatis: trading plan sinyal aktif tetap terkunci."""
         today_str = now_wib().strftime("%Y-%m-%d")
@@ -619,7 +622,7 @@ class SignalTracker:
                     if bar_date <= r["signal_date"]:
                         continue
 
-                    is_live_today = (bar_date == today_str and now_wib().time() < MARKET_CLOSE_CUTOFF)
+                    is_live_today = False if force_final else (bar_date == today_str and now_wib().time() < MARKET_CLOSE_CUTOFF)
 
                     # Jika bar historis yang sudah pernah dievaluasi dan bukan live today -> lewati
                     if bar_date <= since and not is_live_today:
@@ -879,3 +882,130 @@ class SignalTracker:
     def reset_all(self) -> int:
         with self._lock, self.engine.begin() as conn:
             return conn.execute(delete(signals_table)).rowcount
+
+    def rebuild_recent_days(self, market_df: pd.DataFrame, days: int = 12) -> dict:
+        """
+        Mengisi ulang database tracker.db dari riwayat pasar 12 hari bursa terakhir.
+        Menggunakan aturan kuantitatif terbaru & eksekusi instan (< 1.5 detik).
+        """
+        try:
+            from backend.screener_engine import compute_quantitative_dataframe, _round_idx_tick
+        except ImportError:
+            from screener_engine import compute_quantitative_dataframe, _round_idx_tick
+
+        trigger_labels = {
+            "MARKUP_BREAKOUT": "Markup / Breakout Akumulasi",
+            "BIG_ACCUMULATION": "Akumulasi Likuiditas Besar",
+            "SILENT_ACCUMULATION": "Silent Accumulation (Squeeze)",
+            "FOREIGN_INFLOW": "Inflow Dana Asing Masif",
+        }
+
+        # 1. Hapus seluruh data lama di tracker.db
+        self.reset_all()
+
+        is_sqlite = "sqlite" in str(self.engine.url)
+        if is_sqlite:
+            with self.engine.begin() as con:
+                con.exec_driver_sql("PRAGMA synchronous = OFF")
+
+        try:
+            # 2. Hitung seluruh indikator kuantitatif 1 kali saja di awal secara vektor
+            df = compute_quantitative_dataframe(market_df)
+
+            # 3. Ambil 12 tanggal bursa terakhir
+            target_dates = sorted(df["Date"].dropna().astype(str).unique())[-days:]
+
+            total_added = 0
+            total_changes = {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0}
+
+            # 4. Loop kronologis untuk setiap dt di target_dates
+            for dt in target_dates:
+                # a. Susun details_dt dari df[df["Date"] <= dt] dan jalankan evaluate
+                active_tickers = set(self.get_active_tickers())
+                if active_tickers:
+                    sub_df = df[(df["Date"] <= dt) & (df["Ticker"].isin(active_tickers))]
+                    details_dt = {}
+                    for ticker, g in sub_df.groupby("Ticker"):
+                        lat = g.iloc[-1]
+                        hist = [
+                            {
+                                "date": str(r.Date),
+                                "open": float(r.Open),
+                                "high": float(r.High),
+                                "low": float(r.Low),
+                                "close": float(r.Close),
+                            }
+                            for r in g.tail(5).itertuples()
+                        ]
+                        details_dt[ticker] = {
+                            "close": float(lat["Close"]),
+                            "smart_money_score": int(lat["Smart_Money_Score"]),
+                            "trigger_type": str(lat["Trigger_Type"]),
+                            "sector": str(lat.get("Sector", "")),
+                            "diff_bandar_avg_pct": float(lat.get("Diff_VWAP_Pct", 0.0)),
+                            "value_idr": float(lat.get("Value_IDR", 0.0)),
+                            "history": hist,
+                        }
+                    ch = self.evaluate(details_dt, force_final=True)
+                    for k in total_changes:
+                        total_changes[k] += ch.get(k, 0)
+
+                # b. Filter baris day_df = df[df["Date"] == dt] yang memenuhi syarat auto_track
+                day_df = df[df["Date"] == dt]
+                cand = day_df[(day_df["Trigger_Type"].isin(TRACKABLE_TRIGGERS)) & (day_df["Smart_Money_Score"] >= self.min_score)]
+                for r in cand.itertuples():
+                    c_price = int(round(float(r.Close)))
+                    atr14_val = int(r.ATR14) if hasattr(r, "ATR14") and not pd.isna(r.ATR14) else max(1, int(round(c_price * 0.03)))
+                    sl_dist = max(int(round(c_price * 0.025)), min(int(round(c_price * 0.040)), int(round(1.2 * atr14_val))))
+                    sl = _round_idx_tick(c_price - sl_dist)
+                    tp1 = _round_idx_tick(c_price * 1.04)
+                    tp2 = _round_idx_tick(c_price * 1.07)
+                    if tp2 <= tp1:
+                        tp2 = _round_idx_tick(tp1 + (2 if c_price >= 200 else 1))
+
+                    diff_vwap = round(float(r.Diff_VWAP_Pct), 2) if hasattr(r, "Diff_VWAP_Pct") else 0.0
+                    val_idr = float(r.Value_IDR) if hasattr(r, "Value_IDR") else 1_000_000_000.0
+                    trig_type = str(r.Trigger_Type)
+                    trig_lbl = trigger_labels.get(trig_type, trig_type)
+                    stock_obj = {
+                        "ticker": str(r.Ticker).upper(),
+                        "sector": str(r.Sector) if hasattr(r, "Sector") else "",
+                        "date": str(r.Date),
+                        "close": c_price,
+                        "smart_money_score": int(r.Smart_Money_Score),
+                        "pct_change": round(float(r.Pct_Change), 2) if hasattr(r, "Pct_Change") else 0.0,
+                        "closing_range": round(float(r.Closing_Range), 2) if hasattr(r, "Closing_Range") else 0.7,
+                        "closing_range_pct": int(round(float(r.Closing_Range) * 100)) if hasattr(r, "Closing_Range") else 70,
+                        "diff_bandar_avg_pct": diff_vwap,
+                        "value_idr": val_idr,
+                        "value_b_idr": round(val_idr / 1e9, 2),
+                        "trigger_type": trig_type,
+                        "trigger_label": trig_lbl,
+                        "trading_plan": {
+                            "entry_price": c_price,
+                            "entry_low": c_price,
+                            "entry_high": c_price,
+                            "stop_loss": sl,
+                            "stop_loss_pct": round(((sl - c_price) / max(c_price, 1)) * 100.0, 2),
+                            "target_1": tp1,
+                            "target_1_pct": round(((tp1 - c_price) / max(c_price, 1)) * 100.0, 2),
+                            "target_2": tp2,
+                            "target_2_pct": round(((tp2 - c_price) / max(c_price, 1)) * 100.0, 2),
+                            "diff_bandar_avg_pct": diff_vwap,
+                        },
+                    }
+                    ok, _ = self.add_signal(stock_obj, source="AUTO")
+                    if ok:
+                        total_added += 1
+
+            return {
+                "target_dates": target_dates,
+                "days_rebuilt": len(target_dates),
+                "added": total_added,
+                "changes": total_changes,
+                "stats": self.stats(),
+            }
+        finally:
+            if is_sqlite:
+                with self.engine.begin() as con:
+                    con.exec_driver_sql("PRAGMA synchronous = NORMAL")

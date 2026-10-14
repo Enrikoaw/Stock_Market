@@ -855,8 +855,18 @@ def tracker_delete(signal_id: int) -> dict:
 
 @app.post("/api/tracker/reset")
 def tracker_reset() -> dict:
-    n = TRACKER.reset_all()
-    return {"status": "success", "message": f"{n} catatan sinyal dihapus. Tracker dimulai dari nol."}
+    if not REAL_CACHE_CSV.exists():
+        n = TRACKER.reset_all()
+        return {"status": "success", "message": f"{n} catatan sinyal dihapus. Cache pasar belum tersedia."}
+
+    real_df = pd.read_csv(REAL_CACHE_CSV)
+    summary = TRACKER.rebuild_recent_days(real_df, days=12)
+    sync_tracker_to_analysis(STATE.get("analysis"))
+    return {
+        "status": "success",
+        "message": f"Tracker berhasil di-rebuild dengan {summary.get('days_rebuilt', 12)} hari bursa terakhir ({summary.get('added', 0)} sinyal tercatat).",
+        "summary": summary,
+    }
 
 
 # ===================== TELEGRAM NOTIFIER =====================
