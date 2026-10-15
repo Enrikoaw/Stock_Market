@@ -208,12 +208,13 @@ html.light .ambient-bg-orbs {
 
 /* 1. Semuanya yang bernuansa gelap (slate-950, slate-900) berganti putih bersih */
 html.light .glass-panel,
+html.light .glass-subcard,
 html.light .modal-box,
 html.light [class*="bg-slate-950"],
 html.light [class*="bg-slate-900"] {
-  background: rgba(255, 255, 255, 0.92) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
   border-color: #e2e8f0 !important;
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06) !important;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.06) !important;
 }
 
 html.light [class*="bg-slate-800"] {
@@ -400,6 +401,24 @@ html.light .star-btn.text-amber-400,
 html.light .star-btn.text-amber-300 {
   color: #ea580c !important;
   filter: drop-shadow(0 0 6px rgba(234, 88, 12, 0.45)) !important;
+}
+
+/* 11. WCAG Kontras Tinggi untuk Light Mode: Teks Emerald, Rose, Blue, Sky */
+html.light .text-emerald-300,
+html.light .text-emerald-400 {
+  color: #047857 !important;
+}
+html.light .text-rose-300,
+html.light .text-rose-400 {
+  color: #b91c1c !important;
+}
+html.light .text-blue-300,
+html.light .text-blue-400 {
+  color: #1d4ed8 !important;
+}
+html.light .text-sky-300,
+html.light .text-sky-400 {
+  color: #0369a1 !important;
 }
 
 html.light #mobileBottomNav {

@@ -599,17 +599,17 @@
 
             <!-- Grid Harga Area Masuk, Batas Rugi, Target -->
             <div class="grid grid-cols-3 gap-2 text-center text-xs">
-              <div class="p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
-                <div id="planEntryLabel" class="text-[10px] text-blue-300 font-semibold">Harga Beli</div>
-                <div id="planEntryZone" class="font-mono font-bold text-white text-[11px] mt-0.5">-</div>
+              <div class="p-2 rounded-lg bg-slate-50 text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
+                <div id="planEntryLabel" class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Harga Beli</div>
+                <div id="planEntryZone" class="font-mono font-bold text-slate-900 dark:text-white text-[11px] mt-0.5">-</div>
               </div>
-              <div class="p-2 rounded-lg bg-rose-500/10 border border-rose-400/20">
-                <div class="text-[10px] text-rose-300 font-semibold">Batas Rugi (SL)</div>
-                <div id="planStopLoss" class="font-mono font-bold text-white text-[11px] mt-0.5">-</div>
+              <div class="p-2 rounded-lg bg-rose-50 text-rose-700 border border-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/30">
+                <div class="text-[10px] text-rose-600 dark:text-rose-300 font-semibold">Batas Rugi (SL)</div>
+                <div id="planStopLoss" class="font-mono font-bold text-rose-700 dark:text-rose-300 text-[11px] mt-0.5">-</div>
               </div>
-              <div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-400/20">
-                <div class="text-[10px] text-emerald-300 font-semibold">Target 1 (TP1 +4%)</div>
-                <div id="planTargets" class="font-mono font-bold text-white text-[11px] mt-0.5">-</div>
+              <div class="p-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30">
+                <div class="text-[10px] text-emerald-600 dark:text-emerald-300 font-semibold">Target 1 (TP1 +4%)</div>
+                <div id="planTargets" class="font-mono font-bold text-emerald-700 dark:text-emerald-300 text-[11px] mt-0.5">-</div>
               </div>
             </div>
 
@@ -809,32 +809,32 @@
 
         <!-- KPI Tracker: Win Rate, Sinyal Menunggu, Posisi Berjalan, Selesai Target, Kena Batas Rugi -->
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <div class="p-3.5 rounded-xl glass-subcard text-center">
-            <div class="text-[11px] text-slate-300 font-medium">Win Rate (Target)</div>
-            <div id="tsWinRate" class="text-xl sm:text-2xl font-black font-mono text-emerald-400 mt-0.5">—</div>
-            <div class="w-full bg-slate-800 h-1 rounded-full mt-2 overflow-hidden">
-              <div id="tsWinBar" class="h-full bg-emerald-400" style="width: 0%"></div>
+          <div class="p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 text-center">
+            <div class="text-[11px] font-medium">Win Rate (Target)</div>
+            <div id="tsWinRate" class="text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-white mt-0.5">—</div>
+            <div class="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
+              <div id="tsWinBar" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div>
             </div>
           </div>
-          <div class="p-3.5 rounded-xl glass-subcard text-center">
-            <div class="text-[11px] text-slate-300 font-medium">Menunggu Masuk</div>
-            <div id="tsWatch" class="text-xl sm:text-2xl font-black font-mono text-blue-300 mt-0.5">—</div>
-            <div class="text-[10px] text-slate-400 mt-1">Antre di area masuk</div>
+          <div class="p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 text-center">
+            <div class="text-[11px] font-medium">Menunggu Masuk</div>
+            <div id="tsWatch" class="text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-white mt-0.5">—</div>
+            <div class="text-[10px] text-slate-500 font-medium dark:text-slate-400 mt-1">Antre di area masuk</div>
           </div>
-          <div class="p-3.5 rounded-xl glass-subcard text-center">
-            <div class="text-[11px] text-slate-300 font-medium">Sedang Berjalan</div>
-            <div id="tsRunning" class="text-xl sm:text-2xl font-black font-mono text-amber-300 mt-0.5">—</div>
-            <div id="tsRunningPnl" class="text-[10px] font-mono text-emerald-400 mt-1">—</div>
+          <div class="p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 text-center">
+            <div class="text-[11px] font-medium">Sedang Berjalan</div>
+            <div id="tsRunning" class="text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-white mt-0.5">—</div>
+            <div id="tsRunningPnl" class="text-[10px] font-mono text-slate-500 font-medium dark:text-slate-400 mt-1">—</div>
           </div>
-          <div class="p-3.5 rounded-xl glass-subcard text-center">
-            <div class="text-[11px] text-slate-300 font-medium">Target Tercapai (Win)</div>
-            <div id="tsWin" class="text-xl sm:text-2xl font-black font-mono text-emerald-300 mt-0.5">—</div>
-            <div class="text-[10px] text-slate-400 mt-1">Mencapai Target 1</div>
+          <div class="p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 text-center">
+            <div class="text-[11px] font-medium">Target Tercapai (Win)</div>
+            <div id="tsWin" class="text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-white mt-0.5">—</div>
+            <div class="text-[10px] text-slate-500 font-medium dark:text-slate-400 mt-1">Mencapai Target 1</div>
           </div>
-          <div class="p-3.5 rounded-xl glass-subcard text-center col-span-2 sm:col-span-1">
-            <div class="text-[11px] text-slate-300 font-medium">Batas Rugi (Loss)</div>
-            <div id="tsLoss" class="text-xl sm:text-2xl font-black font-mono text-rose-400 mt-0.5">—</div>
-            <div class="text-[10px] text-slate-400 mt-1">Kena Stop Loss</div>
+          <div class="p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 text-center col-span-2 sm:col-span-1">
+            <div class="text-[11px] font-medium">Batas Rugi (Loss)</div>
+            <div id="tsLoss" class="text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-white mt-0.5">—</div>
+            <div class="text-[10px] text-slate-500 font-medium dark:text-slate-400 mt-1">Kena Stop Loss</div>
           </div>
         </div>
 
@@ -938,30 +938,30 @@
 
         <!-- Portfolio Summary KPI Cards -->
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <div class="p-3.5 rounded-xl glass-subcard text-center">
-            <div class="text-[11px] text-slate-300 font-medium">Modal Terpakai</div>
-            <div id="portCapital" class="text-lg sm:text-xl font-black font-mono text-white mt-0.5">Rp 0</div>
-            <div id="portHoldingCount" class="text-[10px] text-slate-400 mt-1">0 Posisi Aktif</div>
+          <div class="p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 text-center">
+            <div class="text-[11px] font-medium">Modal Terpakai</div>
+            <div id="portCapital" class="text-lg sm:text-xl font-black font-mono text-slate-900 dark:text-white mt-0.5">Rp 0</div>
+            <div id="portHoldingCount" class="text-[10px] text-slate-500 font-medium dark:text-slate-400 mt-1">0 Posisi Aktif</div>
           </div>
-          <div class="p-3.5 rounded-xl glass-subcard text-center">
-            <div class="text-[11px] text-slate-300 font-medium">Nilai Saat Ini</div>
-            <div id="portCurrentVal" class="text-lg sm:text-xl font-black font-mono text-sky-300 mt-0.5">Rp 0</div>
-            <div class="text-[10px] text-slate-400 mt-1">Estimasi Live</div>
+          <div class="p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 text-center">
+            <div class="text-[11px] font-medium">Nilai Saat Ini</div>
+            <div id="portCurrentVal" class="text-lg sm:text-xl font-black font-mono text-slate-900 dark:text-white mt-0.5">Rp 0</div>
+            <div class="text-[10px] text-slate-500 font-medium dark:text-slate-400 mt-1">Estimasi Live</div>
           </div>
-          <div class="p-3.5 rounded-xl glass-subcard text-center">
-            <div class="text-[11px] text-slate-300 font-medium">Floating P/L</div>
-            <div id="portFloatingPnl" class="text-lg sm:text-xl font-black font-mono text-emerald-400 mt-0.5">Rp 0</div>
-            <div id="portFloatingPct" class="text-[10px] font-mono text-emerald-400 mt-1">(+0.0%)</div>
+          <div class="p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 text-center">
+            <div class="text-[11px] font-medium">Floating P/L</div>
+            <div id="portFloatingPnl" class="text-lg sm:text-xl font-black font-mono text-slate-900 dark:text-white mt-0.5">Rp 0</div>
+            <div id="portFloatingPct" class="text-[10px] font-mono text-slate-500 font-medium dark:text-slate-400 mt-1">(+0.0%)</div>
           </div>
-          <div class="p-3.5 rounded-xl glass-subcard text-center">
-            <div class="text-[11px] text-slate-300 font-medium">Realized P/L</div>
-            <div id="portRealizedPnl" class="text-lg sm:text-xl font-black font-mono text-emerald-300 mt-0.5">Rp 0</div>
-            <div id="portClosedCount" class="text-[10px] text-slate-400 mt-1">0 Trade Selesai</div>
+          <div class="p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 text-center">
+            <div class="text-[11px] font-medium">Realized P/L</div>
+            <div id="portRealizedPnl" class="text-lg sm:text-xl font-black font-mono text-slate-900 dark:text-white mt-0.5">Rp 0</div>
+            <div id="portClosedCount" class="text-[10px] text-slate-500 font-medium dark:text-slate-400 mt-1">0 Trade Selesai</div>
           </div>
-          <div class="p-3.5 rounded-xl glass-subcard text-center col-span-2 sm:col-span-1">
-            <div class="text-[11px] text-slate-300 font-medium">Win Rate Riil</div>
-            <div id="portWinRate" class="text-lg sm:text-xl font-black font-mono text-amber-300 mt-0.5">—</div>
-            <div class="text-[10px] text-slate-400 mt-1">Posisi Realized</div>
+          <div class="p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 text-center col-span-2 sm:col-span-1">
+            <div class="text-[11px] font-medium">Win Rate Riil</div>
+            <div id="portWinRate" class="text-lg sm:text-xl font-black font-mono text-slate-900 dark:text-white mt-0.5">—</div>
+            <div class="text-[10px] text-slate-500 font-medium dark:text-slate-400 mt-1">Posisi Realized</div>
           </div>
         </div>
 
@@ -1822,6 +1822,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=55.0"></script>
+  <script src="/static/app.js?v=56.0"></script>
 </body>
 </html>

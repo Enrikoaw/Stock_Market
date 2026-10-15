@@ -376,18 +376,18 @@ function renderTodayCandidates(stocks) {
     const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : (((target2 - s.close) / s.close) * 100).toFixed(1);
 
     // Tingkat Risiko / Status Pantauan
-    let statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">Risiko Rendah</span>';
+    let statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50">Risiko Rendah</span>';
     if (s.tracker_status === 'RUNNING') {
       const isLoss = (s.tracker_pnl_pct || 0) < 0;
       const pnlColor = isLoss
-        ? 'bg-rose-500/20 text-rose-300 border-rose-400/40 shadow-sm shadow-rose-500/20'
-        : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/35';
+        ? 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50'
+        : 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50';
       const icon = isLoss ? '🔻' : '🚀';
       statusPill = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md ${pnlColor} border">${icon} Posisi Aktif (${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%)</span>`;
     } else if (s.tracker_status === 'WATCHLIST') {
-      statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-400/30">⏳ Menunggu Entry</span>';
+      statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50">⏳ Menunggu Entry</span>';
     } else if (s.vol_ratio > 2.5 || s.pct_change > 4.5) {
-      statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-400/30">Risiko Sedang</span>';
+      statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/30">Risiko Sedang</span>';
     }
 
     let entryLabel = 'Harga Beli';
@@ -406,7 +406,7 @@ function renderTodayCandidates(stocks) {
             ${getStockLogoImg(s.ticker, 'w-10 h-10')}
             <div>
               <div class="flex items-center gap-1.5">
-                <span class="font-mono font-black text-base text-white">${s.ticker}</span>
+                <span class="font-mono font-black text-base text-slate-900 dark:text-white">${s.ticker}</span>
                 <button
                   onclick="toggleFavorite('${s.ticker}', event)"
                   class="star-btn star-btn-${s.ticker} text-lg leading-none ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-500 hover:text-amber-300'}"
@@ -415,43 +415,43 @@ function renderTodayCandidates(stocks) {
                   ${starActive ? '★' : '☆'}
                 </button>
               </div>
-              <div class="text-[11px] text-slate-400 truncate max-w-[140px]">${s.sector}</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[140px]">${s.sector}</div>
             </div>
           </div>
 
           <div class="text-right">
-            <div class="font-mono font-black text-base text-white">${fmtPrice(s.close)}</div>
+            <div class="font-mono font-black text-base text-slate-900 dark:text-white">${fmtPrice(s.close)}</div>
             <div class="font-mono text-xs font-bold ${chgColor}">${fmtSignPct(s.pct_change)}</div>
           </div>
         </div>
 
         <!-- Kekuatan Smart Money -->
-        <div class="p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-between text-xs">
+        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-white/[0.04] dark:border-white/[0.06] flex items-center justify-between text-xs">
           <div class="flex items-center gap-1.5">
             <span class="font-mono ${strength.color}">${strength.dots}</span>
-            <span class="text-white font-bold">${strength.label}</span>
-            <span class="text-slate-400 text-[11px]">(Skor ${s.smart_money_score})</span>
+            <span class="text-slate-900 dark:text-white font-bold">${strength.label}</span>
+            <span class="text-slate-500 dark:text-slate-400 text-[11px]">(Skor ${s.smart_money_score})</span>
           </div>
           ${statusPill}
         </div>
 
         <!-- Rencana Trading Terukur (Entry, SL, TP) -->
-        <div class="p-3 rounded-xl glass-subcard border border-white/[0.06] space-y-2 text-xs">
+        <div class="p-3 rounded-xl bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.06] space-y-2 text-xs shadow-sm dark:shadow-none">
           <div class="grid grid-cols-3 gap-1.5 text-center font-mono">
-            <div class="p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
-              <div class="text-[10px] text-blue-300 font-sans font-semibold">${entryLabel}</div>
-              <div class="text-white font-bold text-[11px] mt-0.5">${entryValue}</div>
+            <div class="p-2 rounded-lg bg-slate-50 text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
+              <div class="text-[10px] text-slate-500 dark:text-slate-400 font-sans font-semibold">${entryLabel}</div>
+              <div class="text-slate-900 dark:text-white font-bold text-[11px] mt-0.5">${entryValue}</div>
             </div>
-            <div class="p-2 rounded-lg bg-rose-500/10 border border-rose-400/20">
-              <div class="text-[10px] text-rose-300 font-sans font-semibold">Batas Rugi (SL)</div>
-              <div class="text-rose-300 font-bold text-[11px] mt-0.5">${fmtNumber(stopLoss)} (${slPct}%)</div>
+            <div class="p-2 rounded-lg bg-rose-50 text-rose-700 border border-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/30">
+              <div class="text-[10px] text-rose-600 dark:text-rose-300 font-sans font-semibold">Batas Rugi (SL)</div>
+              <div class="text-rose-700 dark:text-rose-300 font-bold text-[11px] mt-0.5">${fmtNumber(stopLoss)} (${slPct}%)</div>
             </div>
-            <div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-400/20">
-              <div class="text-[10px] text-emerald-300 font-sans font-semibold">Target (TP1)</div>
-              <div class="text-emerald-300 font-bold text-[11px] mt-0.5">${fmtNumber(target1)} (+${tp1Pct}%)</div>
+            <div class="p-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30">
+              <div class="text-[10px] text-emerald-600 dark:text-emerald-300 font-sans font-semibold">Target (TP1)</div>
+              <div class="text-emerald-700 dark:text-emerald-300 font-bold text-[11px] mt-0.5">${fmtNumber(target1)} (+${tp1Pct}%)</div>
             </div>
           </div>
-          ${target2 > 0 ? `<div class="text-[10px] text-slate-400 font-mono text-center pt-0.5">TP2: <span class="text-emerald-300 font-semibold">${fmtNumber(target2)} (+${tp2Pct}%)</span> · Disiplin SL ATR14</div>` : ''}
+          ${target2 > 0 ? `<div class="text-[10px] text-slate-500 dark:text-slate-400 font-mono text-center pt-0.5">TP2: <span class="text-emerald-700 dark:text-emerald-300 font-semibold">${fmtNumber(target2)} (+${tp2Pct}%)</span> · Disiplin SL ATR14</div>` : ''}
         </div>
 
         <!-- Tombol Aksi -->
@@ -1043,7 +1043,7 @@ function renderScreenerTable(stocks) {
           </td>
 
           <!-- Price -->
-          <td class="py-3 px-2 text-right font-mono font-bold text-white text-xs">
+          <td class="py-3 px-2 text-right font-mono font-bold text-slate-900 dark:text-white text-xs">
             ${fmtPrice(s.close)}
           </td>
 
@@ -1054,29 +1054,29 @@ function renderScreenerTable(stocks) {
 
           <!-- Volume Spike Badge & Status Pantauan -->
           <td class="py-3 px-2 text-center font-mono">
-            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-amber-500/15 text-amber-300 border border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
+            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
               ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
             </span>
-            ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-amber-300 mt-1 font-mono bg-amber-500/10 px-1 py-0.5 rounded border border-amber-400/25">🏆 WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? ((s.tracker_pnl_pct || 0) < 0 ? `<span class="block text-[9px] font-bold text-rose-300 mt-1 font-mono bg-rose-500/15 px-1 py-0.5 rounded border border-rose-400/35">🔻 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : `<span class="block text-[9px] font-bold text-emerald-300 mt-1 font-mono bg-emerald-500/10 px-1 py-0.5 rounded border border-emerald-400/25">🚀 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>`) : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-300 mt-1 font-mono bg-blue-500/10 px-1 py-0.5 rounded border border-blue-400/25">⏳ WATCHLIST</span>' : ''}
+            ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">🏆 WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? ((s.tracker_pnl_pct || 0) < 0 ? `<span class="block text-[9px] font-bold text-rose-800 bg-rose-100 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50 mt-1 font-mono px-1 py-0.5 rounded">🔻 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : `<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">🚀 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>`) : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-800 bg-blue-100 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50 mt-1 font-mono px-1 py-0.5 rounded">⏳ WATCHLIST</span>' : ''}
           </td>
 
           <!-- Smart Money Score with Progress Bar -->
           <td class="py-3 px-2 text-right">
             <div class="flex items-center justify-end gap-2.5">
-              <span class="font-mono font-extrabold text-xs text-white">${s.smart_money_score}</span>
-              <div class="w-20 bg-white/[0.08] h-2 rounded-full overflow-hidden">
-                <div class="h-full bg-gradient-to-r from-emerald-400 to-teal-300 rounded-full" style="width: ${s.smart_money_score}%"></div>
+              <span class="font-mono font-extrabold text-xs text-slate-900 dark:text-white">${s.smart_money_score}</span>
+              <div class="w-20 bg-slate-200 dark:bg-white/[0.08] h-2 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 dark:from-emerald-400 dark:to-teal-300 rounded-full" style="width: ${s.smart_money_score}%"></div>
               </div>
             </div>
           </td>
 
           <!-- Profil VSA & VWAP 5H -->
           <td class="py-3 pl-2 pr-4 text-xs font-mono">
-            <div class="text-[11px] text-slate-300">
-              VWAP 5H: <span class="text-white font-bold">${fmtPrice(s.bandar_avg_buy)}</span> <span class="${s.diff_bandar_avg_pct >= 0 ? 'text-amber-300' : 'text-emerald-400'} font-semibold">(${s.diff_bandar_avg_pct >= 0 ? '+' : ''}${s.diff_bandar_avg_pct.toFixed(1)}%)</span>
+            <div class="text-[11px] text-slate-600 dark:text-slate-300">
+              VWAP 5H: <span class="text-slate-900 dark:text-white font-bold">${fmtPrice(s.bandar_avg_buy)}</span> <span class="${s.diff_bandar_avg_pct >= 0 ? 'text-amber-500 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-400'} font-semibold">(${s.diff_bandar_avg_pct >= 0 ? '+' : ''}${s.diff_bandar_avg_pct.toFixed(1)}%)</span>
             </div>
-            <div class="text-[10px] text-slate-400">
-              CR: <span class="text-slate-200 font-semibold">${s.closing_range_pct}%</span> · Val: <span class="text-slate-200">Rp ${s.value_b_idr} M</span>
+            <div class="text-[10px] text-slate-500 dark:text-slate-400">
+              CR: <span class="text-slate-800 dark:text-slate-200 font-semibold">${s.closing_range_pct}%</span> · Val: <span class="text-slate-800 dark:text-slate-200">Rp ${s.value_b_idr} M</span>
             </div>
           </td>
         </tr>
@@ -1188,18 +1188,20 @@ function renderInspectorPanel(d) {
     if (biasEl) {
       biasEl.textContent = plan.action_bias;
       if (trackerSt === 'WIN') {
-        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.25)]';
+        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50';
       } else if (trackerSt === 'RUNNING') {
         const isLoss = (plan.pnl_pct || 0) < 0;
         if (isLoss) {
-          biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-400/35 shadow-[0_0_12px_rgba(244,63,94,0.25)]';
+          biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50';
         } else {
-          biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/35 shadow-[0_0_12px_rgba(16,185,129,0.25)]';
+          biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50';
         }
       } else if (trackerSt === 'LOSS' || d.trigger_type === 'DISTRIBUTION_WARNING') {
-        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-400/35 shadow-[0_0_12px_rgba(244,63,94,0.2)]';
+        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50';
+      } else if (trackerSt === 'WATCHLIST') {
+        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50';
       } else {
-        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/35 shadow-[0_0_12px_rgba(16,185,129,0.2)]';
+        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50';
       }
     }
 
@@ -2012,13 +2014,13 @@ let currentTrackerSignals = [];
 let trackerSearchTerm = '';
 
 const TRACKER_STATUS_STYLE = {
-  WATCHLIST: 'bg-sky-500/20 text-sky-300 border-sky-400/50 shadow-sm shadow-sky-500/20',
-  RUNNING: 'bg-amber-500/25 text-amber-300 border-amber-400/60 shadow-sm shadow-amber-500/25',
-  WIN: 'bg-emerald-500/25 text-emerald-300 border-emerald-400/60 shadow-sm shadow-emerald-500/25',
-  LOSS: 'bg-rose-500/25 text-rose-300 border-rose-400/60 shadow-sm shadow-rose-500/25',
-  EXPIRED: 'bg-slate-700/40 text-slate-300 border-slate-600',
-  TIMEOUT: 'bg-purple-500/20 text-purple-300 border-purple-400/50 shadow-sm shadow-purple-500/20',
-  CANCELLED: 'bg-slate-800/60 text-slate-400 border-slate-600/60',
+  WATCHLIST: 'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50',
+  RUNNING: 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50',
+  WIN: 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50',
+  LOSS: 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50',
+  EXPIRED: 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50',
+  TIMEOUT: 'bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800/50',
+  CANCELLED: 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-600/60',
 };
 
 const fmtPctOrDash = (v) => (v === null || v === undefined ? '-' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`);
@@ -2226,18 +2228,18 @@ function renderTrackerTable(rows) {
 
       let statusCls = TRACKER_STATUS_STYLE[r.status] || TRACKER_STATUS_STYLE.EXPIRED;
       if (isRunningLoss) {
-        statusCls = 'bg-rose-500/25 text-rose-300 border-rose-400/60 shadow-sm shadow-rose-500/25';
+        statusCls = 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50';
       }
 
       const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT', 'CANCELLED'].includes(r.status);
       const exitOrLast = isClosed && r.exit_price
-        ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-400">${r.exit_date || ''}</div>`
-        : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-400">last</div>`;
+        ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${r.exit_date || ''}</div>`
+        : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">last</div>`;
       const entryCell = r.entry_price
-        ? `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-400">${r.entry_date || ''}</div>`
+        ? `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${r.entry_date || ''}</div>`
         : r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined
-        ? `<span class="text-slate-400">-</span><div class="text-[10px] text-blue-300">jarak ${fmtPctOrDash(r.dist_to_entry_pct)}</div>`
-        : '<span class="text-slate-400">-</span>';
+        ? `<span class="text-slate-400 dark:text-slate-500">-</span><div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">jarak ${fmtPctOrDash(r.dist_to_entry_pct)}</div>`
+        : '<span class="text-slate-400 dark:text-slate-500">-</span>';
 
       let isHighFlyer = false;
       if (r.status === 'RUNNING' && pnl !== null && pnl >= 2.0) {
@@ -2262,12 +2264,12 @@ function renderTrackerTable(rows) {
           <div class="flex items-center gap-3 cursor-pointer group" onclick="selectStockAndGoToInspector('${r.ticker}')" title="Klik untuk membuka detail ${r.ticker}">
             ${getStockLogoImg(r.ticker, 'w-8 h-8')}
             <div>
-              <div class="font-sans font-extrabold text-sm text-white group-hover:text-emerald-300 flex items-center gap-1.5 transition">
+              <div class="font-sans font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 flex items-center gap-1.5 transition">
                 <span>${r.ticker}</span>
                 ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
                 ${hasDistWarning ? `<span class="text-xs animate-pulse" title="${noteText}">⚠️</span>` : ''}
               </div>
-              <div class="text-[11px] text-slate-400 group-hover:text-slate-300 truncate max-w-[150px] mt-0.5">${r.sector || (r.source === 'AUTO' ? 'Auto Sinyal' : 'Manual')}</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 truncate max-w-[150px] mt-0.5">${r.sector || (r.source === 'AUTO' ? 'Auto Sinyal' : 'Manual')}</div>
             </div>
           </div>
         </td>
@@ -2276,24 +2278,24 @@ function renderTrackerTable(rows) {
         <td class="py-3.5 px-3">
           <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">
             <span>${r.trigger_label || '-'}</span>
-            <span class="font-mono font-extrabold text-white">${r.score ?? '-'}</span>
+            <span class="font-mono font-extrabold text-slate-900 dark:text-white">${r.score ?? '-'}</span>
           </span>
         </td>
 
         <!-- Tanggal & Waktu Sinyal -->
-        <td class="py-3.5 px-3 font-sans font-medium text-slate-200 text-xs">
+        <td class="py-3.5 px-3 font-sans font-medium text-slate-800 dark:text-slate-200 text-xs">
           <div>${r.signal_date}</div>
-          <div class="text-[10px] text-emerald-400 font-mono flex items-center gap-1 mt-0.5" title="Waktu terdeteksi">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 mt-0.5" title="Waktu terdeteksi">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
             ${formatSignalTime(r.created_at)}
           </div>
         </td>
 
         <!-- Harga Beli -->
-        <td class="py-3.5 px-3 text-right font-mono text-white font-bold text-xs">${fmtPrice(r.entry_high || r.entry_low || r.entry_price)}</td>
+        <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-bold text-xs">${fmtPrice(r.entry_high || r.entry_low || r.entry_price)}</td>
 
         <!-- SL / TP -->
-        <td class="py-3.5 px-3 text-right font-mono text-white font-semibold text-xs">
+        <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-semibold text-xs">
           ${fmtNumber(r.stop_loss)} / ${fmtNumber(r.target)}
         </td>
 
@@ -2302,22 +2304,22 @@ function renderTrackerTable(rows) {
           <span class="inline-block min-w-[82px] text-center px-3.5 py-1 rounded-full border text-xs font-bold tracking-wide ${statusCls}" title="${noteText}">
             ${r.status === 'RUNNING' ? (isRunningLoss ? 'Running Loss' : 'Running') : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : r.status}
           </span>
-          ${hasDistWarning ? `<div class="mt-1 text-[9px] font-extrabold text-rose-300 bg-rose-500/20 border border-rose-500/40 rounded px-1.5 py-0.5 animate-pulse" title="${noteText}">⚠️ AWAS DISTRIBUSI</div>` : ''}
+          ${hasDistWarning ? `<div class="mt-1 text-[9px] font-extrabold text-rose-800 bg-rose-100 border border-rose-200 dark:text-rose-300 dark:bg-rose-500/20 dark:border-rose-500/40 rounded px-1.5 py-0.5 animate-pulse" title="${noteText}">⚠️ AWAS DISTRIBUSI</div>` : ''}
         </td>
 
         <!-- Harga Masuk -->
-        <td class="py-3.5 px-3 text-right font-mono text-white font-semibold text-xs">${entryCell}</td>
+        <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-semibold text-xs">${entryCell}</td>
 
         <!-- Harga Terkini -->
-        <td class="py-3.5 px-3 text-right font-mono text-white font-semibold text-xs">${exitOrLast}</td>
+        <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-semibold text-xs">${exitOrLast}</td>
 
         <!-- Hasil (P/L) -->
         <td class="py-3.5 px-3 text-right font-mono">
           ${pnl !== null ? `
-            <span class="inline-block min-w-[66px] text-center px-3 py-1 rounded-full text-xs font-extrabold font-mono ${pnl >= 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/70 shadow-[0_0_16px_rgba(16,185,129,0.28)]' : 'bg-rose-500/20 text-rose-300 border border-rose-400/70 shadow-[0_0_16px_rgba(244,63,94,0.25)]'}">
+            <span class="inline-block min-w-[66px] text-center px-3 py-1 rounded-full text-xs font-extrabold font-mono ${pnl >= 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/70 shadow-[0_0_16px_rgba(16,185,129,0.1)]' : 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-400/70 shadow-[0_0_16px_rgba(244,63,94,0.1)]'}">
               ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%
             </span>
-          ` : '<span class="text-slate-400">-</span>'}
+          ` : '<span class="text-slate-400 dark:text-slate-500">-</span>'}
         </td>
 
         <!-- Action / Delete -->
