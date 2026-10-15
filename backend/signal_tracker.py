@@ -647,13 +647,17 @@ class SignalTracker:
 
                 for bar in hist:
                     bar_date = str(bar["date"])
-                    if bar_date <= r["signal_date"]:
+                    if bar_date < r["signal_date"]:
                         continue
 
                     is_live_today = False if force_final else (bar_date == today_str and now_wib().time() < MARKET_CLOSE_CUTOFF)
 
-                    # Jika bar historis yang sudah pernah dievaluasi dan bukan live today -> lewati
-                    if bar_date <= since and not is_live_today:
+                    # Jika bar pada tanggal sinyal dan bukan sesi live hari ini serta bukan manual -> lewati (sinyal harian terbentuk saat penutupan)
+                    if bar_date == r["signal_date"] and not is_live_today and r.get("source") != "MANUAL":
+                        continue
+
+                    # Jika bar historis yang sudah pernah dievaluasi final dan bukan live today -> lewati
+                    if bar_date <= since and not is_live_today and bar_date != r["signal_date"]:
                         continue
 
                     self._step(r, bar, changes, is_live_today=is_live_today)
@@ -691,14 +695,14 @@ class SignalTracker:
         if r["status"] == "WATCHLIST":
             e_low, e_high, sl = r["entry_low"], r["entry_high"], r["stop_loss"]
 
-            # 1. Proteksi gap down di bawah Stop Loss atau > -1.5% di bawah harga entry pada pembukaan
-            if o <= sl or o < e_low * 0.985:
+            # 1. Proteksi gap down ekstrim: pembukaan di bawah Stop Loss langsung dibatalkan
+            if o <= sl:
                 r.update(
                     status="EXPIRED",
                     exit_date=date,
                     exit_price=round(o, 2),
                     pnl_pct=0.0,
-                    note="Batal beli: Gap down saat pembukaan pasar (tekanan jual pagi).",
+                    note="Batal beli: Gap down ekstrim langsung di bawah Stop Loss.",
                 )
                 changes["expired"] += 1
                 changes.setdefault("events", []).append({
@@ -710,58 +714,80 @@ class SignalTracker:
                 })
                 return
 
-            # 2. Antrean Buy Limit di area entry (l <= e_high) dengan konfirmasi rebound
-            if l <= e_high and o >= e_low * 0.985:
-                # Jika di hari antre harga jebol SL tanpa rebound (l <= sl dan c <= sl), batalkan antrean
-                if l <= sl and c <= sl:
-                    r.update(
-                        status="EXPIRED",
-                        exit_date=date,
-                        exit_price=round(c, 2),
-                        pnl_pct=0.0,
-                        note="Batal beli: Support jebol disertai guyuran di hari antrean.",
-                    )
-                    changes["expired"] += 1
-                    return
+            # 2. Antrean Buy Limit tereksekusi saat harga pasar (Low) menyentuh atau berada di bawah harga antrean (l <= e_high)
+            if l <= e_high:
+                # Harga eksekusi (fill): jika open di bawah limit, dapat harga open yang lebih murah; jika tidak, dapat harga limit (e_high)
+                fill = min(o, e_high)
 
-                # Posisi masuk hanya jika candle penutupan tidak jebol di bawah Stop Loss (c > sl)
-                if c > sl:
-                    fill = min(o, e_high)
-                    r.update(
-                        status="RUNNING",
-                        entry_date=date,
-                        entry_price=round(fill, 2),
-                        bars_held=0,
-                        last_close=c,
-                        pnl_pct=round((c - fill) / fill * 100.0, 2),
-                        note=f"Entry terkunci {date} @ Rp {fill:,.0f} (Low Rp {l:,.0f} menyentuh Entry Rp {e_high:,.0f}).",
-                    )
-                    changes["entered"] += 1
-                    changes.setdefault("events", []).append({
-                        "event": "RUNNING",
-                        "ticker": r["ticker"],
-                        "price": round(fill, 2),
-                        "pnl_pct": r["pnl_pct"],
-                        "note": r["note"],
-                    })
-
-                    # Jika di hari entry target tercapai dan close tetap di atas/sama dengan entry fill -> langsung WIN
-                    if h >= r["target"] and c >= fill:
-                        tp_val = float(r["target"])
-                        self._close(
-                            r,
-                            date,
-                            tp_val,
-                            "WIN",
-                            f"Target Price (Rp {tp_val:,.0f}) tercapai di hari yang sama dengan entry (Close Rp {c:,.0f} >= Fill Rp {fill:,.0f}).",
-                            changes,
+                # Jika di hari yang sama harga terus anjlok menembus Stop Loss (l <= sl)
+                if l <= sl:
+                    # Cek apakah penutupan candle berhasil rebound di atas SL (c > sl)
+                    if c > sl:
+                        # Rebound berhasil di atas SL: posisi masuk RUNNING
+                        r.update(
+                            status="RUNNING",
+                            entry_date=date,
+                            entry_price=round(fill, 2),
+                            bars_held=0,
+                            last_close=c,
+                            pnl_pct=round((c - fill) / fill * 100.0, 2),
+                            note=f"Entry tereksekusi {date} @ Rp {fill:,.0f} (Low Rp {l:,.0f} menyentuh Entry Rp {e_high:,.0f}). Rebound di Rp {c:,.0f}.",
                         )
+                        changes["entered"] += 1
+                        changes.setdefault("events", []).append({
+                            "event": "RUNNING",
+                            "ticker": r["ticker"],
+                            "price": round(fill, 2),
+                            "pnl_pct": r["pnl_pct"],
+                            "note": r["note"],
+                        })
+                        return
+                    else:
+                        # Candle tutup jebol di bawah SL: batalkan antrean demi keamanan modal
+                        r.update(
+                            status="EXPIRED",
+                            exit_date=date,
+                            exit_price=round(c, 2),
+                            pnl_pct=0.0,
+                            note=f"Batal beli: Harga jebol menembus SL (Low Rp {l:,.0f}, Close Rp {c:,.0f} <= SL Rp {sl:,.0f}).",
+                        )
+                        changes["expired"] += 1
                         return
 
-                    return
+                # Kondisi normal: Low menyentuh area antrean dan harga tidak tembus SL -> Posisi masuk RUNNING
+                r.update(
+                    status="RUNNING",
+                    entry_date=date,
+                    entry_price=round(fill, 2),
+                    bars_held=0,
+                    last_close=c,
+                    pnl_pct=round((c - fill) / fill * 100.0, 2),
+                    note=f"Entry tereksekusi {date} @ Rp {fill:,.0f} (Low Rp {l:,.0f} menyentuh Entry Rp {e_high:,.0f}).",
+                )
+                changes["entered"] += 1
+                changes.setdefault("events", []).append({
+                    "event": "RUNNING",
+                    "ticker": r["ticker"],
+                    "price": round(fill, 2),
+                    "pnl_pct": r["pnl_pct"],
+                    "note": r["note"],
+                })
+
+                # Jika di hari yang sama High menyentuh Target Price (tp) -> langsung WIN
+                if h >= r["target"] and c >= fill:
+                    tp_val = float(r["target"])
+                    self._close(
+                        r,
+                        date,
+                        tp_val,
+                        "WIN",
+                        f"Target Price (Rp {tp_val:,.0f}) tercapai di hari yang sama dengan entry (High Rp {h:,.0f}).",
+                        changes,
+                    )
+                return
 
             if not is_live_today:
-                r["bars_waited"] = int(r["bars_waited"] or 0) + 1
+                r["bars_waited"] = int(r.get("bars_waited") or 0) + 1
                 if r["bars_waited"] >= self.entry_expiry_days:
                     r.update(
                         status="EXPIRED",
@@ -781,26 +807,11 @@ class SignalTracker:
             sl, tp = float(r["stop_loss"]), float(r["target"])
             entry_p = float(r["entry_price"])
 
-            from backend.screener_engine import _round_idx_tick
-            # Trailing Profit Pengunci Kemenangan: Jika posisi RUNNING menyentuh h >= entry_p * 1.02 (+2.0%),
-            # langsung naikkan stop_loss ke entry_p * 1.006 (+0.6% di atas modal)
-            if h >= entry_p * 1.020:
-                lock_sl = _round_idx_tick(entry_p * 1.006)
-                if lock_sl > sl:
-                    sl = lock_sl
-                    r["stop_loss"] = lock_sl
-                    r["note"] = f"Trailing Profit aktif di Rp {lock_sl:,.0f} (+0.6% mengunci modal, High Rp {h:,.0f} menyentuh +2.0%)."
-
-            # 1. Stop Loss tersentuh
+            # 1. Stop Loss tersentuh (tetap menggunakan SL terencana tanpa trailing di atas modal)
             if l <= sl:
                 exit_p = o if o < sl else sl
-                if exit_p >= entry_p:
-                    note = f"Trailing Profit tersentuh di Rp {exit_p:,.0f} (mengamankan modal & profit pasca rally +2.0%)."
-                    status = "WIN"
-                else:
-                    note = "Stop Loss tersentuh." if h < tp else "SL & TP tersentuh di hari yang sama — dihitung LOSS (konservatif)."
-                    status = "LOSS"
-                self._close(r, date, exit_p, status, note, changes)
+                note = "Stop Loss tersentuh." if h < tp else "SL & TP tersentuh di hari yang sama — dihitung LOSS (konservatif)."
+                self._close(r, date, exit_p, "LOSS", note, changes)
                 return
 
             # 2. Target Price tersentuh
@@ -815,7 +826,7 @@ class SignalTracker:
             r["note"] = f"Running: Entry Rp {entry_p:,.0f}, Last Rp {c:,.0f} ({r['pnl_pct']:+.2f}%). High hari ini Rp {h:,.0f}."
 
             if not is_live_today:
-                r["bars_held"] = int(r["bars_held"] or 0) + 1
+                r["bars_held"] = int(r.get("bars_held") or 0) + 1
                 if r["bars_held"] >= self.max_hold_days:
                     self._close(r, date, c, "TIMEOUT", f"Melewati batas tahan {self.max_hold_days} hari — ditutup di harga close Rp {c:,.0f}.", changes)
             return
@@ -1023,14 +1034,14 @@ class SignalTracker:
                     if day_added >= 3:
                         break
                     c_price = int(round(float(r.Close)))
-                    entry_price = _round_idx_tick(c_price * 0.985)
+                    entry_price = _round_idx_tick(c_price)
                     entry_low = entry_price
                     entry_high = entry_price
                     atr14_val = int(r.ATR14) if hasattr(r, "ATR14") and not pd.isna(r.ATR14) else max(1, int(round(entry_price * 0.03)))
                     sl_dist = max(int(round(entry_price * 0.035)), min(int(round(entry_price * 0.050)), int(round(1.4 * atr14_val))))
                     sl = _round_idx_tick(entry_price - sl_dist)
-                    tp1 = _round_idx_tick(entry_price * 1.035)
-                    tp2 = _round_idx_tick(entry_price * 1.065)
+                    tp1 = _round_idx_tick(entry_price * 1.04)
+                    tp2 = _round_idx_tick(entry_price * 1.07)
                     if tp2 <= tp1:
                         tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
 

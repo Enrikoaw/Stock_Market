@@ -1386,16 +1386,11 @@ function renderInspectorChart(d) {
     const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : 7;
     const slPct = plan.stop_loss_pct != null ? plan.stop_loss_pct : -4;
 
-    // Pastikan batas harga mencakup TP2, TP1, Harga Asli, Entry, dan SL agar tidak terpotong (clipped)
+    // Batas rentang harga disesuaikan dengan pergerakan candlestick, MA20, dan harga saat ini
     const valCandidatesMin = [...allLows, ...ma20s.filter((v) => v > 0)];
-    if (slVal && slVal > 0) valCandidatesMin.push(slVal);
-    if (entryVal && entryVal > 0) valCandidatesMin.push(entryVal);
     if (currentPrice > 0) valCandidatesMin.push(currentPrice);
 
     const valCandidatesMax = [...allHighs, ...ma20s.filter((v) => v > 0)];
-    if (tp1Val && tp1Val > 0) valCandidatesMax.push(tp1Val);
-    if (tp2Val && tp2Val > 0) valCandidatesMax.push(tp2Val);
-    if (entryVal && entryVal > 0) valCandidatesMax.push(entryVal);
     if (currentPrice > 0) valCandidatesMax.push(currentPrice);
 
     const rawMin = valCandidatesMin.length > 0 ? Math.min(...valCandidatesMin) : 0;
@@ -1529,11 +1524,10 @@ function renderInspectorChart(d) {
           c.restore();
         }
 
-        // Urutan render garis skenario: HANYA SL, TP1, TP2 di kanan, dan Entry di kiri
-        if (tp2Val) drawScenarioLine(tp2Val, '#14b8a6', `TP2: Rp ${fmtNumber(tp2Val)}`, true, true);
-        if (tp1Val) drawScenarioLine(tp1Val, '#10b981', `TP1: Rp ${fmtNumber(tp1Val)}`, true, true);
-        if (entryVal) drawScenarioLine(entryVal, '#38bdf8', `Entry: Rp ${fmtNumber(entryVal)}`, true, false);
-        if (slVal) drawScenarioLine(slVal, '#f43f5e', `SL: Rp ${fmtNumber(slVal)}`, true, true);
+        // Garis Harga Saat Ini (Cukup tampilkan garis yang menunjukkan harga saat itu)
+        if (currentPrice && currentPrice > 0) {
+          drawScenarioLine(currentPrice, '#38bdf8', `Harga Saat Ini: Rp ${fmtNumber(currentPrice)}`, true, true);
+        }
 
         c.restore();
       },
@@ -2170,6 +2164,17 @@ function renderTrackerStats(data) {
   });
 }
 
+function formatSignalTime(dateStr) {
+  if (!dateStr) return '16:00 WIB';
+  let t = '';
+  if (dateStr.includes(' ')) {
+    t = dateStr.split(' ')[1].slice(0, 5);
+  } else if (dateStr.includes('T')) {
+    t = dateStr.split('T')[1].slice(0, 5);
+  }
+  return t ? `${t} WIB` : '16:00 WIB';
+}
+
 function renderTrackerTable(rows) {
   const tbody = document.getElementById('trackerTableBody');
   if (!tbody) return;
@@ -2234,8 +2239,14 @@ function renderTrackerTable(rows) {
           </span>
         </td>
 
-        <!-- Tanggal Sinyal -->
-        <td class="py-3.5 px-3 font-sans font-medium text-slate-200 text-xs">${r.signal_date}</td>
+        <!-- Tanggal & Waktu Sinyal -->
+        <td class="py-3.5 px-3 font-sans font-medium text-slate-200 text-xs">
+          <div>${r.signal_date}</div>
+          <div class="text-[10px] text-emerald-400 font-mono flex items-center gap-1 mt-0.5" title="Waktu terdeteksi">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            ${formatSignalTime(r.created_at)}
+          </div>
+        </td>
 
         <!-- Harga Beli -->
         <td class="py-3.5 px-3 text-right font-mono text-white font-bold text-xs">${fmtPrice(r.entry_high || r.entry_low || r.entry_price)}</td>

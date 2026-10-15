@@ -1222,8 +1222,8 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             },
         ]
 
-        # Trading Plan: Harga Beli Diskon (Pullback -1.5% dari Close) & SL Proporsional
-        entry_price = _round_idx_tick(close_price * 0.985)
+        # Trading Plan: 1 Harga Beli Acuan (Close Hari Sinyal) & SL Proporsional
+        entry_price = _round_idx_tick(close_price)
         entry_low = entry_price
         entry_high = entry_price
         # Batasi Stop Loss proporsional -3.5% s/d -5.0% (1.4 * ATR14) untuk Swing Pendek
@@ -1232,8 +1232,8 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         risk_idr = max(1, entry_price - stop_loss)
         risk_pct = round((risk_idr / max(entry_price, 1)) * 100.0, 2)
 
-        tp1 = _round_idx_tick(entry_price * 1.035)
-        tp2 = _round_idx_tick(entry_price * 1.065)
+        tp1 = _round_idx_tick(entry_price * 1.04)
+        tp2 = _round_idx_tick(entry_price * 1.07)
         if tp2 <= tp1:
             tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
         tp1_pct = round(((tp1 - entry_price) / max(entry_price, 1)) * 100.0, 2)

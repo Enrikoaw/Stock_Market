@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=50.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=51.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -577,12 +577,10 @@
               <canvas id="inspectorChart"></canvas>
             </div>
             
-            <!-- Legend Garis Rencana -->
+            <!-- Legend Garis Grafik -->
             <div class="flex flex-wrap items-center justify-center gap-4 text-[10px] text-slate-300">
-              <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-sky-400 inline-block border-b border-dashed border-sky-400"></span> Area Masuk</span>
-              <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-emerald-400 inline-block"></span> Target 1 (TP1)</span>
-              <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-teal-400 inline-block"></span> Target 2 (TP2)</span>
-              <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-rose-400 inline-block"></span> Batas Rugi (SL)</span>
+              <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-sky-400 inline-block"></span> Garis Harga Saat Ini</span>
+              <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-emerald-400 inline-block"></span> MA20 Trendline</span>
             </div>
           </div>
 
@@ -911,7 +909,7 @@
               <tr class="bg-slate-900/80 border-y border-white/[0.08] text-slate-300 font-semibold select-none">
                 <th class="py-3 pl-4 pr-2 cursor-pointer hover:text-white" onclick="toggleTrackerSort('ticker')">Saham <span id="sortIconTicker" class="text-[10px] text-emerald-400 font-mono"></span></th>
                 <th class="py-3 px-3 cursor-pointer hover:text-white" onclick="toggleTrackerSort('score')">Sinyal &amp; Skor <span id="sortIconScore" class="text-[10px] text-emerald-400 font-mono"></span></th>
-                <th class="py-3 px-3 cursor-pointer hover:text-white" onclick="toggleTrackerSort('date')">Tanggal Sinyal <span id="sortIconDate" class="text-[10px] text-emerald-400 font-mono"></span></th>
+                <th class="py-3 px-3 cursor-pointer hover:text-white" onclick="toggleTrackerSort('date')">Waktu &amp; Tanggal Sinyal <span id="sortIconDate" class="text-[10px] text-emerald-400 font-mono"></span></th>
                 <th class="py-3 px-3 text-right">Harga Beli</th>
                 <th class="py-3 px-3 text-right">SL / TP</th>
                 <th class="py-3 px-3 text-center">Status Simulasi</th>
@@ -1834,6 +1832,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=50.0"></script>
+  <script src="/static/app.js?v=51.0"></script>
 </body>
 </html>
