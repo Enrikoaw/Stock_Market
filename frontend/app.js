@@ -766,7 +766,7 @@ function showToast(msg, type = 'success') {
 // =====================================================================
 async function loadScreenerData(preserveSelection = false) {
   const trigger = document.getElementById('filterTrigger')?.value || 'ALL';
-  const minVol = document.getElementById('filterVolRatio')?.value || '1.0';
+  const minVol = document.getElementById('filterVolRatio')?.value || '0.0';
   const minScore = document.getElementById('filterMinScore')?.value || '0';
   const sortBy = document.getElementById('filterSortBy')?.value || 'score';
   const search = document.getElementById('filterSearch')?.value.trim() || '';
@@ -1524,9 +1524,9 @@ function renderInspectorChart(d) {
           c.restore();
         }
 
-        // Garis Harga Saat Ini (Cukup tampilkan garis yang menunjukkan harga saat itu)
+        // Garis Harga Saat Ini (Ditampilkan di sebelah kiri grafik)
         if (currentPrice && currentPrice > 0) {
-          drawScenarioLine(currentPrice, '#38bdf8', `Harga Saat Ini: Rp ${fmtNumber(currentPrice)}`, true, true);
+          drawScenarioLine(currentPrice, '#38bdf8', `Harga Saat Ini: Rp ${fmtNumber(currentPrice)}`, true, false);
         }
 
         c.restore();
