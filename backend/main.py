@@ -19,6 +19,7 @@ from typing import Literal, Optional
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -386,14 +387,31 @@ async def _background_market_session_worker() -> None:
     """
     print("[MarketWorker] Background Market Session Worker aktif.")
     loop_count = 0
+    last_sync_attempt_ts = 0.0
+    import time
     while True:
         loop_count += 1
         try:
             market_open = is_idx_market_open_now()
             cache_stale = _is_cache_stale()
+            now_ts = time.time()
 
-            if (market_open or cache_stale or loop_count == 1) and not STATE["is_syncing"]:
-                print(f"[MarketWorker] Menjalankan sinkronisasi seluruh saham (cache_stale={cache_stale}, market_open={market_open})...")
+            # Jadwal Sinkronisasi Background Terukur:
+            # - Selama jam bursa aktif (market_open): interval 5 menit (300 detik)
+            # - Di luar jam bursa saat cache tertinggal: coba maksimal 1x tiap 30 menit (1800 detik) agar tidak membebani CPU
+            # - Saat pertama kali server dinyalakan: hanya sync jika file cache belum ada sama sekali
+            should_sync = False
+            if not STATE["is_syncing"]:
+                if market_open and (now_ts - last_sync_attempt_ts >= 300):
+                    should_sync = True
+                elif cache_stale and (now_ts - last_sync_attempt_ts >= 1800):
+                    should_sync = True
+                elif loop_count == 1 and not REAL_CACHE_CSV.exists():
+                    should_sync = True
+
+            if should_sync:
+                print(f"[MarketWorker] Menjalankan sinkronisasi background (market_open={market_open}, cache_stale={cache_stale})...")
+                last_sync_attempt_ts = now_ts
                 STATE["is_syncing"] = True
                 try:
                     await asyncio.to_thread(_run_sync_job_blocking)
@@ -449,6 +467,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 @app.middleware("http")
@@ -513,7 +532,6 @@ def get_screener_data(
         init_default_state()
 
     analysis = STATE["analysis"]
-    sync_tracker_to_analysis(analysis)
     stocks = list(analysis["stocks"])
 
     if trigger and isinstance(trigger, str) and trigger.upper() != "ALL":
@@ -582,7 +600,6 @@ def get_stock_detail(ticker: str) -> dict:
     if STATE["analysis"] is None:
         init_default_state()
 
-    sync_tracker_to_analysis(STATE["analysis"])
     key = ticker.strip().upper()
     details_map = STATE["analysis"]["details"]
     if key not in details_map:
@@ -629,14 +646,14 @@ def _fetch_ticker_candles_blocking(ticker: str, period: str = "6mo") -> list[dic
 async def get_stock_candles(ticker: str, period: str = Query(default="6mo")) -> dict:
     if STATE["analysis"] is None:
         init_default_state()
-    sync_tracker_to_analysis(STATE["analysis"])
 
     key = ticker.strip().upper()
     details_map = STATE["analysis"]["details"]
     detail = details_map.get(key, {})
 
-    candles = await asyncio.to_thread(_fetch_ticker_candles_blocking, key, period)
-    if not candles and detail:
+    # Prioritaskan data histori lokal dari memori/cache (< 1ms) agar UI instan dan tidak membebani network
+    candles = []
+    if detail and detail.get("history") and len(detail["history"]) >= 5:
         candles = [
             {
                 "date": h["date"],
@@ -646,8 +663,10 @@ async def get_stock_candles(ticker: str, period: str = Query(default="6mo")) -> 
                 "close": h["close"],
                 "volume_lot": h.get("volume_lot", 0),
             }
-            for h in detail.get("history", [])
+            for h in detail["history"]
         ]
+    else:
+        candles = await asyncio.to_thread(_fetch_ticker_candles_blocking, key, period)
 
     if candles and detail and detail.get("close"):
         lc = int(round(float(detail["close"])))

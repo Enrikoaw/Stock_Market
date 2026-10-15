@@ -474,7 +474,7 @@ function renderTodayCandidates(stocks) {
 
 function selectStockAndGoToInspector(ticker) {
   switchMainTab('explore');
-  selectStock(ticker, true);
+  selectStock(ticker, true, true);
 }
 
 // =====================================================================
@@ -810,7 +810,7 @@ async function loadScreenerData(preserveSelection = false) {
         preserveSelection && currentStocks.some((s) => s.ticker === selectedTicker)
           ? selectedTicker
           : currentStocks[0].ticker;
-      await selectStock(targetTicker);
+      await selectStock(targetTicker, false, false);
     }
   } catch (err) {
     showToast(`Error: ${err.message}`, 'error');
@@ -1016,7 +1016,7 @@ function renderScreenerTable(stocks) {
       return `
         <tr
           id="row-${s.ticker}"
-          onclick="selectStock('${s.ticker}')"
+          onclick="selectStock('${s.ticker}', true)"
           class="stock-row hover:bg-white/[0.05] transition-colors cursor-pointer ${isSelected ? 'selected-row' : ''}"
         >
           <!-- Ticker & Logo & Star -->
@@ -1083,7 +1083,7 @@ function renderScreenerTable(stocks) {
 // =====================================================================
 // INSPECTOR PANEL & DETAIL SAHAM
 // =====================================================================
-async function selectStock(ticker, scrollToTradingPlan = false) {
+async function selectStock(ticker, isUserClick = false, scrollToTradingPlan = false) {
   selectedTicker = ticker;
 
   document.querySelectorAll('.stock-row').forEach((el) => el.classList.remove('selected-row'));
@@ -1107,8 +1107,8 @@ async function selectStock(ticker, scrollToTradingPlan = false) {
           }, 2000);
         }
       }, 100);
-    } else if (window.innerWidth < 1280) {
-      // Pada layar mobile/tablet, otomatis gulir halus ke Inspector agar detail langsung terlihat
+    } else if (isUserClick && window.innerWidth < 1280) {
+      // Pada layar mobile/tablet, otomatis gulir halus ke Inspector HANYA jika pengguna sengaja mengklik saham
       setTimeout(() => {
         const inspector = document.getElementById('inspectorPanel');
         if (inspector) {

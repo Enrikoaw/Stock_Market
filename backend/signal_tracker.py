@@ -223,8 +223,17 @@ class SignalTracker:
     def _make_engine(url: str):
         kwargs: dict[str, Any] = {"pool_pre_ping": True}
         if url.startswith("sqlite"):
-            kwargs["connect_args"] = {"check_same_thread": False}
-        return create_engine(url, **kwargs)
+            kwargs["connect_args"] = {"check_same_thread": False, "timeout": 15}
+        eng = create_engine(url, **kwargs)
+        if url.startswith("sqlite"):
+            try:
+                with eng.begin() as conn:
+                    conn.exec_driver_sql("PRAGMA journal_mode = WAL;")
+                    conn.exec_driver_sql("PRAGMA synchronous = NORMAL;")
+                    conn.exec_driver_sql("PRAGMA busy_timeout = 10000;")
+            except Exception:
+                pass
+        return eng
 
     def config(self) -> dict:
         return {

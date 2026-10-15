@@ -68,12 +68,21 @@ class PortfolioTracker:
         if not url:
             url = f"sqlite:///{sqlite_path.as_posix()}"
 
+        kwargs: dict[str, Any] = {"pool_pre_ping": True}
+        if url.startswith("sqlite"):
+            kwargs["connect_args"] = {"check_same_thread": False, "timeout": 15}
+
         try:
-            self.engine = create_engine(url, pool_pre_ping=True)
+            self.engine = create_engine(url, **kwargs)
+            if url.startswith("sqlite"):
+                with self.engine.begin() as conn:
+                    conn.exec_driver_sql("PRAGMA journal_mode = WAL;")
+                    conn.exec_driver_sql("PRAGMA synchronous = NORMAL;")
+                    conn.exec_driver_sql("PRAGMA busy_timeout = 10000;")
             portfolio_metadata.create_all(self.engine)
         except Exception:
             url = f"sqlite:///{sqlite_path.as_posix()}"
-            self.engine = create_engine(url, pool_pre_ping=True)
+            self.engine = create_engine(url, **kwargs)
             portfolio_metadata.create_all(self.engine)
 
     def add_trade(
