@@ -60,8 +60,8 @@ USER_EXCEL_DIR = BASE_DIR / "data" / "user_excel"
 REAL_CACHE_CSV = BASE_DIR / "data" / "real_idx_market_latest.csv"
 MASTER_UPLOADED_CSV = BASE_DIR / "data" / "master_uploaded_tickers.csv"
 
-# Interval Auto-Sync dalam detik (default: setiap 30 menit = 1800 detik)
-AUTO_SYNC_INTERVAL_SECONDS = int(os.environ.get("AUTO_SYNC_INTERVAL", "1800"))
+# Interval Auto-Sync dalam detik (default: setiap 15 menit = 900 detik)
+AUTO_SYNC_INTERVAL_SECONDS = int(os.environ.get("AUTO_SYNC_INTERVAL", "900"))
 
 STATE: dict = {
     "source_name": "Daftar Saham IDX - REAL Market Data",
@@ -399,12 +399,12 @@ async def _background_market_session_worker() -> None:
             now_ts = time.time()
 
             # Jadwal Sinkronisasi Background Terukur:
-            # - Selama jam bursa aktif (market_open): interval 5 menit (300 detik)
-            # - Di luar jam bursa saat cache tertinggal: coba maksimal 1x tiap 30 menit (1800 detik) agar tidak membebani CPU
+            # - Selama jam bursa aktif (market_open): interval 15 menit (900 detik) sesuai rencana awal
+            # - Di luar jam bursa saat cache tertinggal: coba maksimal 1x tiap 30 menit (1800 detik) agar tidak membebani CPU/IP
             # - Saat pertama kali server dinyalakan: hanya sync jika file cache belum ada sama sekali
             should_sync = False
             if not STATE["is_syncing"]:
-                if market_open and (now_ts - last_sync_attempt_ts >= 300):
+                if market_open and (now_ts - last_sync_attempt_ts >= 900):
                     should_sync = True
                 elif cache_stale and (now_ts - last_sync_attempt_ts >= 1800):
                     should_sync = True
