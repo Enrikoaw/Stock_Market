@@ -274,7 +274,7 @@ def _run_sync_job_blocking() -> dict:
     else:
         tickers_df = generate_900_idx_master_tickers_df()
 
-    real_df = fetch_real_idx_market_data(tickers_df, output_csv_path=REAL_CACHE_CSV, period="auto", max_workers=4)
+    real_df = fetch_real_idx_market_data(tickers_df, output_csv_path=REAL_CACHE_CSV, period="auto", max_workers=2)
     real_df["Has_Broker_Summary"] = True
     analysis = analyze_smart_money_dataframe(real_df)
     del real_df
@@ -692,26 +692,41 @@ async def get_stock_candles(ticker: str, period: str = Query(default="6mo")) -> 
 @app.post("/api/sync-live")
 @app.post("/api/sync-fast")
 async def sync_unified_market_data() -> dict:
-    """Satu jalur sinkronisasi: mengambil pembaruan seluruh 844 saham secara paralel
-    (mode incremental 5 hari agar cepat), menghitung ulang indikator semua saham,
-    mengevaluasi status Watchlist/Running, dan langsung merespon dengan data baru."""
+    """Satu jalur sinkronisasi non-blocking: langsung merespon ke frontend agar koneksi HTTP
+    tidak tertutup timeout (ERR_CONNECTION_CLOSED), sementara proses unduh & kalkulasi 844 saham
+    berjalan aman di background thread."""
     if STATE["is_syncing"]:
         return {
             "status": "already_running",
-            "message": "Sinkronisasi seluruh saham sedang berjalan...",
+            "message": "Sinkronisasi seluruh saham sedang berlangsung di background...",
+            "is_syncing": True,
             "source_name": STATE["source_name"],
             "last_sync_time": STATE["last_sync_time"],
             "kpis": STATE["analysis"]["kpis"] if STATE["analysis"] else {},
             "stocks": STATE["analysis"]["stocks"] if STATE["analysis"] else [],
         }
-    STATE["is_syncing"] = True
-    try:
-        res = await asyncio.to_thread(_run_sync_job_blocking)
-        return res
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Gagal sinkronisasi data bursa: {exc}") from exc
-    finally:
-        STATE["is_syncing"] = False
+
+    async def _async_sync_runner():
+        STATE["is_syncing"] = True
+        try:
+            print("[SyncAPI] Memulai proses sinkronisasi background aman...")
+            await asyncio.to_thread(_run_sync_job_blocking)
+            print("[SyncAPI] Sinkronisasi background selesai dengan sukses.")
+        except Exception as exc:
+            print(f"[SyncAPI] Error sinkronisasi background: {exc}")
+        finally:
+            STATE["is_syncing"] = False
+
+    asyncio.create_task(_async_sync_runner())
+    return {
+        "status": "started",
+        "message": "Sinkronisasi 844 saham telah dimulai di server...",
+        "is_syncing": True,
+        "source_name": STATE["source_name"],
+        "last_sync_time": STATE["last_sync_time"],
+        "kpis": STATE["analysis"]["kpis"] if STATE["analysis"] else {},
+        "stocks": STATE["analysis"]["stocks"] if STATE["analysis"] else [],
+    }
 
 
 @app.get("/api/backtest/summary")

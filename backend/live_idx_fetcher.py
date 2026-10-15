@@ -28,7 +28,7 @@ def _download_batch_safe(yf_symbols: list[str], period: str) -> pd.DataFrame | N
                 period=period,
                 interval="1d",
                 group_by="ticker",
-                threads=True,
+                threads=False,
                 progress=False,
                 auto_adjust=False,
             )
@@ -51,7 +51,7 @@ def _download_batch_safe(yf_symbols: list[str], period: str) -> pd.DataFrame | N
                     period=period,
                     interval="1d",
                     group_by="ticker",
-                    threads=True,
+                    threads=False,
                     progress=False,
                     auto_adjust=False,
                 )

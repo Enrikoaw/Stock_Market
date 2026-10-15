@@ -1882,14 +1882,32 @@ async function triggerUnifiedSync() {
     modalBtn.textContent = '⏳ Memperbarui 844 Saham...';
   }
 
-  showToast('🔄 Menarik pembaruan seluruh 844 saham IDX secara paralel...', 'info');
+  showToast('🔄 Memulai pembaruan data bursa seluruh 844 saham IDX...', 'info');
 
   try {
     const res = await fetch('/api/sync', { method: 'POST', cache: 'no-store' });
+    if (!res.ok) throw new Error('Gagal menghubungi server untuk sinkronisasi');
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Gagal sinkronisasi data bursa');
 
-    showToast(data.message || '✅ Sinkronisasi seluruh saham IDX selesai!', 'success');
+    // Polling status background sync secara berkala hingga server selesai mengolah data
+    showToast('⏳ Server sedang mengunduh & menganalisis 844 saham di background...', 'info');
+    let attempts = 0;
+    while (attempts < 60) {
+      await new Promise((r) => setTimeout(r, 2500));
+      attempts++;
+      try {
+        const checkRes = await fetch(`/api/screener?min_vol_ratio=0.0&_t=${Date.now()}`, { cache: 'no-store' });
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (!checkData.is_syncing) {
+            showToast('✅ Sinkronisasi seluruh saham IDX selesai!', 'success');
+            await Promise.all([loadScreenerData(true), loadTracker()]);
+            return;
+          }
+        }
+      } catch (_) {}
+    }
+    // Jika waktu polling tercapai, muat data terbaru
     await Promise.all([loadScreenerData(true), loadTracker()]);
   } catch (err) {
     showToast(`Error sync: ${err.message}`, 'error');
