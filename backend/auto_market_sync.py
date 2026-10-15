@@ -14,13 +14,21 @@ from pathlib import Path
 import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
+BACKEND_DIR = Path(__file__).resolve().parent
+for p in (str(BASE_DIR), str(BACKEND_DIR)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-from backend.excel_generator import generate_900_idx_master_tickers_df
-from backend.live_idx_fetcher import fetch_real_idx_market_data
-from backend.screener_engine import analyze_smart_money_dataframe
-from backend.signal_tracker import SignalTracker
+try:
+    from backend.excel_generator import generate_900_idx_master_tickers_df
+    from backend.live_idx_fetcher import fetch_real_idx_market_data
+    from backend.screener_engine import analyze_smart_money_dataframe
+    from backend.signal_tracker import SignalTracker
+except ImportError:
+    from excel_generator import generate_900_idx_master_tickers_df
+    from live_idx_fetcher import fetch_real_idx_market_data
+    from screener_engine import analyze_smart_money_dataframe
+    from signal_tracker import SignalTracker
 
 DATA_DIR = BASE_DIR / "data"
 # Disamakan dengan backend/main.py agar daftar saham yang dipantau identik

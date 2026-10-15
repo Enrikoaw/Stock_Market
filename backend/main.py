@@ -26,8 +26,10 @@ from pydantic import BaseModel
 
 # Pastikan direktori backend masuk ke sys.path baik dijalankan dari root maupun folder backend/
 BACKEND_DIR = Path(__file__).resolve().parent
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
+BASE_DIR = BACKEND_DIR.parent
+for p in (str(BASE_DIR), str(BACKEND_DIR)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 from excel_generator import (
     build_excel_bytes,
@@ -740,7 +742,10 @@ def get_backtest_summary() -> dict:
                 return json.load(f)
         if REAL_CACHE_CSV.exists():
             df_cache = pd.read_csv(REAL_CACHE_CSV)
-            from backend.backtest_engine import run_historical_backtest
+            try:
+                from backend.backtest_engine import run_historical_backtest
+            except ImportError:
+                from backtest_engine import run_historical_backtest
             return run_historical_backtest(df_cache)
         return {"error": "Cache data pasar belum tersedia."}
     except Exception as exc:

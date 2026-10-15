@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=57.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=58.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -470,6 +470,14 @@
               <option value="60" class="bg-slate-900 text-white">Skor &ge; 60 (Cukup)</option>
               <option value="70" class="bg-slate-900 text-white">Skor &ge; 70 (Kuat)</option>
               <option value="80" class="bg-slate-900 text-white">Skor &ge; 80 (Sangat Kuat)</option>
+            </select>
+
+            <!-- Volume Ratio Filter -->
+            <select id="filterVolRatio" class="px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
+              <option value="0.0" class="bg-slate-900 text-white">Volume: Semua</option>
+              <option value="1.2" class="bg-slate-900 text-white">Vol &ge; 1.2x MA20</option>
+              <option value="1.5" class="bg-slate-900 text-white">Vol &ge; 1.5x (Spike)</option>
+              <option value="2.0" class="bg-slate-900 text-white">Vol &ge; 2.0x (Ledakan)</option>
             </select>
 
             <!-- Sort By Selector -->
@@ -1832,6 +1840,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=57.0"></script>
+  <script src="/static/app.js?v=58.0"></script>
 </body>
 </html>

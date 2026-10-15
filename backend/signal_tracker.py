@@ -111,15 +111,19 @@ def _resolve_db_url(sqlite_path: Path) -> str:
     if not url:
         return f"sqlite:///{sqlite_path.as_posix()}"
     if url.startswith("postgres://"):
-        return "postgresql+psycopg://" + url[len("postgres://"):]
+        url = "postgresql://" + url[len("postgres://"):]
     if url.startswith("postgresql://"):
-        return "postgresql+psycopg://" + url[len("postgresql://"):]
+        try:
+            import psycopg  # noqa: F401
+            return "postgresql+psycopg://" + url[len("postgresql://"):]
+        except ImportError:
+            return url
     return url
 
 
 class SignalTracker:
     def __init__(self, sqlite_path: Path | str) -> None:
-        self.min_score = int(os.environ.get("TRACKER_MIN_SCORE", "78"))
+        self.min_score = int(os.environ.get("TRACKER_MIN_SCORE", "70"))
         self.tp_level = 2 if os.environ.get("TRACKER_TP_LEVEL", "1").strip() == "2" else 1
         self.entry_expiry_days = int(os.environ.get("TRACKER_ENTRY_EXPIRY_DAYS", "3"))
         self.max_hold_days = int(os.environ.get("TRACKER_MAX_HOLD_DAYS", "5"))
@@ -148,7 +152,10 @@ class SignalTracker:
 
     def sync_targets_quick_profit(self) -> int:
         """Menyesuaikan target price posisi aktif (WATCHLIST & RUNNING) ke formula Quick Profit TP1 (+4%) dan TP2 (+7%)."""
-        from backend.screener_engine import _round_idx_tick
+        try:
+            from backend.screener_engine import _round_idx_tick
+        except ImportError:
+            from screener_engine import _round_idx_tick
         updated = 0
         with self._lock, self.engine.begin() as conn:
             rows = conn.execute(
@@ -458,7 +465,7 @@ class SignalTracker:
         try:
             import yfinance as yf
             symbols = [f"{t}.JK" for t in combined_tickers]
-            raw = yf.download(symbols, period="5d", progress=False, auto_adjust=False, threads=True)
+            raw = yf.download(symbols, period="5d", group_by="ticker", progress=False, auto_adjust=False, threads=True)
             if raw is None or raw.empty:
                 return {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "tickers_checked": 0}
 
@@ -469,14 +476,17 @@ class SignalTracker:
                 sym = f"{ticker}.JK"
                 try:
                     if is_multi:
-                        if sym in raw.columns.get_level_values(1):
+                        if sym in raw.columns.get_level_values(0):
+                            sub = raw[sym].copy()
+                        elif sym in raw.columns.get_level_values(1):
                             sub = raw.xs(sym, level=1, axis=1).copy()
-                        elif sym in raw.columns.get_level_values(0):
-                            sub = raw.xs(sym, level=0, axis=1).copy()
                         else:
                             continue
                     else:
-                        sub = raw.copy()
+                        if len(combined_tickers) == 1:
+                            sub = raw.copy()
+                        else:
+                            continue
 
                     sub = sub.dropna(subset=["Close"]).copy()
                     if sub.empty:

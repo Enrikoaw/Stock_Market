@@ -55,6 +55,21 @@ def _now_str() -> str:
     return datetime.now(WIB).strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _resolve_db_url(sqlite_path: Path) -> str:
+    url = os.environ.get("DATABASE_URL", "").strip()
+    if not url:
+        return f"sqlite:///{sqlite_path.as_posix()}"
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        try:
+            import psycopg  # noqa: F401
+            return "postgresql+psycopg://" + url[len("postgresql://"):]
+        except ImportError:
+            return url
+    return url
+
+
 class PortfolioTracker:
     def __init__(self, sqlite_path: Path | str) -> None:
         self._lock = threading.RLock()
@@ -62,11 +77,7 @@ class PortfolioTracker:
             sqlite_path = Path(sqlite_path)
         sqlite_path.parent.mkdir(parents=True, exist_ok=True)
 
-        url = os.environ.get("DATABASE_URL")
-        if url and url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql://", 1)
-        if not url:
-            url = f"sqlite:///{sqlite_path.as_posix()}"
+        url = _resolve_db_url(sqlite_path)
 
         kwargs: dict[str, Any] = {"pool_pre_ping": True}
         if url.startswith("sqlite"):

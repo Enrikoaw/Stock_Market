@@ -18,12 +18,19 @@ import pandas as pd
 
 # Pastikan root workspace terdaftar di sys.path
 BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
+BACKEND_DIR = Path(__file__).resolve().parent
+for p in (str(BASE_DIR), str(BACKEND_DIR)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-from backend.live_idx_fetcher import fetch_real_idx_market_data
-from backend.screener_engine import compute_quantitative_dataframe
-from backend.backtest_engine import run_historical_backtest
+try:
+    from backend.live_idx_fetcher import fetch_real_idx_market_data
+    from backend.screener_engine import compute_quantitative_dataframe
+    from backend.backtest_engine import run_historical_backtest
+except ImportError:
+    from live_idx_fetcher import fetch_real_idx_market_data
+    from screener_engine import compute_quantitative_dataframe
+    from backtest_engine import run_historical_backtest
 
 
 DATA_DIR = BASE_DIR / "data"

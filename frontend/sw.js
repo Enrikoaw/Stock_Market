@@ -1,10 +1,10 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'smartflow-idx-v57';
+const CACHE_NAME = 'smartflow-idx-v58';
 const ASSETS_TO_CACHE = [
   '/',
   '/static/styles.css',
   '/static/app.js',
-  '/static/manifest.json',
+  '/manifest.json',
   '/static/icons/icon.svg',
   '/static/icons/icon-192.svg',
   '/static/icons/icon-512.svg'
@@ -42,8 +42,8 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // Jika request ke /static/ atau root HTML, gunakan network-first dengan cache fallback
-  if (url.pathname.startsWith('/static/') || url.pathname === '/') {
+  // Jika request ke /static/, root HTML, atau /manifest.json, gunakan network-first dengan cache fallback
+  if (url.pathname.startsWith('/static/') || url.pathname === '/' || url.pathname === '/manifest.json') {
     event.respondWith(
       fetch(event.request)
         .then((response) => {

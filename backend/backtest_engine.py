@@ -19,10 +19,15 @@ import pandas as pd
 
 # Pastikan root workspace terdaftar di sys.path
 BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
+BACKEND_DIR = Path(__file__).resolve().parent
+for p in (str(BASE_DIR), str(BACKEND_DIR)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-from backend.screener_engine import compute_quantitative_dataframe, _round_idx_tick
+try:
+    from backend.screener_engine import compute_quantitative_dataframe, _round_idx_tick
+except ImportError:
+    from screener_engine import compute_quantitative_dataframe, _round_idx_tick
 
 
 @dataclass
@@ -121,7 +126,7 @@ def run_historical_backtest(
 
             entry_high = close_p
             entry_low = close_p
-            sl_dist = max(int(round(entry_low * 0.025)), min(int(round(entry_low * 0.040)), int(round(1.2 * atr14))))
+            sl_dist = max(int(round(entry_low * 0.035)), min(int(round(entry_low * 0.050)), int(round(1.4 * atr14))))
             stop_loss = _round_idx_tick(entry_low - sl_dist)
             risk = max(1.0, entry_high - stop_loss)
             tp1 = _round_idx_tick(entry_high * 1.04)
@@ -180,12 +185,6 @@ def run_historical_backtest(
 
                 if bar["high"] >= tp2:
                     hit_tp2 = True
-
-                # Trailing Breakeven Stop: jika High mencapai +2.5% dari harga entry
-                if bar["high"] >= entry_price * 1.025:
-                    be_sl = _round_idx_tick(entry_price * 1.004)
-                    if be_sl > stop_loss:
-                        stop_loss = be_sl
 
                 hit_sl = bar["low"] <= stop_loss
                 hit_tp = bar["high"] >= tp1

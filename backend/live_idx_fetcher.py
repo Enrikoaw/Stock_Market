@@ -206,11 +206,14 @@ def fetch_real_idx_market_data(
     clean_df = clean_df[clean_df["Ticker"].str.match(r"^[A-Z]{4}$", na=False)].reset_index(drop=True)
 
     if "Company_Name" in clean_df.columns and "Sector" in clean_df.columns:
-        clean_df["Sector_Label"] = (
-            clean_df["Company_Name"].fillna("").astype(str).str.strip()
-            + " ("
-            + clean_df["Sector"].fillna("IDX").astype(str).str.strip()
-            + ")"
+        comp = clean_df["Company_Name"].fillna("").astype(str).str.strip()
+        sec = clean_df["Sector"].fillna("IDX").astype(str).str.strip()
+        # Hindari penggabungan jika Company_Name adalah placeholder "PT XXXX Indonesia Tbk"
+        is_placeholder = comp.str.match(r"^PT\s+[A-Z0-9]{4}\s+Indonesia\s+Tbk$", na=False)
+        clean_df["Sector_Label"] = np.where(
+            is_placeholder | (comp == "") | (comp == sec),
+            sec,
+            comp + " (" + sec + ")",
         )
     elif "Company_Name" in clean_df.columns:
         clean_df["Sector_Label"] = clean_df["Company_Name"].fillna("IDX Emiten").astype(str).str.strip()
@@ -230,7 +233,7 @@ def fetch_real_idx_market_data(
     )
 
     if period == "auto":
-        download_period = "5d" if (has_existing_cache and not force_full) else "60d"
+        download_period = "5d" if (has_existing_cache and not force_full) else "90d"
     else:
         download_period = period
 
@@ -294,15 +297,17 @@ def fetch_real_idx_market_data(
         try:
             old_cache = pd.read_csv(output_csv_path)
             result_df = pd.concat([old_cache, new_batch_df], ignore_index=True)
+            result_df["Sector"] = result_df["Ticker"].map(sector_map).fillna(result_df["Sector"])
             result_df = result_df.drop_duplicates(subset=["Ticker", "Date"], keep="last")
-            # Batasi riwayat maksimum 90-150 candle per ticker agar stabil untuk MA20, MA50 & ATR14
-            result_df = result_df.groupby("Ticker", group_keys=False).tail(max_tail)
+            # Urutkan berdasarkan Ticker dan Date sebelum tail agar urutan data historis konsisten
             result_df = result_df.sort_values(by=["Ticker", "Date"]).reset_index(drop=True)
+            # Batasi riwayat maksimum 90-150 candle per ticker agar stabil untuk MA20, MA50 & ATR14
+            result_df = result_df.groupby("Ticker", group_keys=False).tail(max_tail).reset_index(drop=True)
             del old_cache
         except Exception:
-            result_df = new_batch_df
+            result_df = new_batch_df.sort_values(by=["Ticker", "Date"]).groupby("Ticker", group_keys=False).tail(max_tail).reset_index(drop=True)
     else:
-        result_df = new_batch_df.groupby("Ticker", group_keys=False).tail(max_tail).reset_index(drop=True)
+        result_df = new_batch_df.sort_values(by=["Ticker", "Date"]).groupby("Ticker", group_keys=False).tail(max_tail).reset_index(drop=True)
 
     del new_batch_df
     gc.collect()
