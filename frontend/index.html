@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=52.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=57.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -31,6 +31,16 @@
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.07);
       box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+    }
+    html.light .glass-panel {
+      background: #ffffff !important;
+      border: 1px solid #e2e8f0 !important;
+      box-shadow: 0 2px 12px -2px rgba(15, 23, 42, 0.06) !important;
+    }
+    html.light .glass-subcard {
+      background: #f8fafc !important;
+      border: 1px solid #e2e8f0 !important;
+      box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04) !important;
     }
   </style>
   <script>
@@ -552,12 +562,12 @@
           </div>
 
           <!-- Total Score Badge -->
-          <div class="flex items-center justify-between p-3 rounded-xl glass-subcard">
+          <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-800/60 dark:border-white/[0.06] shadow-sm dark:shadow-none">
             <div>
-              <span class="text-xs font-bold text-white">Skor Kekuatan Kuantitatif</span>
-              <p class="text-[11px] text-slate-300">Berdasarkan 5 pilar volume &amp; struktur harga</p>
+              <span class="text-xs font-bold text-slate-900 dark:text-white">Skor Kekuatan Kuantitatif</span>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400">Berdasarkan 5 pilar volume &amp; struktur harga</p>
             </div>
-            <span id="inspTotalScoreBadge" class="text-sm font-extrabold font-mono text-emerald-300 bg-emerald-500/15 px-2.5 py-1 rounded-lg border border-emerald-400/30">
+            <span id="inspTotalScoreBadge" class="text-sm font-extrabold font-mono text-emerald-800 bg-emerald-100 border border-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/15 dark:border-emerald-400/30 px-2.5 py-1 rounded-lg">
               - / 100
             </span>
           </div>
@@ -566,40 +576,40 @@
           <!-- 2. GRAFIK DENGAN GARIS HORIZONTAL AREA MASUK, BATAS RUGI & TARGET -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-white">Grafik Harga &amp; Garis Rencana</span>
-              <div class="flex items-center gap-1 bg-slate-900/60 p-0.5 rounded-lg border border-white/10 text-[11px]">
-                <button id="tabChartPrice" onclick="switchChartTab('price')" class="px-2 py-0.5 rounded text-white font-semibold bg-emerald-600">Candle</button>
-                <button id="tabChartBandar" onclick="switchChartTab('bandar')" class="px-2 py-0.5 rounded text-slate-300">Volume</button>
-                <button id="tabChartScore" onclick="switchChartTab('score')" class="px-2 py-0.5 rounded text-slate-300">Skor</button>
+              <span class="text-xs font-bold text-slate-900 dark:text-white">Grafik Harga &amp; Garis Rencana</span>
+              <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900/60 p-0.5 rounded-lg border border-slate-200 dark:border-white/10 text-[11px]">
+                <button id="tabChartPrice" onclick="switchChartTab('price')" class="px-2 py-0.5 rounded text-white font-semibold bg-emerald-600 shadow-sm">Candle</button>
+                <button id="tabChartBandar" onclick="switchChartTab('bandar')" class="px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">Volume</button>
+                <button id="tabChartScore" onclick="switchChartTab('score')" class="px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">Skor</button>
               </div>
             </div>
 
-            <div class="h-56 w-full rounded-xl glass-subcard p-2 relative">
+            <div class="h-56 w-full rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.06] p-2 relative shadow-sm dark:shadow-none">
               <canvas id="inspectorChart"></canvas>
             </div>
             
             <!-- Legend Garis Grafik -->
-            <div class="flex flex-wrap items-center justify-center gap-4 text-[10px] text-slate-300">
-              <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-sky-400 inline-block"></span> Garis Harga Saat Ini</span>
-              <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-emerald-400 inline-block"></span> MA20 Trendline</span>
+            <div class="flex flex-wrap items-center justify-center gap-4 text-[10px] text-slate-600 dark:text-slate-300">
+              <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-sky-500 dark:bg-sky-400 inline-block"></span> Garis Harga Saat Ini</span>
+              <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-emerald-500 dark:bg-emerald-400 inline-block"></span> MA20 Trendline</span>
             </div>
           </div>
 
           <!-- 3. SKENARIO TERUKUR (BUKAN PERINTAH BELI) & KALKULATOR LOT -->
-          <div id="autoTradingPlanCard" class="p-3.5 rounded-xl glass-subcard border border-white/[0.08] space-y-3">
+          <div id="autoTradingPlanCard" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.08] space-y-3 shadow-sm dark:shadow-none">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5">
-                <span class="text-xs font-bold text-white">Skenario Rencana Terukur</span>
-                <button type="button" class="tip-btn" onclick="openGlossaryModal('scenario')" title="Arti Skenario">ⓘ</button>
+                <span class="text-xs font-bold text-slate-900 dark:text-white">Skenario Rencana Terukur</span>
+                <button type="button" class="tip-btn text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onclick="openGlossaryModal('scenario')" title="Arti Skenario">ⓘ</button>
               </div>
-              <span id="planActionBias" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+              <span id="planActionBias" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50">
                 -
               </span>
             </div>
 
             <!-- Grid Harga Area Masuk, Batas Rugi, Target -->
             <div class="grid grid-cols-3 gap-2 text-center text-xs">
-              <div class="p-2 rounded-lg bg-slate-50 text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
+              <div class="p-2 rounded-lg bg-white text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 shadow-xs">
                 <div id="planEntryLabel" class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Harga Beli</div>
                 <div id="planEntryZone" class="font-mono font-bold text-slate-900 dark:text-white text-[11px] mt-0.5">-</div>
               </div>
@@ -613,9 +623,9 @@
               </div>
             </div>
 
-            <div class="text-[11px] text-slate-300 flex items-center justify-between bg-white/[0.02] p-2 rounded-lg border border-white/5">
-              <span>Target 2 (TP2 +7%): <span id="planTarget2" class="font-mono text-emerald-300 font-semibold">-</span></span>
-              <span id="planRationale" class="text-slate-300 truncate max-w-[180px]">-</span>
+            <div class="text-[11px] text-slate-700 dark:text-slate-300 flex items-center justify-between bg-white border border-slate-200 dark:bg-white/[0.02] dark:border-white/5 p-2 rounded-lg shadow-xs dark:shadow-none">
+              <span>Target 2 (TP2 +7%): <span id="planTarget2" class="font-mono text-emerald-700 dark:text-emerald-300 font-semibold">-</span></span>
+              <span id="planRationale" class="text-slate-600 dark:text-slate-300 truncate max-w-[180px]">-</span>
             </div>
 
             <!-- Tombol Aksi: Masuk Watchlist Tracker & Hitung Lot -->
@@ -653,11 +663,11 @@
           <!-- 4. RINCIAN 5 PILAR KUANTITATIF (Mode Mahir atau Ekspansi) -->
           <div id="expertPillarsContainer" class="space-y-2 pt-1">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-white">5 Pilar Metodologi Kuantitatif</span>
+              <span class="text-xs font-bold text-slate-900 dark:text-white">5 Pilar Metodologi Kuantitatif</span>
               <button
                 onclick="toggleExpertPillarsView()"
                 id="btnTogglePillars"
-                class="text-[11px] text-emerald-400 hover:underline font-medium"
+                class="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline font-medium"
               >
                 Tampilkan Rincian
               </button>
@@ -665,44 +675,44 @@
 
             <div id="expertPillarsContent" class="hidden space-y-2">
               <div class="space-y-1.5 text-xs" id="pScoresList">
-                <div class="flex items-center justify-between text-slate-300 text-[11px]">
+                <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px]">
                   <span>P1: Volume Spike &amp; VSA</span>
-                  <span id="p1Score" class="font-mono text-white font-bold">-</span>
+                  <span id="p1Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
                 </div>
-                <div class="w-full bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
-                  <div id="p1Bar" class="h-full bg-emerald-400" style="width: 0%"></div>
+                <div class="w-full bg-slate-200 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
+                  <div id="p1Bar" class="h-full bg-emerald-500 dark:bg-emerald-400" style="width: 0%"></div>
                 </div>
 
-                <div class="flex items-center justify-between text-slate-300 text-[11px] pt-1">
+                <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
                   <span>P2: Tren &amp; Struktur MA20/MA50</span>
-                  <span id="p2Score" class="font-mono text-white font-bold">-</span>
+                  <span id="p2Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
                 </div>
-                <div class="w-full bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
-                  <div id="p2Bar" class="h-full bg-teal-400" style="width: 0%"></div>
+                <div class="w-full bg-slate-200 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
+                  <div id="p2Bar" class="h-full bg-teal-500 dark:bg-teal-400" style="width: 0%"></div>
                 </div>
 
-                <div class="flex items-center justify-between text-slate-300 text-[11px] pt-1">
+                <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
                   <span>P3: Kompresi Volatilitas (Squeeze)</span>
-                  <span id="p3Score" class="font-mono text-white font-bold">-</span>
+                  <span id="p3Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
                 </div>
-                <div class="w-full bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
-                  <div id="p3Bar" class="h-full bg-blue-400" style="width: 0%"></div>
+                <div class="w-full bg-slate-200 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
+                  <div id="p3Bar" class="h-full bg-blue-500 dark:bg-blue-400" style="width: 0%"></div>
                 </div>
 
-                <div class="flex items-center justify-between text-slate-300 text-[11px] pt-1">
+                <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
                   <span>P4: Likuiditas &amp; Turnover Riil</span>
-                  <span id="p4Score" class="font-mono text-white font-bold">-</span>
+                  <span id="p4Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
                 </div>
-                <div class="w-full bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
-                  <div id="p4Bar" class="h-full bg-purple-400" style="width: 0%"></div>
+                <div class="w-full bg-slate-200 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
+                  <div id="p4Bar" class="h-full bg-purple-500 dark:bg-purple-400" style="width: 0%"></div>
                 </div>
 
-                <div class="flex items-center justify-between text-slate-300 text-[11px] pt-1">
+                <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
                   <span>P5: Posisi Harga vs 5-Day VWAP</span>
-                  <span id="p5Score" class="font-mono text-white font-bold">-</span>
+                  <span id="p5Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
                 </div>
-                <div class="w-full bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
-                  <div id="p5Bar" class="h-full bg-amber-400" style="width: 0%"></div>
+                <div class="w-full bg-slate-200 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
+                  <div id="p5Bar" class="h-full bg-amber-500 dark:bg-amber-400" style="width: 0%"></div>
                 </div>
               </div>
 
@@ -734,21 +744,21 @@
 
       <!-- BAGIAN 1: DAFTAR FAVORIT PRIBADI (BINTANG ★) -->
       <div id="favoritesSection" class="glass-panel rounded-2xl p-4 sm:p-5 space-y-3">
-        <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-white/[0.08] pb-3">
           <div class="flex items-center gap-2">
-            <span class="text-base font-extrabold text-amber-300">⭐</span>
+            <span class="text-base font-extrabold text-amber-500 dark:text-amber-300">⭐</span>
             <div>
-              <h2 class="text-sm sm:text-base font-bold text-white">Daftar Pantauan Favorit Saya</h2>
-              <p class="text-xs text-slate-300">Saham yang Anda tandai bintang ★. Disimpan di peramban Anda tanpa penolakan syarat skor.</p>
+              <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Daftar Pantauan Favorit Saya</h2>
+              <p class="text-xs text-slate-600 dark:text-slate-300">Saham yang Anda tandai bintang ★. Disimpan di peramban Anda tanpa penolakan syarat skor.</p>
             </div>
           </div>
-          <span id="favoritesCountBadge" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-400/30">
+          <span id="favoritesCountBadge" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/30">
             0 Saham
           </span>
         </div>
 
         <div id="favoritesContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div class="col-span-full py-6 text-center text-xs text-slate-400">
+          <div class="col-span-full py-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.08] rounded-xl p-6 shadow-sm dark:shadow-none">
             Belum ada saham favorit. Klik tanda bintang (★) pada kartu atau tabel saham untuk menyimpannya ke sini.
           </div>
         </div>
@@ -756,11 +766,11 @@
 
       <!-- SUB-TAB SAKLAR: PAPER TRACKER vs PORTOFOLIO RIIL -->
       <div class="flex items-center justify-between flex-wrap gap-2 pt-1">
-        <div class="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/80 border border-white/10">
+        <div class="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 border border-slate-200 dark:bg-slate-900/80 dark:border-white/10 shadow-xs dark:shadow-none">
           <button
             id="subTabBtnPaper"
             onclick="switchPantauanSubTab('paper')"
-            class="px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
+            class="px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm"
           >
             <span>🔬</span>
             <span>Paper Tracker (Forward-Test)</span>
@@ -768,7 +778,7 @@
           <button
             id="subTabBtnPortfolio"
             onclick="switchPantauanSubTab('portfolio')"
-            class="px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 text-slate-400 hover:text-white"
+            class="px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
           >
             <span>💼</span>
             <span>Portofolio Riil (Jurnal Saya)</span>
@@ -1822,6 +1832,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=56.0"></script>
+  <script src="/static/app.js?v=57.0"></script>
 </body>
 </html>
