@@ -378,7 +378,12 @@ function renderTodayCandidates(stocks) {
     // Tingkat Risiko / Status Pantauan
     let statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">Risiko Rendah</span>';
     if (s.tracker_status === 'RUNNING') {
-      statusPill = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/35">🚀 Posisi Aktif (${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%)</span>`;
+      const isLoss = (s.tracker_pnl_pct || 0) < 0;
+      const pnlColor = isLoss
+        ? 'bg-rose-500/20 text-rose-300 border-rose-400/40 shadow-sm shadow-rose-500/20'
+        : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/35';
+      const icon = isLoss ? '🔻' : '🚀';
+      statusPill = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md ${pnlColor} border">${icon} Posisi Aktif (${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%)</span>`;
     } else if (s.tracker_status === 'WATCHLIST') {
       statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-400/30">⏳ Menunggu Entry</span>';
     } else if (s.vol_ratio > 2.5 || s.pct_change > 4.5) {
@@ -1052,7 +1057,7 @@ function renderScreenerTable(stocks) {
             <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-amber-500/15 text-amber-300 border border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
               ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
             </span>
-            ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-amber-300 mt-1 font-mono bg-amber-500/10 px-1 py-0.5 rounded border border-amber-400/25">🏆 WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? `<span class="block text-[9px] font-bold text-emerald-300 mt-1 font-mono bg-emerald-500/10 px-1 py-0.5 rounded border border-emerald-400/25">🚀 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-300 mt-1 font-mono bg-blue-500/10 px-1 py-0.5 rounded border border-blue-400/25">⏳ WATCHLIST</span>' : ''}
+            ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-amber-300 mt-1 font-mono bg-amber-500/10 px-1 py-0.5 rounded border border-amber-400/25">🏆 WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? ((s.tracker_pnl_pct || 0) < 0 ? `<span class="block text-[9px] font-bold text-rose-300 mt-1 font-mono bg-rose-500/15 px-1 py-0.5 rounded border border-rose-400/35">🔻 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : `<span class="block text-[9px] font-bold text-emerald-300 mt-1 font-mono bg-emerald-500/10 px-1 py-0.5 rounded border border-emerald-400/25">🚀 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>`) : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-300 mt-1 font-mono bg-blue-500/10 px-1 py-0.5 rounded border border-blue-400/25">⏳ WATCHLIST</span>' : ''}
           </td>
 
           <!-- Smart Money Score with Progress Bar -->
@@ -1185,7 +1190,12 @@ function renderInspectorPanel(d) {
       if (trackerSt === 'WIN') {
         biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.25)]';
       } else if (trackerSt === 'RUNNING') {
-        biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/35 shadow-[0_0_12px_rgba(16,185,129,0.25)]';
+        const isLoss = (plan.pnl_pct || 0) < 0;
+        if (isLoss) {
+          biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-400/35 shadow-[0_0_12px_rgba(244,63,94,0.25)]';
+        } else {
+          biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/35 shadow-[0_0_12px_rgba(16,185,129,0.25)]';
+        }
       } else if (trackerSt === 'LOSS' || d.trigger_type === 'DISTRIBUTION_WARNING') {
         biasEl.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-400/35 shadow-[0_0_12px_rgba(244,63,94,0.2)]';
       } else {
@@ -1210,7 +1220,9 @@ function renderInspectorPanel(d) {
       if (trackerSt === 'WIN') {
         pez.innerHTML = `<span class="text-amber-300 font-bold">${fmtPrice(targetBuy)}</span>`;
       } else if (trackerSt === 'RUNNING') {
-        pez.innerHTML = `<span class="text-emerald-300 font-bold">${fmtPrice(targetBuy)}</span>`;
+        const isLoss = (plan.pnl_pct || 0) < 0;
+        const col = isLoss ? 'text-rose-300' : 'text-emerald-300';
+        pez.innerHTML = `<span class="${col} font-bold">${fmtPrice(targetBuy)}</span>`;
       } else {
         pez.innerHTML = `<span class="text-white font-bold">${fmtPrice(targetBuy)}</span>`;
       }
@@ -1246,6 +1258,7 @@ function renderInspectorPanel(d) {
         btnWatch.onclick = () => switchMainTab('watchlist');
         btnWatch.title = 'Sinyal telah mencapai Target 1 di Pantauan (Klik untuk melihat)';
       } else if (trackerSt === 'RUNNING') {
+        const isLoss = (plan.pnl_pct || 0) < 0;
         btnWatch.innerHTML = `
           <span class="neon-icon-badge">
             <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1254,7 +1267,9 @@ function renderInspectorPanel(d) {
           </span>
           <span>Posisi Aktif (${(plan.pnl_pct || 0) >= 0 ? '+' : ''}${plan.pnl_pct || 0}%)</span>
         `;
-        btnWatch.className = 'liquid-glass-btn neon-emerald active py-2 px-3 justify-center active:scale-95 w-full';
+        btnWatch.className = isLoss
+          ? 'liquid-glass-btn neon-rose active py-2 px-3 justify-center active:scale-95 w-full'
+          : 'liquid-glass-btn neon-emerald active py-2 px-3 justify-center active:scale-95 w-full';
         btnWatch.onclick = () => switchMainTab('watchlist');
         btnWatch.title = 'Saham sedang dalam posisi berjalan di Pantauan (Klik untuk melihat)';
       } else if (trackerSt === 'WATCHLIST') {
@@ -2188,7 +2203,14 @@ function renderTrackerTable(rows) {
 
   tbody.innerHTML = rows
     .map((r) => {
-      const statusCls = TRACKER_STATUS_STYLE[r.status] || TRACKER_STATUS_STYLE.EXPIRED;
+      const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' || r.status === 'CANCELLED' ? null : r.pnl_pct;
+      const isRunningLoss = r.status === 'RUNNING' && pnl !== null && pnl < 0;
+
+      let statusCls = TRACKER_STATUS_STYLE[r.status] || TRACKER_STATUS_STYLE.EXPIRED;
+      if (isRunningLoss) {
+        statusCls = 'bg-rose-500/25 text-rose-300 border-rose-400/60 shadow-sm shadow-rose-500/25';
+      }
+
       const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT', 'CANCELLED'].includes(r.status);
       const exitOrLast = isClosed && r.exit_price
         ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-400">${r.exit_date || ''}</div>`
@@ -2198,7 +2220,6 @@ function renderTrackerTable(rows) {
         : r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined
         ? `<span class="text-slate-400">-</span><div class="text-[10px] text-blue-300">jarak ${fmtPctOrDash(r.dist_to_entry_pct)}</div>`
         : '<span class="text-slate-400">-</span>';
-      const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' || r.status === 'CANCELLED' ? null : r.pnl_pct;
 
       let isHighFlyer = false;
       if (r.status === 'RUNNING' && pnl !== null && pnl >= 2.0) {
@@ -2210,9 +2231,11 @@ function renderTrackerTable(rows) {
 
       const rowHighlight = hasDistWarning
         ? 'hover:bg-rose-500/10 bg-rose-500/[0.06] border-l-4 border-rose-500 transition-colors'
-        : isHighFlyer
-          ? 'hover:bg-white/[0.06] bg-emerald-500/[0.06] border-l-4 border-emerald-400 transition-colors'
-          : 'hover:bg-white/[0.05] transition-colors';
+        : isRunningLoss
+          ? 'hover:bg-rose-500/10 bg-rose-500/[0.04] border-l-4 border-rose-400/80 transition-colors'
+          : isHighFlyer
+            ? 'hover:bg-white/[0.06] bg-emerald-500/[0.06] border-l-4 border-emerald-400 transition-colors'
+            : 'hover:bg-white/[0.05] transition-colors';
 
       return `
       <tr class="${rowHighlight}">
@@ -2259,7 +2282,7 @@ function renderTrackerTable(rows) {
         <!-- Status Simulasi -->
         <td class="py-3.5 px-3 text-center">
           <span class="inline-block min-w-[82px] text-center px-3.5 py-1 rounded-full border text-xs font-bold tracking-wide ${statusCls}" title="${noteText}">
-            ${r.status === 'RUNNING' ? 'Running' : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : r.status}
+            ${r.status === 'RUNNING' ? (isRunningLoss ? 'Running Loss' : 'Running') : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : r.status}
           </span>
           ${hasDistWarning ? `<div class="mt-1 text-[9px] font-extrabold text-rose-300 bg-rose-500/20 border border-rose-500/40 rounded px-1.5 py-0.5 animate-pulse" title="${noteText}">⚠️ AWAS DISTRIBUSI</div>` : ''}
         </td>

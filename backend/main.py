@@ -131,8 +131,9 @@ def sync_tracker_to_analysis(analysis: dict | None) -> None:
                 plan["action_bias"] = f"🏆 TARGET TERCAPAI (WIN +{pnl}%)"
                 plan["rationale"] = f"Target untung (TP1) telah tercapai (+{pnl}%). Rencana trading selesai (Take Profit)."
             elif st == "RUNNING":
-                pnl = sig.get("pnl_pct", 0)
-                plan["action_bias"] = f"🚀 POSISI AKTIF ({pnl:+.1f}%)"
+                pnl = float(sig.get("pnl_pct", 0) or 0)
+                icon = "🔻" if pnl < 0 else "🚀"
+                plan["action_bias"] = f"{icon} POSISI AKTIF ({pnl:+.1f}%)"
                 plan["rationale"] = f"Posisi beli aktif sejak {sig.get('entry_date', sig.get('signal_date'))} @ Rp {float(sig.get('entry_price', 0)):,.0f}."
             elif st == "WATCHLIST":
                 plan["action_bias"] = "⏳ MENUNGGU ENTRY (WATCHLIST)"
@@ -197,8 +198,9 @@ def sync_tracker_to_analysis(analysis: dict | None) -> None:
                 plan["action_bias"] = f"🏆 TARGET TERCAPAI (WIN +{pnl}%)"
                 plan["rationale"] = f"Target untung (TP1) telah tercapai (+{pnl}%). Rencana trading selesai (Take Profit)."
             elif st == "RUNNING":
-                pnl = sig.get("pnl_pct", 0)
-                plan["action_bias"] = f"🚀 POSISI AKTIF ({pnl:+.1f}%)"
+                pnl = float(sig.get("pnl_pct", 0) or 0)
+                icon = "🔻" if pnl < 0 else "🚀"
+                plan["action_bias"] = f"{icon} POSISI AKTIF ({pnl:+.1f}%)"
                 plan["rationale"] = f"Posisi beli aktif sejak {sig.get('entry_date', sig.get('signal_date'))} @ Rp {float(sig.get('entry_price', 0)):,.0f}."
             elif st == "WATCHLIST":
                 plan["action_bias"] = "⏳ MENUNGGU ENTRY (WATCHLIST)"
