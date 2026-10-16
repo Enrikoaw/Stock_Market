@@ -331,12 +331,16 @@ function renderTodayCandidates(stocks) {
   // 5. Jarak ke modal bandar aman (-1.0% <= diff_bandar_avg_pct <= +3.5%)
   // 6. Penutupan candle kuat (closing_range_pct >= 65%)
   // 7. TIDAK boleh yang sudah WIN atau LOSS di tracker!
-  let candidates = stocks.filter(s =>
+  // 8. Filter Fundamental & Papan Safety (Item 4)
+  // 9. Filter Kualitas Pita Tape Flow (Item 5)
+  const rawCandidates = stocks.filter(s =>
     s.smart_money_score >= 70 &&
     (s.value_b_idr || 0) >= 1.0 &&
     (s.close || 0) >= 70 &&
     !String(s.sector || '').toLowerCase().includes('pemantauan khusus') &&
     !String(s.sector || '').toLowerCase().includes('akselerasi') &&
+    (s.fundamental_safety == null || s.fundamental_safety.is_safe !== false) &&
+    (s.tape_quality == null || s.tape_quality.is_organic !== false) &&
     s.pct_change >= -1.5 &&
     s.pct_change <= 5.5 &&
     (s.diff_bandar_avg_pct == null || (s.diff_bandar_avg_pct >= -1.0 && s.diff_bandar_avg_pct <= 3.5)) &&
@@ -346,21 +350,43 @@ function renderTodayCandidates(stocks) {
     s.tracker_status !== 'LOSS'
   );
 
-  // Fallback jika kriteria terlalu ketat: ambil top berdasarkan skor tertinggi yang bukan distribusi, bukan FCA/Penny, dan belum WIN/LOSS
+  rawCandidates.sort((a, b) => (b.smart_money_score - a.smart_money_score) || ((b.vol_ratio || 0) - (a.vol_ratio || 0)));
+
+  // ITEM 2: Batasan Korelasi Sektor (Maksimal 1 saham per sektor)
+  let candidates = [];
+  const seenSectors = new Set();
+  for (const s of rawCandidates) {
+    const secCat = s.sector_category || s.sector || 'General';
+    if (!seenSectors.has(secCat)) {
+      seenSectors.add(secCat);
+      candidates.push(s);
+    }
+    if (candidates.length >= 6) break;
+  }
+
+  // Fallback jika kriteria terlalu ketat: ambil top berdasarkan skor tertinggi yang lolos fundamental & bukan distribusi
   if (candidates.length < 3) {
-    candidates = stocks
+    const fallbackList = stocks
       .filter(s =>
         (s.close || 0) >= 70 &&
         !String(s.sector || '').toLowerCase().includes('pemantauan khusus') &&
         !String(s.sector || '').toLowerCase().includes('akselerasi') &&
+        (s.fundamental_safety == null || s.fundamental_safety.is_safe !== false) &&
+        (s.tape_quality == null || s.tape_quality.is_organic !== false) &&
         s.trigger_type !== 'DISTRIBUTION_WARNING' &&
         s.tracker_status !== 'WIN' &&
         s.tracker_status !== 'LOSS'
       )
-      .sort((a, b) => b.smart_money_score - a.smart_money_score)
-      .slice(0, 5);
-  } else {
-    candidates = candidates.slice(0, 6);
+      .sort((a, b) => (b.smart_money_score - a.smart_money_score) || ((b.vol_ratio || 0) - (a.vol_ratio || 0)));
+
+    for (const s of fallbackList) {
+      const secCat = s.sector_category || s.sector || 'General';
+      if (!seenSectors.has(secCat)) {
+        seenSectors.add(secCat);
+        candidates.push(s);
+      }
+      if (candidates.length >= 5) break;
+    }
   }
 
   if (candidates.length === 0) {
@@ -394,6 +420,11 @@ function renderTodayCandidates(stocks) {
     const tp1Pct = plan.target_1_pct != null ? plan.target_1_pct : (((target1 - s.close) / s.close) * 100).toFixed(1);
     const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : (((target2 - s.close) / s.close) * 100).toFixed(1);
 
+    // Kualitas Pita (Tape Quality) Badge
+    const tapePill = (s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW')
+      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400" title="${s.tape_quality.reason}">⚠️ ${s.tape_quality.label}</span>`
+      : '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400">Arus Organik</span>';
+
     // Tingkat Risiko / Status Pantauan
     let statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50">Risiko Rendah</span>';
     if (s.tracker_status === 'RUNNING') {
@@ -424,8 +455,9 @@ function renderTodayCandidates(stocks) {
           <div class="flex items-center gap-3">
             ${getStockLogoImg(s.ticker, 'w-10 h-10')}
             <div>
-              <div class="flex items-center gap-1.5">
+              <div class="flex items-center gap-1.5 flex-wrap">
                 <span class="font-mono font-black text-base text-slate-900 dark:text-white">${s.ticker}</span>
+                <span class="text-[10px] font-sans font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">${s.sector_category || 'Sektor'}</span>
                 <button
                   onclick="toggleFavorite('${s.ticker}', event)"
                   class="star-btn star-btn-${s.ticker} text-lg leading-none ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-500 hover:text-amber-300'}"
@@ -444,14 +476,17 @@ function renderTodayCandidates(stocks) {
           </div>
         </div>
 
-        <!-- Kekuatan Smart Money -->
+        <!-- Kekuatan Smart Money & Sinyal -->
         <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-white/[0.04] dark:border-white/[0.06] flex items-center justify-between text-xs">
           <div class="flex items-center gap-1.5">
             <span class="font-mono ${strength.color}">${strength.dots}</span>
             <span class="text-slate-900 dark:text-white font-bold">${strength.label}</span>
             <span class="text-slate-500 dark:text-slate-400 text-[11px]">(Skor ${s.smart_money_score})</span>
           </div>
-          ${statusPill}
+          <div class="flex items-center gap-1.5 flex-wrap justify-end">
+            ${tapePill}
+            ${statusPill}
+          </div>
         </div>
 
         <!-- Rencana Trading Terukur (Entry, SL, TP) -->
@@ -1056,7 +1091,10 @@ function renderScreenerTable(stocks) {
               </button>
               ${getStockLogoImg(s.ticker, 'w-8 h-8')}
               <div>
-                <div class="font-mono font-black text-sm text-white">${s.ticker}</div>
+                <div class="flex items-center gap-1.5">
+                  <div class="font-mono font-black text-sm text-slate-900 dark:text-white">${s.ticker}</div>
+                  ${s.sector_category ? `<span class="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${s.sector_category}</span>` : ''}
+                </div>
                 <div class="text-[10px] text-slate-400 truncate max-w-[120px]">${s.sector}</div>
               </div>
             </div>
@@ -1077,6 +1115,7 @@ function renderScreenerTable(stocks) {
             <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
               ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
             </span>
+            ${s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW' ? `<span class="block text-[8px] font-bold text-amber-800 bg-amber-100 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 mt-0.5 font-mono px-1 py-0.2 rounded" title="${s.tape_quality.reason}">⚠️ ${s.tape_quality.code === 'SUSPICIOUS_CROSSING' ? 'Crossing' : s.tape_quality.code === 'UPTHRUST_DISTRIBUTION' ? 'Upthrust' : 'Thin'}</span>` : ''}
             ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">🏆 WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? ((s.tracker_pnl_pct || 0) < 0 ? `<span class="block text-[9px] font-bold text-rose-800 bg-rose-100 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50 mt-1 font-mono px-1 py-0.5 rounded">🔻 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : `<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">🚀 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>`) : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-800 bg-blue-100 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50 mt-1 font-mono px-1 py-0.5 rounded">⏳ WATCHLIST</span>' : ''}
           </td>
 
@@ -1160,7 +1199,28 @@ function renderInspectorPanel(d) {
   }
 
   const sectorEl = document.getElementById('inspSector');
-  if (sectorEl) sectorEl.textContent = `${d.sector} • Update: ${d.date}`;
+  if (sectorEl) {
+    const secCat = d.sector_category ? `${d.sector_category} • ` : '';
+    sectorEl.textContent = `${secCat}${d.sector} • Update: ${d.date}`;
+  }
+
+  const tapeBadge = document.getElementById('inspTapeBadge');
+  if (tapeBadge) {
+    if (d.tape_quality) {
+      tapeBadge.classList.remove('hidden');
+      tapeBadge.textContent = d.tape_quality.label;
+      if (d.tape_quality.is_organic) {
+        tapeBadge.className = 'text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50';
+      } else if (d.tape_quality.code === 'SUSPICIOUS_CROSSING') {
+        tapeBadge.className = 'text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/50';
+      } else {
+        tapeBadge.className = 'text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50';
+      }
+      tapeBadge.title = d.tape_quality.reason || '';
+    } else {
+      tapeBadge.classList.add('hidden');
+    }
+  }
 
   const priceEl = document.getElementById('inspPrice');
   if (priceEl) priceEl.textContent = fmtPrice(d.close);

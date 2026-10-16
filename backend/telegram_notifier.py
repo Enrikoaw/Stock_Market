@@ -86,12 +86,22 @@ def filter_smart_telegram_picks(
         if trig not in valid_triggers:
             continue
 
+        # Item 4: Verifikasi Fundamental & Papan Bursa (Bukan FCA/Akselerasi, Bukan Penny, Notasi Bersih)
+        fund = s.get("fundamental_safety")
+        if isinstance(fund, dict) and not fund.get("is_safe", True):
+            continue
+
         close_p = float(s.get("close", 0))
         if close_p < 70:
             continue
 
         sec = str(s.get("sector", "")).lower()
         if "pemantauan khusus" in sec or "akselerasi" in sec:
+            continue
+
+        # Item 5: Verifikasi Kualitas Pita (Tolak Crossing Anomali & Upthrust Distribution)
+        tape = s.get("tape_quality")
+        if isinstance(tape, dict) and not tape.get("is_organic", True):
             continue
 
         score = int(s.get("smart_money_score", 0))
@@ -133,7 +143,19 @@ def filter_smart_telegram_picks(
         reverse=True,
     )
 
-    return candidates[:max_picks]
+    # Item 2: Batasan Korelasi Sektor (Maksimal 1 saham per sektor)
+    filtered_picks: list[dict] = []
+    seen_sectors: set[str] = set()
+    for s in candidates:
+        if len(filtered_picks) >= max_picks:
+            break
+        sec_cat = str(s.get("sector_category") or s.get("sector") or "General").strip()
+        if sec_cat in seen_sectors:
+            continue
+        seen_sectors.add(sec_cat)
+        filtered_picks.append(s)
+
+    return filtered_picks
 
 
 def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
@@ -161,6 +183,9 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
     for idx, s in enumerate(picks, start=1):
         ticker = html.escape(str(s.get("ticker", "")))
         sector = html.escape(str(s.get("sector", "IDX Emiten")))
+        sec_cat = html.escape(str(s.get("sector_category", "")))
+        sec_display = f"{sec_cat} • {sector}" if sec_cat and sec_cat not in sector else sector
+        tape_lbl = html.escape(str(s.get("tape_quality", {}).get("label", "Arus Organik") if isinstance(s.get("tape_quality"), dict) else "Arus Organik"))
         close = int(s.get("close", 0))
         pct = float(s.get("pct_change", 0))
         pct_sign = "+" if pct >= 0 else ""
@@ -188,9 +213,9 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
 
         card = (
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>{idx}. #{ticker}</b> ({sector})\n"
+            f"<b>{idx}. #{ticker}</b> ({sec_display})\n"
             f"💰 <b>Harga:</b> Rp {close:,} (<b>{pct_sign}{pct:.2f}%</b>) | <b>VSA Score:</b> {score}/100\n"
-            f"⚡ <b>Sinyal:</b> {trigger_lbl} | <b>Closing Range:</b> {cr}%\n"
+            f"⚡ <b>Sinyal:</b> {trigger_lbl} | <b>Pita:</b> {tape_lbl}\n"
             f"📊 <b>Vol Spike:</b> {vol_ratio:.1f}x MA20 | <b>Nilai Transaksi:</b> Rp {val_b:.2f}M\n\n"
             f"🎯 <b>TRADING PLAN (Take Profit Cepat):</b>\n"
             f"• <b>Harga Beli:</b> <code>Rp {e_high:,}</code>\n"

@@ -188,6 +188,254 @@ RETAIL_BROKERS_POOL = [
 ]
 
 
+# =========================================================================
+# IDX-IC 11 SECTOR TAXONOMY & CLASSIFICATION (ITEM 2: SECTOR CAP)
+# =========================================================================
+
+KNOWN_TICKER_SECTORS: dict[str, str] = {
+    # Keuangan (Financials)
+    "BBCA": "Financials", "BBRI": "Financials", "BMRI": "Financials", "BBNI": "Financials",
+    "BBTN": "Financials", "BDMN": "Financials", "BNGA": "Financials", "BRIS": "Financials",
+    "BTPS": "Financials", "ARTO": "Financials", "PNBN": "Financials", "BNLI": "Financials",
+    "BBHI": "Financials", "BBYB": "Financials", "BCIC": "Financials", "BJBR": "Financials",
+    "BJTM": "Financials", "NOBU": "Financials", "AGRO": "Financials", "AGRS": "Financials",
+    "ADMF": "Financials", "CFIN": "Financials", "BFIN": "Financials", "WOMF": "Financials",
+    "MFIN": "Financials", "TRIM": "Financials", "PANS": "Financials", "ABDA": "Financials",
+    "AHAP": "Financials", "ASDM": "Financials", "LPGI": "Financials", "AMOR": "Financials",
+    # Energi (Energy)
+    "ADRO": "Energy", "PTBA": "Energy", "ITMG": "Energy", "BUMI": "Energy",
+    "MEDC": "Energy", "PGAS": "Energy", "AKRA": "Energy", "INDY": "Energy",
+    "HRUM": "Energy", "ABMM": "Energy", "DOID": "Energy", "ENRG": "Energy",
+    "ELSA": "Energy", "RAJA": "Energy", "AADI": "Energy", "CUAN": "Energy",
+    "DSSA": "Energy", "BSSR": "Energy", "KKGI": "Energy", "TOBA": "Energy",
+    "RMKE": "Energy", "WOWS": "Energy", "APEX": "Energy", "SGER": "Energy",
+    "MCOL": "Energy", "MBAP": "Energy", "GEMS": "Energy", "IATA": "Energy",
+    # Barang Baku (Basic Materials)
+    "ANTM": "Basic Materials", "INCO": "Basic Materials", "BRMS": "Basic Materials",
+    "MDKA": "Basic Materials", "TPIA": "Basic Materials", "INKP": "Basic Materials",
+    "TKIM": "Basic Materials", "SMGR": "Basic Materials", "INTP": "Basic Materials",
+    "AMMN": "Basic Materials", "MBMA": "Basic Materials", "PSAB": "Basic Materials",
+    "NCKL": "Basic Materials", "NICL": "Basic Materials", "DKFT": "Basic Materials",
+    "AVIA": "Basic Materials", "ARCI": "Basic Materials", "TINS": "Basic Materials",
+    "KRAS": "Basic Materials", "CITA": "Basic Materials", "ALDO": "Basic Materials",
+    "BRPT": "Basic Materials", "ESSA": "Basic Materials", "SMBR": "Basic Materials",
+    "WSBP": "Basic Materials", "WTON": "Basic Materials", "BTON": "Basic Materials",
+    "ADMG": "Basic Materials", "FASW": "Basic Materials", "SPMA": "Basic Materials",
+    # Konsumer Primer (Consumer Non-Cyclicals)
+    "ICBP": "Consumer Non-Cyclicals", "INDF": "Consumer Non-Cyclicals", "UNVR": "Consumer Non-Cyclicals",
+    "MYOR": "Consumer Non-Cyclicals", "AMRT": "Consumer Non-Cyclicals", "MIDI": "Consumer Non-Cyclicals",
+    "CPIN": "Consumer Non-Cyclicals", "JPFA": "Consumer Non-Cyclicals", "CMRY": "Consumer Non-Cyclicals",
+    "HMSP": "Consumer Non-Cyclicals", "GGRM": "Consumer Non-Cyclicals", "WIIM": "Consumer Non-Cyclicals",
+    "STAA": "Consumer Non-Cyclicals", "TAPG": "Consumer Non-Cyclicals", "LSIP": "Consumer Non-Cyclicals",
+    "AALI": "Consumer Non-Cyclicals", "DSNG": "Consumer Non-Cyclicals", "SIMP": "Consumer Non-Cyclicals",
+    "SSMS": "Consumer Non-Cyclicals", "CLEO": "Consumer Non-Cyclicals", "ULTJ": "Consumer Non-Cyclicals",
+    "ROTI": "Consumer Non-Cyclicals", "DLTA": "Consumer Non-Cyclicals", "MLBI": "Consumer Non-Cyclicals",
+    "TBLA": "Consumer Non-Cyclicals", "AISA": "Consumer Non-Cyclicals", "CAMP": "Consumer Non-Cyclicals",
+    "CEKA": "Consumer Non-Cyclicals", "GOOD": "Consumer Non-Cyclicals", "STTP": "Consumer Non-Cyclicals",
+    # Konsumer Non-Primer (Consumer Cyclicals)
+    "ASII": "Consumer Cyclicals", "ACES": "Consumer Cyclicals", "MAPI": "Consumer Cyclicals",
+    "MAPA": "Consumer Cyclicals", "ERAA": "Consumer Cyclicals", "AUTO": "Consumer Cyclicals",
+    "DRMA": "Consumer Cyclicals", "SMSM": "Consumer Cyclicals", "GJTL": "Consumer Cyclicals",
+    "RALS": "Consumer Cyclicals", "LPPF": "Consumer Cyclicals", "MNCN": "Consumer Cyclicals",
+    "SCMA": "Consumer Cyclicals", "EMTK": "Consumer Cyclicals", "FILM": "Consumer Cyclicals",
+    "MPMX": "Consumer Cyclicals", "BRAM": "Consumer Cyclicals", "WOOD": "Consumer Cyclicals",
+    "PZZA": "Consumer Cyclicals", "IMAS": "Consumer Cyclicals", "INDX": "Consumer Cyclicals",
+    # Kesehatan (Healthcare)
+    "KLBF": "Healthcare", "MIKA": "Healthcare", "HEAL": "Healthcare", "SILO": "Healthcare",
+    "SIDO": "Healthcare", "PRDA": "Healthcare", "SAME": "Healthcare", "TSPC": "Healthcare",
+    "MERK": "Healthcare", "PEHA": "Healthcare", "IRRA": "Healthcare", "OMED": "Healthcare",
+    "KAEF": "Healthcare", "INAF": "Healthcare", "PYFA": "Healthcare", "DVLA": "Healthcare",
+    # Infrastruktur (Infrastructures)
+    "TLKM": "Infrastructures", "ISAT": "Infrastructures", "EXCL": "Infrastructures",
+    "TOWR": "Infrastructures", "TBIG": "Infrastructures", "MTEL": "Infrastructures",
+    "JSMR": "Infrastructures", "PGEO": "Infrastructures", "BREN": "Infrastructures",
+    "POWR": "Infrastructures", "KEEN": "Infrastructures", "ARKO": "Infrastructures",
+    "CENT": "Infrastructures", "META": "Infrastructures", "CMNP": "Infrastructures",
+    "IPCC": "Infrastructures", "IPAC": "Infrastructures", "BALI": "Infrastructures",
+    # Properti & Real Estat (Properties & Real Estate)
+    "BSDE": "Properties & Real Estate", "CTRA": "Properties & Real Estate", "PWON": "Properties & Real Estate",
+    "SMRA": "Properties & Real Estate", "ASRI": "Properties & Real Estate", "DILD": "Properties & Real Estate",
+    "KIJA": "Properties & Real Estate", "SSIA": "Properties & Real Estate", "BEST": "Properties & Real Estate",
+    "BKSL": "Properties & Real Estate", "MDLN": "Properties & Real Estate", "LPPS": "Properties & Real Estate",
+    "LPKR": "Properties & Real Estate", "LPCK": "Properties & Real Estate", "PPRO": "Properties & Real Estate",
+    "DMAS": "Properties & Real Estate", "CITY": "Properties & Real Estate", "DUTI": "Properties & Real Estate",
+    # Teknologi (Technology)
+    "GOTO": "Technology", "BUKA": "Technology", "BELI": "Technology",
+    "WIRG": "Technology", "DCII": "Technology", "MTDL": "Technology", "MCAS": "Technology",
+    "NFCX": "Technology", "GLVA": "Technology", "KIOS": "Technology", "CASH": "Technology",
+    "DIVA": "Technology", "MLPT": "Technology", "WIFI": "Technology", "ENVY": "Technology",
+    # Transportasi & Logistik (Transportation & Logistics)
+    "GIAA": "Transportation & Logistics", "ASSA": "Transportation & Logistics", "BIRD": "Transportation & Logistics",
+    "TMAS": "Transportation & Logistics", "SMDR": "Transportation & Logistics", "HAIS": "Transportation & Logistics",
+    "TCPI": "Transportation & Logistics", "TNCA": "Transportation & Logistics", "WEHA": "Transportation & Logistics",
+    "SAFE": "Transportation & Logistics", "TRUK": "Transportation & Logistics", "MITI": "Transportation & Logistics",
+    "BLTA": "Transportation & Logistics", "PSSI": "Transportation & Logistics", "BBRM": "Transportation & Logistics",
+    # Perindustrian (Industrials)
+    "UNTR": "Industrials", "HEXA": "Industrials", "ARNA": "Industrials", "MARK": "Industrials",
+    "BMSR": "Industrials", "KBLI": "Industrials", "CCSI": "Industrials", "SCCO": "Industrials",
+    "VOKS": "Industrials", "JECC": "Industrials", "MLIA": "Industrials", "IMPC": "Industrials",
+    "DYAN": "Industrials", "INTD": "Industrials", "KBLM": "Industrials", "IKBI": "Industrials",
+    "SMIL": "Industrials", "ASPI": "Industrials", "SATU": "Industrials", "HBAT": "Industrials",
+}
+
+
+def classify_idx_sector(ticker: str, raw_sector: str) -> str:
+    """Mengklasifikasikan saham ke salah satu dari 11 Sektor Standar IDX-IC."""
+    clean_ticker = str(ticker).strip().upper()
+    if clean_ticker in KNOWN_TICKER_SECTORS:
+        return KNOWN_TICKER_SECTORS[clean_ticker]
+
+    s = str(raw_sector).lower()
+    if any(k in s for k in ("bank", "keuangan", "financial", "asuransi", "insurance", "insuran", "leasing", "multifinance", "multi finance", "sekuritas", "securities", "modal", "dana", "investasi", "investama", "investment")):
+        return "Financials"
+    if any(k in s for k in ("adaro", "energi", "energy", "minyak", "oil", "gas", "batubara", "coal", "petroleum", "tambang batubara", "resources")):
+        return "Energy"
+    if any(k in s for k in ("mineral", "metal", "tambang", "baja", "steel", "semen", "cement", "kimia", "chemical", "basic material", "material dasar", "kertas", "paper", "pulp", "gold", "emas", "nikel", "nickel", "timah", "tin", "tembaga", "copper", "fibreboard", "polychem")):
+        return "Basic Materials"
+    if any(k in s for k in ("food", "makanan", "beverage", "minuman", "agro", "lestari", "sawit", "palm", "plantation", "perkebunan", "rokok", "tobacco", "poultry", "ayam", "feed", "consumer non-cyclical", "primer", "gourmet", "mina", "perikanan")):
+        return "Consumer Non-Cyclicals"
+    if any(k in s for k in ("ritel", "retail", "otomotif", "automotive", "sparepart", "textile", "tekstil", "garmen", "garment", "fashion", "elektronik", "media", "televisi", "film", "cinema", "consumer cyclical", "non-primer", "hotel", "tourism", "pariwisata", "hiburan", "entertainment")):
+        return "Consumer Cyclicals"
+    if any(k in s for k in ("farmasi", "pharmaceutical", "pharma", "obat", "kesehatan", "health", "hospital", "rumah sakit", "klinik", "clinic", "laboratorium", "jamu")):
+        return "Healthcare"
+    if any(k in s for k in ("telekomunikasi", "telecom", "telco", "tower", "menara", "infrastruktur", "infrastructure", "jalan tol", "toll", "satelit", "satellite", "panas bumi", "geothermal", "power", "listrik", "karya", "konstruksi", "kontraktor", "bangunan gedung")):
+        return "Infrastructures"
+    if any(k in s for k in ("properti", "property", "real estate", "real estat", "land", "perumahan", "developer", "residence", "estate", "graha", "plaza", "sukses sejahtera")):
+        return "Properties & Real Estate"
+    if any(k in s for k in ("teknologi", "technology", "tech", "software", "digital", "data center", "cloud", "internet", "komputer", "e-commerce")):
+        return "Technology"
+    if any(k in s for k in ("transpor", "transport", "logistik", "logistic", "pelayaran", "shipping", "samudera", "maritim", "aviation", "penerbangan", "truk", "truck", "express", "cargo", "kargo", "aerowisata")):
+        return "Transportation & Logistics"
+    if any(k in s for k in ("industri", "industrial", "alat berat", "heavy equipment", "mesin", "machinery", "engineering", "kabel", "cable", "packaging", "kemasan", "plastik", "plastic", "mecaniques", "manufaktur")):
+        return "Industrials"
+
+    return "General & Others"
+
+
+def check_fundamental_and_board_safety(
+    ticker: str,
+    sector: str,
+    close: float,
+    value_b_idr: float,
+    frequency: float,
+) -> dict[str, Any]:
+    """
+    Evaluasi Keamanan Fundamental & Papan Bursa (Item 4):
+    1. Exclude Papan Pemantauan Khusus (FCA) & Papan Akselerasi.
+    2. Exclude notasi khusus kritis (E, X, A, M, S, PKPU/Pailit).
+    3. Minimum Harga Close >= Rp 70 (menolak saham gocap/penny stock).
+    4. Minimum Turnover Value >= Rp 1.0 Miliar.
+    5. Minimum Frekuensi Transaksi >= 150 kali perdagangan.
+    """
+    sec_lower = str(sector).lower()
+    ticker_upper = str(ticker).upper()
+
+    reasons: list[str] = []
+    board = "Utama"
+    if "pemantauan khusus" in sec_lower or ".x" in ticker_upper or "{x}" in sec_lower:
+        board = "Pemantauan Khusus (FCA)"
+        reasons.append("Tercatat di Papan Pemantauan Khusus (FCA)")
+    elif "akselerasi" in sec_lower:
+        board = "Akselerasi"
+        reasons.append("Tercatat di Papan Akselerasi (Likuiditas & Fundamental Berisiko)")
+    elif "pengembangan" in sec_lower:
+        board = "Pengembangan"
+    elif "utama" in sec_lower:
+        board = "Utama"
+
+    # Cek notasi kritis
+    critical_notations = []
+    if any(k in sec_lower for k in ("ekuitas negatif", "{e}", ".e")):
+        critical_notations.append("E (Ekuitas Negatif)")
+    if any(k in sec_lower for k in ("pkpu", "pailit", "{a}", ".a")):
+        critical_notations.append("A (Permohonan PKPU / Pailit)")
+    if any(k in sec_lower for k in ("moratorium", "{m}", ".m")):
+        critical_notations.append("M (Moratorium PKPU)")
+    if any(k in sec_lower for k in ("tidak menyampaikan laporan", "{s}", ".s")):
+        critical_notations.append("S (Laporan Keuangan Bermasalah)")
+
+    if critical_notations:
+        reasons.append(f"Notasi Khusus Kritis: {', '.join(critical_notations)}")
+
+    # Cek harga minimum
+    if close < 70:
+        reasons.append(f"Harga Rp {int(close)} di bawah batas aman minimum Rp 70 (Penny Stock)")
+
+    # Cek turnover minimum
+    if value_b_idr < 1.0:
+        reasons.append(f"Turnover harian Rp {value_b_idr:.2f} M < Rp 1.0 Miliar (Likuiditas Rendah)")
+
+    # Cek frekuensi transaksi
+    if frequency < 150:
+        reasons.append(f"Frekuensi transaksi {int(frequency)}x < 150 transaksi (Partisipasi Pasar Minim)")
+
+    is_safe = len(reasons) == 0
+    return {
+        "is_safe": is_safe,
+        "board": board,
+        "status": "PASS" if is_safe else "FAIL",
+        "reasons": reasons,
+        "summary": "Lolos Verifikasi Fundamental & Papan Bursa" if is_safe else "; ".join(reasons),
+    }
+
+
+def evaluate_tape_and_closing_quality(
+    vol_ratio: float,
+    closing_range: float,
+    pct_change: float,
+    val_idr: float,
+    frequency: float,
+    median_val_per_tx: float,
+) -> dict[str, Any]:
+    """
+    Evaluasi Pola Tape Jam Bursa & Anti Manipulasi Pre-Closing (Item 5):
+    1. Suspicious Crossing: Volume Spike >= 1.5x namun Frekuensi < 150 atau ticket size >= 8x median bursa.
+    2. Upthrust Distribution: Volume Spike >= 1.4x namun Closing Range <= 0.35 (guyur sore / bantingan akhir).
+    3. Thin Marking: Kenaikan harga >= +4.0% dengan Volume Ratio < 0.65x dan Turnover < 1.0 Miliar.
+    """
+    freq_clean = max(frequency, 1.0)
+    val_per_tx = val_idr / freq_clean
+
+    is_suspicious_crossing = (vol_ratio >= 1.5) and (
+        (frequency < 150) or (val_per_tx >= median_val_per_tx * 8.0)
+    )
+    is_upthrust_trap = (vol_ratio >= 1.4) and (closing_range <= 0.35)
+    is_thin_marking = (pct_change >= 4.0) and (vol_ratio < 0.65) and (val_idr < 1_000_000_000)
+
+    if is_suspicious_crossing:
+        return {
+            "code": "SUSPICIOUS_CROSSING",
+            "label": "Crossing Anomali / Volume Pasif",
+            "is_organic": False,
+            "badge_color": "amber",
+            "reason": f"Volume {vol_ratio:.1f}x baseline namun frekuensi hanya {int(frequency)}x atau ticket per tx Rp {val_per_tx/1e6:.1f} Jt (>8x median bursa). Indikasi crossing negosiasi/pre-closing semu.",
+        }
+    elif is_upthrust_trap:
+        return {
+            "code": "UPTHRUST_DISTRIBUTION",
+            "label": "Jebakan Upthrust (Guyur Sore)",
+            "is_organic": False,
+            "badge_color": "rose",
+            "reason": f"Volume tinggi {vol_ratio:.1f}x baseline tetapi harga ditutup di dasar candle (Closing Range {int(closing_range * 100)}%). Indikasi pompa pagi lalu buang barang menjelang penutupan.",
+        }
+    elif is_thin_marking:
+        return {
+            "code": "THIN_MARKING",
+            "label": "Marking The Close Sepi",
+            "is_organic": False,
+            "badge_color": "rose",
+            "reason": f"Harga dinaikkan {pct_change:+.1f}% tanpa partisipasi volume ({vol_ratio:.2f}x) dan turnover Rp {val_idr/1e9:.2f} M (< 1 Miliar). Rawan berbalik anjlok.",
+        }
+    else:
+        return {
+            "code": "ORGANIC_FLOW",
+            "label": "Arus Volume Organik",
+            "is_organic": True,
+            "badge_color": "emerald",
+            "reason": "Volume dan penutupan harga terkonfirmasi alami dari partisipasi pasar reguler yang solid.",
+        }
+
+
 def _clean_col_key(col_name: Any) -> str:
     s = str(col_name).strip().lower()
     s = re.sub(r"[^a-z0-9%]+", "_", s).strip("_")
@@ -1034,12 +1282,14 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
     df["Daily_SM_Score"] = df["Smart_Money_Score"]
 
-    # Filter Keamanan Swing Pendek: Bukan Saham FCA/Akselerasi & Harga >= Rp 70
+    # Filter Keamanan Swing Pendek: Bukan Saham FCA/Akselerasi, Harga >= Rp 70, Turnover >= 1M, Frekuensi >= 150
     sec_lower = df["Sector"].astype(str).str.lower()
     is_safe_swing = (
         (df["Close"] >= 70)
         & (~sec_lower.str.contains("pemantauan khusus", na=False))
         & (~sec_lower.str.contains("akselerasi", na=False))
+        & (df["Value_IDR"] >= 1_000_000_000)
+        & (df["Frequency"] >= 150)
     )
 
     # Klasifikasi Sinyal Kuantitatif (Trigger Type)
@@ -1109,6 +1359,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
     df = compute_quantitative_dataframe(raw_df)
     stocks_result: list[dict[str, Any]] = []
     stocks_detail_map: dict[str, dict[str, Any]] = {}
+    median_val_per_tx = max(1_000_000.0, float(df["Val_Per_Tx"].median())) if "Val_Per_Tx" in df.columns else 2_500_000.0
 
     for ticker, g in df.groupby("Ticker", sort=False):
         n = len(g)
@@ -1183,7 +1434,12 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             bandar_status = "Accumulation" if smart_money_score >= 60 else "Neutral"
             vsa_pattern = "Normal Consolidation Activity"
 
-        # 5-Pillar Quantitative Checklist
+        freq_val = float(latest["Frequency"]) if "Frequency" in latest and not pd.isna(latest["Frequency"]) else 500.0
+        sector_category = classify_idx_sector(str(ticker), str(latest["Sector"]))
+        fund_safety = check_fundamental_and_board_safety(str(ticker), str(latest["Sector"]), close_price, val_idr / 1e9, freq_val)
+        tape_quality = evaluate_tape_and_closing_quality(vol_ratio, closing_range, pct_change, val_idr, freq_val, median_val_per_tx)
+
+        # 5-Pillar Quantitative Checklist + Safety Filters
         checklist = [
             {
                 "title": "Pilar 1: Volume Spike & VSA Murni",
@@ -1219,6 +1475,20 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
                 "status": "pass" if pilar5_score >= 18 else ("warn" if pilar5_score >= 10 else "fail"),
                 "metric": f"VWAP 5H Rp {vwap_5d:,} ({diff_vwap_pct:+.1f}%)",
                 "detail": f"Harga saat ini Rp {close_price:,} berjarak {diff_vwap_pct:+.1f}% dari VWAP 5 hari bursa terakhir (Rp {vwap_5d:,}).",
+            },
+            {
+                "title": "Filter Fundamental & Papan Bursa",
+                "score": "PASS" if fund_safety["is_safe"] else "FAIL",
+                "status": "pass" if fund_safety["is_safe"] else "fail",
+                "metric": f"{fund_safety['board']} | Rp {close_price:,}",
+                "detail": fund_safety["summary"] + f" (Frekuensi {int(freq_val):,} tx, Turnover Rp {val_idr / 1e9:.2f} M).",
+            },
+            {
+                "title": "Kualitas Arus Volume (Tape Flow)",
+                "score": "ORGANIC" if tape_quality["is_organic"] else "ANOMALY",
+                "status": "pass" if tape_quality["is_organic"] else ("warn" if tape_quality["code"] == "SUSPICIOUS_CROSSING" else "fail"),
+                "metric": tape_quality["label"],
+                "detail": tape_quality["reason"],
             },
         ]
 
@@ -1381,6 +1651,9 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             "bandar_status": bandar_status,
             "vsa_pattern": vsa_pattern,
             "trading_plan": trading_plan,
+            "sector_category": sector_category,
+            "fundamental_safety": fund_safety,
+            "tape_quality": tape_quality,
         }
 
         stocks_result.append(summary_item)

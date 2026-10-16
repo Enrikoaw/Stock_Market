@@ -440,18 +440,31 @@ class SignalTracker:
             and s.get("trigger_type") in TRACKABLE_TRIGGERS
             and int(s.get("smart_money_score", 0)) >= self.min_score
             and (not market_date or s.get("date") == market_date)
+            # Item 4: Filter Fundamental & Board Safety (Papan Utama/Pengembangan, >=70, >=1M, Notasi Bersih)
+            and (s.get("fundamental_safety", {}).get("is_safe", True) if isinstance(s.get("fundamental_safety"), dict) else True)
+            and float(s.get("close", 0)) >= 70
+            and float(s.get("value_b_idr") or (float(s.get("value_idr", 0)) / 1e9)) >= 1.0
+            and not ("pemantauan khusus" in str(s.get("sector", "")).lower() or "akselerasi" in str(s.get("sector", "")).lower())
+            # Item 5: Filter Kualitas Pita & Anti Manipulasi Pre-Closing (Tolak Crossing Anomali & Upthrust Trap)
+            and (s.get("tape_quality", {}).get("is_organic", True) if isinstance(s.get("tape_quality"), dict) else True)
         ]
         candidates.sort(
             key=lambda x: (int(x.get("smart_money_score", 0)), float(x.get("vol_ratio") or x.get("volume_ratio") or 0.0)),
             reverse=True,
         )
         max_daily = 3
+        seen_sectors: set[str] = set()
         for s in candidates:
             if added >= max_daily:
                 break
+            # Item 2: Batasan Korelasi Sektor (Maksimal 1 saham per sektor per hari)
+            sec_cat = str(s.get("sector_category") or s.get("sector") or "General").strip()
+            if sec_cat in seen_sectors:
+                continue
             ok, _ = self.add_signal(s, source="AUTO")
             if ok:
                 added += 1
+                seen_sectors.add(sec_cat)
                 active_tickers.add(str(s.get("ticker", "")).upper())
         return added
 
@@ -1007,9 +1020,21 @@ class SignalTracker:
         Menggunakan aturan kuantitatif terbaru & eksekusi instan (< 1.5 detik).
         """
         try:
-            from backend.screener_engine import compute_quantitative_dataframe, _round_idx_tick
+            from backend.screener_engine import (
+                compute_quantitative_dataframe,
+                _round_idx_tick,
+                classify_idx_sector,
+                check_fundamental_and_board_safety,
+                evaluate_tape_and_closing_quality,
+            )
         except ImportError:
-            from screener_engine import compute_quantitative_dataframe, _round_idx_tick
+            from screener_engine import (
+                compute_quantitative_dataframe,
+                _round_idx_tick,
+                classify_idx_sector,
+                check_fundamental_and_board_safety,
+                evaluate_tape_and_closing_quality,
+            )
 
         trigger_labels = {
             "MARKUP_BREAKOUT": "Markup / Breakout Akumulasi",
@@ -1029,6 +1054,7 @@ class SignalTracker:
         try:
             # 2. Hitung seluruh indikator kuantitatif 1 kali saja di awal secara vektor
             df = compute_quantitative_dataframe(market_df)
+            median_val_tx = max(1_000_000.0, float(df["Val_Per_Tx"].median())) if "Val_Per_Tx" in df.columns else 2_500_000.0
 
             # 3. Ambil 10 tanggal bursa terakhir
             target_dates = sorted(df["Date"].dropna().astype(str).unique())[-days:]
@@ -1074,10 +1100,32 @@ class SignalTracker:
                 # Urutkan berdasarkan (Smart_Money_Score, Volume_Ratio) tertinggi dan batasi maksimal 3 saham terbaik per tanggal bursa
                 cand = cand.sort_values(by=["Smart_Money_Score", "Volume_Ratio"], ascending=[False, False])
                 day_added = 0
+                seen_day_sectors: set[str] = set()
                 for r in cand.itertuples():
                     if day_added >= 3:
                         break
                     c_price = int(round(float(r.Close)))
+                    val_idr = float(r.Value_IDR) if hasattr(r, "Value_IDR") else 1_000_000_000.0
+                    freq_val = float(r.Frequency) if hasattr(r, "Frequency") else 500.0
+                    r_sec = str(r.Sector) if hasattr(r, "Sector") else ""
+                    vol_ratio_val = float(r.Volume_Ratio) if hasattr(r, "Volume_Ratio") else 1.0
+                    cr_val = float(r.Closing_Range) if hasattr(r, "Closing_Range") else 0.7
+                    pct_val = float(r.Pct_Change) if hasattr(r, "Pct_Change") else 0.0
+
+                    # Item 4: Filter Fundamental & Board Safety
+                    fund = check_fundamental_and_board_safety(str(r.Ticker).upper(), r_sec, c_price, val_idr / 1e9, freq_val)
+                    if not fund["is_safe"]:
+                        continue
+
+                    # Item 5: Filter Kualitas Tape & Anti Manipulasi Pre-Closing
+                    tape = evaluate_tape_and_closing_quality(vol_ratio_val, cr_val, pct_val, val_idr, freq_val, median_val_tx)
+                    if not tape["is_organic"]:
+                        continue
+
+                    # Item 2: Batasan Korelasi Sektor (Maks 1 saham per sektor per hari)
+                    sec_cat = classify_idx_sector(str(r.Ticker).upper(), r_sec)
+                    if sec_cat in seen_day_sectors:
+                        continue
                     entry_price = _round_idx_tick(c_price)
                     entry_low = entry_price
                     entry_high = entry_price
@@ -1123,6 +1171,7 @@ class SignalTracker:
                     ok, _ = self.add_signal(stock_obj, source="AUTO")
                     if ok:
                         day_added += 1
+                        seen_day_sectors.add(sec_cat)
                         total_added += 1
 
             return {
