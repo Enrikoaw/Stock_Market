@@ -863,4 +863,124 @@ html.light .mobile-nav-item .mobile-nav-text {
   font-weight: 700 !important;
 }
 
+/* =====================================================================
+   THEME PRESETS: OBSIDIAN GOLD, MIDNIGHT BLUE, CLEAN SLATE, CLEAN PAPER
+   ===================================================================== */
+
+/* 1. Theme: Obsidian Gold */
+html.theme-gold:not(.light) {
+  --bg-primary: #07070a;
+  --bg-card: rgba(18, 18, 25, 0.6);
+  --bg-card-hover: rgba(28, 28, 38, 0.7);
+  --border-subtle: rgba(234, 179, 8, 0.14);
+}
+html.theme-gold:not(.light) body {
+  background-color: #07070a;
+}
+html.theme-gold:not(.light) .ambient-bg-orbs > div:nth-child(1) {
+  background: rgba(234, 179, 8, 0.12) !important;
+}
+html.theme-gold:not(.light) .ambient-bg-orbs > div:nth-child(2) {
+  background: rgba(202, 138, 4, 0.10) !important;
+}
+html.theme-gold:not(.light) .liquid-glass-btn.neon-emerald.active {
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.3) 0%, rgba(202, 138, 4, 0.15) 100%) !important;
+  border-color: rgba(234, 179, 8, 0.5) !important;
+  color: #fef08a !important;
+  box-shadow: 0 0 20px rgba(234, 179, 8, 0.25) !important;
+}
+html.theme-gold:not(.light) .liquid-glass-btn.neon-emerald .neon-icon-badge {
+  background: #eab308 !important;
+}
+html.theme-gold:not(.light) .stock-row.selected-row {
+  border-left-color: #eab308 !important;
+  background: linear-gradient(90deg, rgba(234, 179, 8, 0.15) 0%, rgba(234, 179, 8, 0.02) 100%) !important;
+}
+html.theme-gold:not(.light) #btnMarketRegime span#regimeDot,
+html.theme-gold:not(.light) #marketLivePill span#marketStatusDot {
+  background-color: #eab308 !important;
+}
+
+/* 2. Theme: Midnight Blue */
+html.theme-midnight:not(.light) {
+  --bg-primary: #060b18;
+  --bg-card: rgba(14, 23, 47, 0.6);
+  --bg-card-hover: rgba(21, 34, 68, 0.7);
+  --border-subtle: rgba(56, 189, 248, 0.14);
+}
+html.theme-midnight:not(.light) body {
+  background-color: #060b18;
+}
+html.theme-midnight:not(.light) .ambient-bg-orbs > div:nth-child(1) {
+  background: rgba(14, 165, 233, 0.15) !important;
+}
+html.theme-midnight:not(.light) .ambient-bg-orbs > div:nth-child(2) {
+  background: rgba(59, 130, 246, 0.15) !important;
+}
+html.theme-midnight:not(.light) .liquid-glass-btn.neon-emerald.active {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.3) 0%, rgba(2, 132, 199, 0.15) 100%) !important;
+  border-color: rgba(56, 189, 248, 0.5) !important;
+  color: #e0f2fe !important;
+  box-shadow: 0 0 20px rgba(14, 165, 233, 0.25) !important;
+}
+html.theme-midnight:not(.light) .liquid-glass-btn.neon-emerald .neon-icon-badge {
+  background: #38bdf8 !important;
+}
+html.theme-midnight:not(.light) .stock-row.selected-row {
+  border-left-color: #38bdf8 !important;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.15) 0%, rgba(56, 189, 248, 0.02) 100%) !important;
+}
+html.theme-midnight:not(.light) #btnMarketRegime span#regimeDot,
+html.theme-midnight:not(.light) #marketLivePill span#marketStatusDot {
+  background-color: #38bdf8 !important;
+}
+
+/* 3. Theme: Clean Slate */
+html.theme-slate:not(.light) {
+  --bg-primary: #0e121a;
+  --bg-card: rgba(22, 28, 39, 0.6);
+  --bg-card-hover: rgba(30, 38, 52, 0.7);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+}
+html.theme-slate:not(.light) body {
+  background-color: #0e121a;
+}
+html.theme-slate:not(.light) .ambient-bg-orbs > div {
+  opacity: 0.1 !important;
+}
+html.theme-slate:not(.light) .liquid-glass-btn.neon-emerald.active {
+  background: linear-gradient(135deg, rgba(100, 116, 139, 0.35) 0%, rgba(71, 85, 105, 0.2) 100%) !important;
+  border-color: rgba(148, 163, 184, 0.4) !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 0 15px rgba(148, 163, 184, 0.15) !important;
+}
+html.theme-slate:not(.light) .liquid-glass-btn.neon-emerald .neon-icon-badge {
+  background: #94a3b8 !important;
+}
+html.theme-slate:not(.light) .stock-row.selected-row {
+  border-left-color: #94a3b8 !important;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.15) 0%, rgba(148, 163, 184, 0.02) 100%) !important;
+}
+
+/* Theme selector card in settings */
+.theme-select-btn {
+  background: rgba(15, 23, 42, 0.6);
+}
+html.light .theme-select-btn {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+html.light .theme-select-btn.active-theme {
+  border-color: #0f172a !important;
+  background: #f1f5f9 !important;
+  box-shadow: 0 0 10px rgba(15, 23, 42, 0.15) !important;
+}
+html.light .theme-select-btn .theme-btn-title {
+  color: #0f172a !important;
+}
+html.light .theme-select-btn .theme-btn-sub {
+  color: #64748b !important;
+}
+
+
 

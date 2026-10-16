@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=62.1" />
+  <link rel="stylesheet" href="/static/styles.css?v=63.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -46,13 +46,15 @@
   <script>
     (function() {
       try {
-        const saved = localStorage.getItem('smartflow_theme');
-        if (saved === 'light') {
+        let saved = localStorage.getItem('smartflow_theme') || 'emerald';
+        if (saved === 'dark') saved = 'emerald';
+        if (saved === 'light') saved = 'paper';
+        if (saved === 'paper') {
           document.documentElement.classList.remove('dark');
-          document.documentElement.classList.add('light');
+          document.documentElement.classList.add('light', 'theme-paper');
         } else {
           document.documentElement.classList.remove('light');
-          document.documentElement.classList.add('dark');
+          document.documentElement.classList.add('dark', 'theme-' + saved);
         }
       } catch (e) {}
     })();
@@ -1061,6 +1063,98 @@
       </div>
 
       <div class="space-y-3 text-xs">
+        <!-- 0. Tema & Nuansa Tampilan UI -->
+        <div class="p-3 rounded-xl glass-subcard space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="font-bold text-white flex items-center gap-1.5">
+              <span>🎨</span>
+              <span>Tema &amp; Nuansa Antarmuka</span>
+            </div>
+            <span id="activeThemeBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+              Emerald Cyber
+            </span>
+          </div>
+          <p class="text-slate-300 leading-relaxed text-[11px]">
+            Pilih tema tampilan yang paling nyaman untuk mata Anda (tersimpan otomatis):
+          </p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-0.5">
+            <!-- 1. Emerald Cyber (Default) -->
+            <button
+              type="button"
+              onclick="selectTheme('emerald')"
+              id="themeBtn-emerald"
+              class="theme-select-btn p-2 rounded-xl border text-left flex items-center gap-2 transition active:scale-95 cursor-pointer border-white/10"
+              title="Emerald Cyber (Bawaan)"
+            >
+              <div class="w-4 h-4 rounded-full bg-emerald-400 shrink-0 border border-white/20"></div>
+              <div class="truncate">
+                <div class="theme-btn-title font-bold text-white text-[11px] truncate">Emerald</div>
+                <div class="theme-btn-sub text-[9px] text-slate-400 font-mono">Cyber Dark</div>
+              </div>
+            </button>
+
+            <!-- 2. Obsidian Gold -->
+            <button
+              type="button"
+              onclick="selectTheme('gold')"
+              id="themeBtn-gold"
+              class="theme-select-btn p-2 rounded-xl border text-left flex items-center gap-2 transition active:scale-95 cursor-pointer border-white/10"
+              title="Obsidian Gold (Elit / Private Banking)"
+            >
+              <div class="w-4 h-4 rounded-full bg-yellow-400 shrink-0 border border-white/20"></div>
+              <div class="truncate">
+                <div class="theme-btn-title font-bold text-white text-[11px] truncate">Obsidian</div>
+                <div class="theme-btn-sub text-[9px] text-slate-400 font-mono">Warm Gold</div>
+              </div>
+            </button>
+
+            <!-- 3. Midnight Blue -->
+            <button
+              type="button"
+              onclick="selectTheme('midnight')"
+              id="themeBtn-midnight"
+              class="theme-select-btn p-2 rounded-xl border text-left flex items-center gap-2 transition active:scale-95 cursor-pointer border-white/10"
+              title="Midnight Blue (Cyber Tech / TradingView Style)"
+            >
+              <div class="w-4 h-4 rounded-full bg-sky-400 shrink-0 border border-white/20"></div>
+              <div class="truncate">
+                <div class="theme-btn-title font-bold text-white text-[11px] truncate">Midnight</div>
+                <div class="theme-btn-sub text-[9px] text-slate-400 font-mono">Deep Blue</div>
+              </div>
+            </button>
+
+            <!-- 4. Clean Slate -->
+            <button
+              type="button"
+              onclick="selectTheme('slate')"
+              id="themeBtn-slate"
+              class="theme-select-btn p-2 rounded-xl border text-left flex items-center gap-2 transition active:scale-95 cursor-pointer border-white/10"
+              title="Clean Slate (Swiss Minimalist / Linear)"
+            >
+              <div class="w-4 h-4 rounded-full bg-slate-400 shrink-0 border border-white/20"></div>
+              <div class="truncate">
+                <div class="theme-btn-title font-bold text-white text-[11px] truncate">Slate</div>
+                <div class="theme-btn-sub text-[9px] text-slate-400 font-mono">Minimalis</div>
+              </div>
+            </button>
+
+            <!-- 5. Clean Paper (Light Mode) -->
+            <button
+              type="button"
+              onclick="selectTheme('paper')"
+              id="themeBtn-paper"
+              class="theme-select-btn p-2 rounded-xl border text-left flex items-center gap-2 transition active:scale-95 cursor-pointer border-white/10 col-span-2 sm:col-span-1"
+              title="Clean Paper (Mode Terang Kontras Tinggi)"
+            >
+              <div class="w-4 h-4 rounded-full bg-slate-100 shrink-0 border border-slate-400"></div>
+              <div class="truncate">
+                <div class="theme-btn-title font-bold text-white text-[11px] truncate">Paper Light</div>
+                <div class="theme-btn-sub text-[9px] text-slate-400 font-mono">Tema Terang</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
         <!-- 1. Sinkronisasi Data Pasar -->
         <div class="p-3 rounded-xl glass-subcard space-y-2">
           <div class="font-bold text-white flex items-center gap-1.5">
@@ -1862,6 +1956,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=62.1"></script>
+  <script src="/static/app.js?v=63.0"></script>
 </body>
 </html>
