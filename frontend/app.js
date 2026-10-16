@@ -1369,6 +1369,31 @@ function switchChartTab(tabName) {
       btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-white transition';
     }
   });
+
+  const btnToggleLines = document.getElementById('btnToggleScenarioLines');
+  if (btnToggleLines) {
+    btnToggleLines.style.display = tabName === 'price' ? 'flex' : 'none';
+  }
+
+  if (selectedStockDetail) {
+    renderInspectorChart(selectedStockDetail);
+  }
+}
+
+// State visibilitas garis rencana trading
+let showScenarioLines = true;
+
+function toggleScenarioLines() {
+  showScenarioLines = !showScenarioLines;
+
+  const eyeOpen = document.getElementById('eyeIconOpen');
+  const eyeClosed = document.getElementById('eyeIconClosed');
+  if (eyeOpen && eyeClosed) {
+    eyeOpen.classList.toggle('hidden', !showScenarioLines);
+    eyeClosed.classList.toggle('hidden', showScenarioLines);
+  }
+
+  // Render ulang grafik inspector
   if (selectedStockDetail) {
     renderInspectorChart(selectedStockDetail);
   }
@@ -1383,6 +1408,13 @@ function renderInspectorChart(d) {
   const ctx = chartCanvas.getContext('2d');
   if (chartInstance) {
     chartInstance.destroy();
+  }
+
+  const eyeOpen = document.getElementById('eyeIconOpen');
+  const eyeClosed = document.getElementById('eyeIconClosed');
+  if (eyeOpen && eyeClosed) {
+    eyeOpen.classList.toggle('hidden', !showScenarioLines);
+    eyeClosed.classList.toggle('hidden', showScenarioLines);
   }
 
   const hist = d.history || [];
@@ -1423,16 +1455,20 @@ function renderInspectorChart(d) {
     const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : 7;
     const slPct = plan.stop_loss_pct != null ? plan.stop_loss_pct : -4;
 
-    // Batas rentang harga disesuaikan dengan pergerakan candlestick, MA20, skenario trading, dan harga saat ini
+    // Batas rentang harga sumbu Y (otomatis terisolasi ke candle jika garis rencana disembunyikan)
     const valCandidatesMin = [...allLows, ...ma20s.filter((v) => v > 0)];
     if (currentPrice > 0) valCandidatesMin.push(currentPrice);
-    if (slVal && slVal > 0) valCandidatesMin.push(slVal);
-    if (entryVal && entryVal > 0) valCandidatesMin.push(entryVal);
+    if (showScenarioLines) {
+      if (slVal && slVal > 0) valCandidatesMin.push(slVal);
+      if (entryVal && entryVal > 0) valCandidatesMin.push(entryVal);
+    }
 
     const valCandidatesMax = [...allHighs, ...ma20s.filter((v) => v > 0)];
     if (currentPrice > 0) valCandidatesMax.push(currentPrice);
-    if (tp1Val && tp1Val > 0) valCandidatesMax.push(tp1Val);
-    if (tp2Val && tp2Val > 0) valCandidatesMax.push(tp2Val);
+    if (showScenarioLines) {
+      if (tp1Val && tp1Val > 0) valCandidatesMax.push(tp1Val);
+      if (tp2Val && tp2Val > 0) valCandidatesMax.push(tp2Val);
+    }
 
     const rawMin = valCandidatesMin.length > 0 ? Math.min(...valCandidatesMin) : 0;
     const rawMax = valCandidatesMax.length > 0 ? Math.max(...valCandidatesMax) : 100;
@@ -1565,20 +1601,24 @@ function renderInspectorChart(d) {
           c.restore();
         }
 
-        // Garis Rencana Skenario Trading (TP1, TP2, Entry, SL, dan Harga Saat Ini)
-        if (tp2Val && tp2Val > 0) {
-          drawScenarioLine(tp2Val, '#14b8a6', `TP2: Rp ${fmtNumber(tp2Val)} (+${tp2Pct}%)`, true, true);
+        // Garis Rencana Skenario Trading (Hanya digambar jika showScenarioLines === true)
+        if (showScenarioLines) {
+          if (tp2Val && tp2Val > 0) {
+            drawScenarioLine(tp2Val, '#14b8a6', `TP2: Rp ${fmtNumber(tp2Val)} (+${tp2Pct}%)`, true, true);
+          }
+          if (tp1Val && tp1Val > 0) {
+            drawScenarioLine(tp1Val, '#10b981', `TP1: Rp ${fmtNumber(tp1Val)} (+${tp1Pct}%)`, true, true);
+          }
+          if (entryVal && entryVal > 0) {
+            drawScenarioLine(entryVal, '#f59e0b', `Beli: Rp ${fmtNumber(entryVal)}`, false, false);
+          }
+          if (slVal && slVal > 0) {
+            drawScenarioLine(slVal, '#ef4444', `SL: Rp ${fmtNumber(slVal)} (${slPct}%)`, true, true);
+          }
         }
-        if (tp1Val && tp1Val > 0) {
-          drawScenarioLine(tp1Val, '#10b981', `TP1: Rp ${fmtNumber(tp1Val)} (+${tp1Pct}%)`, true, true);
-        }
-        if (entryVal && entryVal > 0) {
-          drawScenarioLine(entryVal, '#f59e0b', `Beli: Rp ${fmtNumber(entryVal)}`, false, false);
-        }
-        if (slVal && slVal > 0) {
-          drawScenarioLine(slVal, '#ef4444', `SL: Rp ${fmtNumber(slVal)} (${slPct}%)`, true, true);
-        }
-        if (currentPrice && currentPrice > 0 && currentPrice !== entryVal) {
+
+        // Garis harga penutupan terakhir tetap ditampilkan
+        if (currentPrice && currentPrice > 0 && (!showScenarioLines || currentPrice !== entryVal)) {
           drawScenarioLine(currentPrice, '#38bdf8', `Last: Rp ${fmtNumber(currentPrice)}`, true, false);
         }
 

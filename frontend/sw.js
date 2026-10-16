@@ -1,5 +1,5 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'smartflow-idx-v59';
+const CACHE_NAME = 'smartflow-idx-v60';
 const ASSETS_TO_CACHE = [
   '/',
   '/static/styles.css',

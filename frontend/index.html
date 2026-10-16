@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=59.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=60.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -593,6 +593,26 @@
             </div>
 
             <div class="h-56 w-full rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.06] p-2 relative shadow-sm dark:shadow-none">
+              <!-- Tombol Mata (Toggle Garis Entry, SL, TP) -->
+              <button
+                id="btnToggleScenarioLines"
+                type="button"
+                onclick="toggleScenarioLines()"
+                class="absolute top-2 left-2 z-10 p-1.5 rounded-lg bg-white/90 dark:bg-slate-900/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-white/15 backdrop-blur-md transition shadow-sm dark:shadow-md cursor-pointer flex items-center justify-center"
+                title="Tampilkan / Sembunyikan Garis Rencana (Entry, SL, TP)"
+                aria-label="Toggle Garis Rencana"
+              >
+                <!-- Ikon Mata Terbuka -->
+                <svg id="eyeIconOpen" class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                <!-- Ikon Mata Tertutup / Silang -->
+                <svg id="eyeIconClosed" class="w-4 h-4 text-slate-400 dark:text-slate-500 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                </svg>
+              </button>
+
               <canvas id="inspectorChart"></canvas>
             </div>
             
@@ -1840,6 +1860,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=59.0"></script>
+  <script src="/static/app.js?v=60.0"></script>
 </body>
 </html>
