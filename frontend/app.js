@@ -295,6 +295,25 @@ function renderTodayCandidates(stocks) {
   const container = document.getElementById('todayCandidatesGrid');
   if (!container) return;
 
+  const regime = currentMarketRegime || {};
+  if (regime.allow_watchlist === false) {
+    container.innerHTML = `
+      <div class="col-span-full p-8 rounded-2xl bg-white dark:bg-[#0b1329]/80 border border-rose-200 dark:border-rose-500/30 shadow-sm text-center space-y-3">
+        <span class="text-4xl block">🛡️</span>
+        <div class="text-base font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider">
+          ${regime.label || 'MODE DEFENSIF AKTIF — AKSES DIBEKUKAN'}
+        </div>
+        <p class="max-w-xl mx-auto text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+          ${regime.regime_note || 'IHSG sedang mengalami tekanan jual ekstrem / downtrend. Sistem menahan seluruh sinyal beli sampai terbentuk konfirmasi rebound yang sah.'}
+        </p>
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-400/30 text-rose-700 dark:text-rose-300 text-xs font-mono font-bold">
+          Rekomendasi Alokasi: ${regime.allocation || '100% Cash'}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
   if (!stocks || stocks.length === 0) {
     container.innerHTML = `
       <div class="col-span-full p-8 rounded-2xl glass-panel text-center text-slate-300 text-xs">
@@ -912,28 +931,29 @@ function updateKPICards(kpis, currentTrigger) {
     const autoTimerEl = document.getElementById('marketAutoTimer');
     const todayRegimeBadge = document.getElementById('todayRegimeBadge');
     const todayMarketSentence = document.getElementById('todayMarketSentence');
+    const reg = kpis.market_regime;
 
-    const isBull = kpis.market_regime.status.includes('BULLISH');
-    const badgeCls = isBull ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold';
+    const isCrash = reg.status === 'CRASH_LOCKED' || reg.color === 'rose';
+    const isBull = reg.status === 'NORMAL_ACTIVE' || reg.color === 'emerald';
+    const badgeCls = isCrash ? 'text-rose-400 font-semibold' : isBull ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold';
 
     if (autoTimerEl) {
-      autoTimerEl.innerHTML = `<span class="${badgeCls}" title="${kpis.market_regime.regime_note}">Regime: ${kpis.market_regime.status.split(' / ')[0]} (${kpis.market_regime.breadth_ma50_pct}% > MA50)</span>`;
+      autoTimerEl.innerHTML = `<span class="${badgeCls}" title="${reg.regime_note}">Regime: ${reg.label || reg.status} (${reg.breadth_ma20_pct}% > MA20)</span>`;
     }
 
     if (todayRegimeBadge) {
-      todayRegimeBadge.textContent = kpis.market_regime.status.split(' / ')[0];
-      todayRegimeBadge.className = `text-[10px] font-semibold px-2 py-0.5 rounded-full ${isBull ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30' : 'bg-amber-500/15 text-amber-300 border border-amber-400/30'}`;
+      todayRegimeBadge.textContent = reg.label || reg.status;
+      todayRegimeBadge.className = `text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+        isCrash
+          ? 'bg-rose-500/15 text-rose-300 border border-rose-400/30'
+          : isBull
+          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30'
+          : 'bg-amber-500/15 text-amber-300 border border-amber-400/30'
+      }`;
     }
 
     if (todayMarketSentence) {
-      const breadth = kpis.market_regime.breadth_ma50_pct;
-      if (breadth >= 55) {
-        todayMarketSentence.textContent = `Pasar cenderung kuat (Bullish) dengan ${breadth}% saham berada di atas rata-rata 50 hari (MA50). Sangat kondusif untuk strategi swing breakout terukur.`;
-      } else if (breadth >= 40) {
-        todayMarketSentence.textContent = `Pasar berada dalam fase konsolidasi sehat (${breadth}% saham di atas MA50). Rotasi dana selektif, utamakan saham dengan skor akumulasi tertinggi.`;
-      } else {
-        todayMarketSentence.textContent = `Kondisi pasar defensif (${breadth}% saham di atas MA50). Disarankan bersikap konservatif dan prioritaskan menjaga modal tunai (cash).`;
-      }
+      todayMarketSentence.textContent = reg.regime_note || 'Kondisi pasar sedang dipantau.';
     }
   }
 
@@ -2582,6 +2602,11 @@ function renderMarketRegimeBadge(regime) {
        regime.color === 'rose' ? 'text-rose-300' :
        'text-amber-300');
     label.textContent = `${regime.label} (${regime.breadth_ma20_pct}%)`;
+  }
+
+  // Jika sedang di tab Pilihan Hari Ini, sesuaikan tampilan kandidat sesuai status lock/rebound
+  if (activeMainTab === 'today' && currentStocks && currentStocks.length > 0) {
+    renderTodayCandidates(currentStocks);
   }
 }
 

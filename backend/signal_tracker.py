@@ -52,7 +52,7 @@ from sqlalchemy import (
 WIB = ZoneInfo("Asia/Jakarta")
 MARKET_CLOSE_CUTOFF = dtime(16, 15)
 ACTIVE_STATUSES = ("WATCHLIST", "RUNNING")
-CLOSED_STATUSES = ("WIN", "LOSS", "EXPIRED", "TIMEOUT")
+CLOSED_STATUSES = ("WIN", "LOSS", "EXPIRED", "TIMEOUT", "CANCELLED")
 TRACKABLE_TRIGGERS = {"MARKUP_BREAKOUT", "BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW"}
 
 metadata = MetaData()
@@ -402,9 +402,34 @@ class SignalTracker:
             )
         return True, f"{ticker} masuk Watchlist (zona entry Rp {e_low:,.0f} - {e_high:,.0f}, SL {sl:,.0f}, TP {target:,.0f})."
 
+    def cancel_pending_watchlist(self, reason: str) -> int:
+        """Membatalkan seluruh posisi gantung berstatus WATCHLIST yang belum terbeli saat pasar crash/downtrend."""
+        with self._lock, self.engine.begin() as conn:
+            res = conn.execute(
+                update(signals_table)
+                .where(signals_table.c.status == "WATCHLIST")
+                .values(
+                    status="CANCELLED",
+                    note=f"Dibatalkan otomatis: {reason}",
+                    updated_at=_now_str(),
+                )
+            )
+            count = res.rowcount if hasattr(res, "rowcount") and res.rowcount is not None else 0
+            if count > 0:
+                print(f"[Tracker] Membatalkan {count} antrean WATCHLIST gantung karena: {reason}")
+            return count
+
     def auto_track(self, analysis: dict) -> int:
         """Catat otomatis sinyal akumulasi terbaik (score >= min_score, maks 3 sinyal/hari) dari sesi bursa yang terdeteksi.
         Saham yang masih WATCHLIST / RUNNING atau dalam masa cooldown 5 hari tidak dimasukkan ulang."""
+        market_regime = analysis.get("kpis", {}).get("market_regime", {})
+        # Jika pasar crash / downtrend belum rebound, hentikan penambahan sinyal
+        if not market_regime.get("allow_watchlist", True):
+            print("[Tracker] Auto-track dibatalkan: Pasar terkunci (Downtrend/Crash).")
+            # Otomatis batalkan semua status WATCHLIST yang belum terbeli agar terhindar dari gap down
+            self.cancel_pending_watchlist("Pasar IHSG Crash / Downtrend.")
+            return 0
+
         market_date = analysis.get("kpis", {}).get("latest_date")
         active_tickers = set(self.get_active_tickers())
         added = 0

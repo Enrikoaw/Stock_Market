@@ -432,14 +432,19 @@ async def _background_market_session_worker() -> None:
                     tg_cfg = load_telegram_config()
                     if tg_cfg.get("bot_token") and tg_cfg.get("chat_id") and tg_cfg.get("auto_notify", True):
                         try:
-                            print(f"[MarketWorker] Auto-broadcasting Top Picks Penutupan Bursa ({today_str}) ke Telegram...")
-                            stocks = STATE["analysis"]["stocks"] if STATE.get("analysis") else []
-                            market_date = STATE["analysis"]["kpis"]["latest_date"] if STATE.get("analysis") else today_str
-                            picks = filter_smart_telegram_picks(stocks=stocks, max_picks=3, max_pct_change=2.5, min_score=70)
-                            bcast_text = format_telegram_broadcast(picks, market_date)
-                            await asyncio.to_thread(send_telegram_message, tg_cfg["bot_token"], tg_cfg["chat_id"], bcast_text)
-                            LAST_DAILY_BROADCAST_DATE = today_str
-                            print("[MarketWorker] Broadcast Telegram penutupan pasar berhasil dikirim.")
+                            market_regime = STATE["analysis"]["kpis"].get("market_regime", {}) if STATE.get("analysis") else {}
+                            if not market_regime.get("allow_watchlist", True):
+                                print(f"[MarketWorker] Auto-broadcast Top Picks dilewati: {market_regime.get('label', 'Pasar terkunci')}.")
+                                LAST_DAILY_BROADCAST_DATE = today_str
+                            else:
+                                print(f"[MarketWorker] Auto-broadcasting Top Picks Penutupan Bursa ({today_str}) ke Telegram...")
+                                stocks = STATE["analysis"]["stocks"] if STATE.get("analysis") else []
+                                market_date = STATE["analysis"]["kpis"]["latest_date"] if STATE.get("analysis") else today_str
+                                picks = filter_smart_telegram_picks(stocks=stocks, max_picks=3, max_pct_change=2.5, min_score=70)
+                                bcast_text = format_telegram_broadcast(picks, market_date)
+                                await asyncio.to_thread(send_telegram_message, tg_cfg["bot_token"], tg_cfg["chat_id"], bcast_text)
+                                LAST_DAILY_BROADCAST_DATE = today_str
+                                print("[MarketWorker] Broadcast Telegram penutupan pasar berhasil dikirim.")
                         except Exception as tg_err:
                             print(f"[MarketWorker] Error broadcast Telegram: {tg_err}")
         except Exception as exc:

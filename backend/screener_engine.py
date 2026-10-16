@@ -1450,28 +1450,40 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
     if not latest_day_df.empty:
         breadth_ma20 = float((latest_day_df["Close"] >= latest_day_df["MA20"]).mean() * 100.0)
         breadth_ma50 = float((latest_day_df["Close"] >= latest_day_df["MA50"]).mean() * 100.0)
+        avg_market_pct = float(latest_day_df["Pct_Change"].median()) if "Pct_Change" in latest_day_df.columns else 0.0
     else:
         breadth_ma20 = 50.0
         breadth_ma50 = 50.0
+        avg_market_pct = 0.0
 
-    if breadth_ma20 >= 55.0:
-        regime_status = "BULLISH / RISK-ON"
-        regime_label = "Bullish Expansion"
-        regime_color = "emerald"
-        regime_alloc = "Alokasi Modal 100% (Porsi Penuh)"
-        regime_note = f"Market Breadth: {breadth_ma20:.1f}% emiten di atas MA20. Bursa kondusif untuk strategi Breakout & Trend Following."
-    elif breadth_ma20 >= 40.0:
-        regime_status = "NEUTRAL / CONSOLIDATION"
-        regime_label = "Netral / Konsolidasi"
-        regime_color = "amber"
-        regime_alloc = "Alokasi Modal 50% - 70% (Selektif)"
-        regime_note = f"Market Breadth: {breadth_ma20:.1f}% emiten di atas MA20. Bursa bergerak mendatar/selektif. Utamakan saham dengan skor VSA tertinggi (85+) dekat VWAP."
-    else:
-        regime_status = "BEARISH / RISK-OFF"
-        regime_label = "Bearish / Tekanan Jual"
+    # 3. Logika Lock vs Rebound
+    # Shock Drop (<= -1.5%), Breadth Hancur (< 35%), atau Distribusi Massal (dist >= accum * 3)
+    is_market_crash = (avg_market_pct <= -1.5) or (breadth_ma20 < 35.0) or (dist_now >= max(1, accum_now * 3))
+
+    # Rebound valid jika breadth berbalik naik >= 42% dan pergerakan harian positif (>= +0.5%)
+    is_rebound_confirmed = (not is_market_crash) and (breadth_ma20 >= 42.0) and (avg_market_pct >= 0.5)
+
+    if is_market_crash:
+        regime_status = "CRASH_LOCKED"
+        regime_label = "Pasar Tertekan (Watchlist Dibekukan)"
         regime_color = "rose"
-        regime_alloc = "Alokasi Modal 25% / Wait & See"
-        regime_note = f"Market Breadth: {breadth_ma20:.1f}% emiten di atas MA20. Mayoritas emiten tertekan di bawah MA20. Kurangi risiko per trade dan prioritaskan perlindungan modal."
+        regime_alloc = "Cash 100% / Dilarang Entry Baru"
+        allow_watchlist = False
+        regime_note = f"Peringatan Risiko: Pasar anjlok / Breadth {breadth_ma20:.1f}%. Seluruh sinyal beli baru ditahan demi mengamankan modal."
+    elif not is_rebound_confirmed and breadth_ma20 < 45.0:
+        regime_status = "WAITING_REBOUND"
+        regime_label = "Menunggu Konfirmasi Rebound"
+        regime_color = "amber"
+        regime_alloc = "Cash 80% - 90% (Wait & See)"
+        allow_watchlist = False
+        regime_note = "Pasar belum membentuk konfirmasi pantulan yang kuat. Menghindari jebakan Dead Cat Bounce."
+    else:
+        regime_status = "NORMAL_ACTIVE"
+        regime_label = "Pasar Kondusif / Rebound Terkonfirmasi"
+        regime_color = "emerald"
+        regime_alloc = "Alokasi Modal Normal Terukur"
+        allow_watchlist = True
+        regime_note = f"Market Breadth sehat ({breadth_ma20:.1f}% > MA20). Sinyal akumulasi diizinkan muncul."
 
     market_regime = {
         "status": regime_status,
@@ -1480,7 +1492,9 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         "allocation": regime_alloc,
         "breadth_ma20_pct": round(breadth_ma20, 1),
         "breadth_ma50_pct": round(breadth_ma50, 1),
+        "allow_watchlist": allow_watchlist,
         "regime_note": regime_note,
+        "avg_market_pct": round(avg_market_pct, 2),
     }
 
     kpis = {
