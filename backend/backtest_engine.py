@@ -225,6 +225,7 @@ def run_historical_backtest(
                     exit_price = ticker_prices[last_bar_date]["close"]
 
             pnl_pct = round(((exit_price - entry_price) / max(entry_price, 1.0)) * 100.0, 2)
+            tp2_pnl_pct = round(((tp2 - entry_price) / max(entry_price, 1.0)) * 100.0, 2) if hit_tp2 else pnl_pct
             trade_logs.append({
                 "ticker": ticker,
                 "date": date_str,
@@ -233,6 +234,7 @@ def run_historical_backtest(
                 "entered": True,
                 "result": status,
                 "pnl_pct": pnl_pct,
+                "tp2_pnl_pct": tp2_pnl_pct,
                 "hit_tp2": hit_tp2,
                 "bars_held": bars_held,
             })
@@ -326,7 +328,7 @@ def run_historical_backtest(
             "tp1_avg_win_pct": ov_avg_win,
             "tp2_wins": len(all_tp2),
             "tp2_win_rate_pct": round(len(all_tp2) / max(len(all_entered), 1) * 100.0, 1),
-            "tp2_avg_win_pct": round(float(np.mean([t["pnl_pct"] for t in all_tp2])), 2) if all_tp2 else 0.0,
+            "tp2_avg_win_pct": round(float(np.mean([t["tp2_pnl_pct"] for t in all_tp2])), 2) if all_tp2 else 0.0,
             "sl_losses": n_all_l,
             "sl_loss_pct": ov_loss_rate,
             "sl_avg_loss_pct": ov_avg_loss,

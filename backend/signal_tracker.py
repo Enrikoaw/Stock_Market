@@ -775,41 +775,22 @@ class SignalTracker:
             if l <= e_high:
                 # Harga eksekusi (fill): jika open di bawah limit, dapat harga open yang lebih murah; jika tidak, dapat harga limit (e_high)
                 fill = min(o, e_high)
+                r["entry_price"] = round(fill, 2)
+                r["entry_date"] = date
+                r["bars_held"] = 0
 
                 # Jika di hari yang sama harga terus anjlok menembus Stop Loss (l <= sl)
                 if l <= sl:
-                    # Cek apakah penutupan candle berhasil rebound di atas SL (c > sl)
-                    if c > sl:
-                        # Rebound berhasil di atas SL: posisi masuk RUNNING
-                        r.update(
-                            status="RUNNING",
-                            entry_date=date,
-                            entry_price=round(fill, 2),
-                            bars_held=0,
-                            last_close=c,
-                            pnl_pct=round((c - fill) / fill * 100.0, 2),
-                            note=f"Entry tereksekusi {date} @ Rp {fill:,.0f} (Low Rp {l:,.0f} menyentuh Entry Rp {e_high:,.0f}). Rebound di Rp {c:,.0f}.",
-                        )
-                        changes["entered"] += 1
-                        changes.setdefault("events", []).append({
-                            "event": "RUNNING",
-                            "ticker": r["ticker"],
-                            "price": round(fill, 2),
-                            "pnl_pct": r["pnl_pct"],
-                            "note": r["note"],
-                        })
-                        return
-                    else:
-                        # Candle tutup jebol di bawah SL: batalkan antrean demi keamanan modal
-                        r.update(
-                            status="EXPIRED",
-                            exit_date=date,
-                            exit_price=round(c, 2),
-                            pnl_pct=0.0,
-                            note=f"Batal beli: Harga jebol menembus SL (Low Rp {l:,.0f}, Close Rp {c:,.0f} <= SL Rp {sl:,.0f}).",
-                        )
-                        changes["expired"] += 1
-                        return
+                    exit_p = min(o, sl) if o < sl else sl
+                    self._close(
+                        r,
+                        date,
+                        exit_p,
+                        "LOSS",
+                        f"Entry tereksekusi @ Rp {fill:,.0f}, lalu Stop Loss tertembus di hari yang sama (Low Rp {l:,.0f} <= SL Rp {sl:,.0f}).",
+                        changes,
+                    )
+                    return
 
                 # Kondisi normal: Low menyentuh area antrean dan harga tidak tembus SL -> Posisi masuk RUNNING
                 r.update(

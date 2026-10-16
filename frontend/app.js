@@ -1470,6 +1470,11 @@ function renderInspectorChart(d) {
     chartInstance.destroy();
   }
 
+  const btnToggleLines = document.getElementById('btnToggleScenarioLines');
+  if (btnToggleLines) {
+    btnToggleLines.style.display = activeChartTab === 'price' ? 'flex' : 'none';
+  }
+
   const eyeOpen = document.getElementById('eyeIconOpen');
   const eyeClosed = document.getElementById('eyeIconClosed');
   if (eyeOpen && eyeClosed) {

@@ -301,6 +301,30 @@ def _run_sync_job_blocking() -> dict:
     }
 
 
+SYNC_LOCK: asyncio.Lock | None = None
+
+
+def get_sync_lock() -> asyncio.Lock:
+    global SYNC_LOCK
+    if SYNC_LOCK is None:
+        SYNC_LOCK = asyncio.Lock()
+    return SYNC_LOCK
+
+
+async def trigger_safe_sync() -> bool:
+    """Eksekusi sinkronisasi aman non-reentrant menggunakan asyncio.Lock."""
+    lock = get_sync_lock()
+    if lock.locked() or STATE["is_syncing"]:
+        return False
+    async with lock:
+        STATE["is_syncing"] = True
+        try:
+            await asyncio.to_thread(_run_sync_job_blocking)
+            return True
+        finally:
+            STATE["is_syncing"] = False
+
+
 # Daftar Hari Libur Resmi Bursa Efek Indonesia (BEI / IDX) 2025 - 2027
 IDX_HOLIDAYS: set[str] = {
     # 2025
@@ -405,7 +429,7 @@ async def _background_market_session_worker() -> None:
             # - Di luar jam bursa saat cache tertinggal: coba maksimal 1x tiap 30 menit (1800 detik) agar tidak membebani CPU/IP
             # - Saat pertama kali server dinyalakan: hanya sync jika file cache belum ada sama sekali
             should_sync = False
-            if not STATE["is_syncing"]:
+            if not STATE["is_syncing"] and not get_sync_lock().locked():
                 if market_open and (now_ts - last_sync_attempt_ts >= 900):
                     should_sync = True
                 elif cache_stale and (now_ts - last_sync_attempt_ts >= 1800):
@@ -416,11 +440,7 @@ async def _background_market_session_worker() -> None:
             if should_sync:
                 print(f"[MarketWorker] Menjalankan sinkronisasi background (market_open={market_open}, cache_stale={cache_stale})...")
                 last_sync_attempt_ts = now_ts
-                STATE["is_syncing"] = True
-                try:
-                    await asyncio.to_thread(_run_sync_job_blocking)
-                finally:
-                    STATE["is_syncing"] = False
+                await trigger_safe_sync()
 
             # Auto-Broadcast Penutupan Pasar (16:15 WIB) ke Telegram
             global LAST_DAILY_BROADCAST_DATE
@@ -660,9 +680,10 @@ async def get_stock_candles(ticker: str, period: str = Query(default="6mo")) -> 
     details_map = STATE["analysis"]["details"]
     detail = details_map.get(key, {})
 
-    # Prioritaskan data histori lokal dari memori/cache (< 1ms) agar UI instan dan tidak membebani network
+    # Prioritaskan data histori lokal dari memori/cache (< 1ms) jika mencukupi rentang candle yang diminta
     candles = []
-    if detail and detail.get("history") and len(detail["history"]) >= 5:
+    required_bars = 100 if period in ("6mo", "1y", "2y") else 20
+    if detail and detail.get("history") and len(detail["history"]) >= required_bars:
         candles = [
             {
                 "date": h["date"],
@@ -702,7 +723,7 @@ async def sync_unified_market_data() -> dict:
     """Satu jalur sinkronisasi non-blocking: langsung merespon ke frontend agar koneksi HTTP
     tidak tertutup timeout (ERR_CONNECTION_CLOSED), sementara proses unduh & kalkulasi 844 saham
     berjalan aman di background thread."""
-    if STATE["is_syncing"]:
+    if get_sync_lock().locked() or STATE["is_syncing"]:
         return {
             "status": "already_running",
             "message": "Sinkronisasi seluruh saham sedang berlangsung di background...",
@@ -714,15 +735,12 @@ async def sync_unified_market_data() -> dict:
         }
 
     async def _async_sync_runner():
-        STATE["is_syncing"] = True
-        try:
-            print("[SyncAPI] Memulai proses sinkronisasi background aman...")
-            await asyncio.to_thread(_run_sync_job_blocking)
+        print("[SyncAPI] Memulai proses sinkronisasi background aman...")
+        synced = await trigger_safe_sync()
+        if synced:
             print("[SyncAPI] Sinkronisasi background selesai dengan sukses.")
-        except Exception as exc:
-            print(f"[SyncAPI] Error sinkronisasi background: {exc}")
-        finally:
-            STATE["is_syncing"] = False
+        else:
+            print("[SyncAPI] Sinkronisasi dilewati karena sedang berjalan.")
 
     asyncio.create_task(_async_sync_runner())
     return {

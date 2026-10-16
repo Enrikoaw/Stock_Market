@@ -1293,9 +1293,13 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # Klasifikasi Sinyal Kuantitatif (Trigger Type)
+    # Proteksi Anti False-Crash: Hanya saham yang aktif diperdagangkan (Value_IDR >= 500 Juta) yang dievaluasi sebagai distribusi
     c_dist = (
-        ((df["Closing_Range"] <= 0.35) & (df["Pct_Change"] <= -1.5) & (df["Volume_Ratio"] >= 1.2))
-        | (df["Smart_Money_Score"] <= 35)
+        (df["Value_IDR"] >= 500_000_000)
+        & (
+            ((df["Closing_Range"] <= 0.35) & (df["Pct_Change"] <= -1.5) & (df["Volume_Ratio"] >= 1.2))
+            | (df["Smart_Money_Score"] <= 35)
+        )
     )
     c_markup = (
         is_safe_swing
