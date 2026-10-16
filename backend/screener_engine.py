@@ -1734,8 +1734,8 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         avg_market_pct = 0.0
 
     # 3. Logika Lock vs Rebound
-    # Shock Drop (<= -1.5%), Breadth Hancur (< 35%), atau Distribusi Massal (dist >= accum * 3)
-    is_market_crash = (avg_market_pct <= -1.5) or (breadth_ma20 < 35.0) or (dist_now >= max(1, accum_now * 3))
+    # Shock Drop (<= -1.5%), Breadth Hancur (< 35%), atau Distribusi Massal (dist_now >= 15 dan dist_now >= max(1, accum_now * 3))
+    is_market_crash = (avg_market_pct <= -1.5) or (breadth_ma20 < 35.0) or (dist_now >= 15 and dist_now >= max(1, accum_now * 3))
 
     # Rebound valid jika breadth berbalik naik >= 42% dan pergerakan harian positif (>= +0.5%)
     is_rebound_confirmed = (not is_market_crash) and (breadth_ma20 >= 42.0) and (avg_market_pct >= 0.5)

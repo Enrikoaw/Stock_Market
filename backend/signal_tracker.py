@@ -606,11 +606,6 @@ class SignalTracker:
                 except (ValueError, TypeError):
                     val_num = 1.0
 
-                # Jika tidak memenuhi 6 filter (misal likuiditas < 1M, skor < 70, atau bukan akumulasi), hapus dari sistem
-                if val_num < 1.0 or cur_score < self.min_score or cur_trigger not in TRACKABLE_TRIGGERS:
-                    ids_to_delete.append(row["id"])
-                    continue
-
                 diff_b = d.get("diff_bandar_avg_pct")
                 if diff_b is None and isinstance(d.get("trading_plan"), dict):
                     diff_b = d["trading_plan"].get("diff_bandar_avg_pct")
