@@ -38,6 +38,11 @@ from excel_generator import (
     generate_900_idx_master_tickers_df,
 )
 from live_idx_fetcher import fetch_real_idx_market_data
+from broker_summary_fetcher import (
+    load_broker_api_config,
+    save_broker_api_config,
+    run_stage2_broker_enrichment,
+)
 from portfolio_tracker import PortfolioTracker
 from signal_tracker import SignalTracker
 from telegram_notifier import (
@@ -240,8 +245,19 @@ def _run_sync_job_blocking() -> dict:
     import gc
     gc.collect()
 
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     latest_dt = analysis["kpis"]["latest_date"]
+
+    # Stage 2: Broker Summary API Fetcher (Jika API Key/Token tersedia)
+    broker_cfg = load_broker_api_config()
+    if broker_cfg.get("goapi_key") or broker_cfg.get("stockbit_token"):
+        stage1_candidates = [
+            s for s in analysis.get("stocks", [])
+            if float(s.get("value_b_idr", 0)) >= 1.0 and int(s.get("smart_money_score", 0)) >= 50
+        ]
+        if stage1_candidates:
+            run_stage2_broker_enrichment(stage1_candidates, str(latest_dt), broker_cfg)
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["source_name"] = f"Live IDX ({latest_dt})"
     STATE["analysis"] = analysis
     STATE["last_sync_time"] = now_str
@@ -1346,6 +1362,48 @@ def save_telegram_config_endpoint(req: TelegramConfigSaveRequest) -> dict:
             "auto_notify": cfg["auto_notify"],
         },
     }
+
+
+class BrokerApiConfigRequest(BaseModel):
+    provider: Optional[str] = "goapi"
+    goapi_key: Optional[str] = None
+    stockbit_token: Optional[str] = None
+    delay_ms: Optional[int] = 1000
+    max_candidates: Optional[int] = 60
+
+
+@app.get("/api/broker/config")
+def get_broker_api_config_endpoint() -> dict:
+    cfg = load_broker_api_config()
+    go_key = cfg.get("goapi_key", "")
+    masked_key = f"{go_key[:4]}...{go_key[-4:]}" if len(go_key) > 8 else ("***" if go_key else "")
+    return {
+        "provider": cfg.get("provider", "goapi"),
+        "has_goapi_key": bool(go_key),
+        "masked_goapi_key": masked_key,
+        "has_stockbit_token": bool(cfg.get("stockbit_token")),
+        "delay_ms": cfg.get("delay_ms", 1000),
+        "max_candidates": cfg.get("max_candidates", 60),
+    }
+
+
+@app.post("/api/broker/config")
+def save_broker_api_config_endpoint(req: BrokerApiConfigRequest) -> dict:
+    cfg = load_broker_api_config()
+    if req.provider:
+        cfg["provider"] = req.provider.strip().lower()
+    if req.goapi_key is not None:
+        cfg["goapi_key"] = req.goapi_key.strip()
+    if req.stockbit_token is not None:
+        cfg["stockbit_token"] = req.stockbit_token.strip()
+    if req.delay_ms is not None:
+        cfg["delay_ms"] = max(200, req.delay_ms)
+    if req.max_candidates is not None:
+        cfg["max_candidates"] = max(10, req.max_candidates)
+    ok = save_broker_api_config(cfg)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Gagal menyimpan konfigurasi Broker API.")
+    return {"status": "success", "message": "Konfigurasi Broker API berhasil disimpan!", "config": cfg}
 
 
 @app.post("/api/telegram/test")
