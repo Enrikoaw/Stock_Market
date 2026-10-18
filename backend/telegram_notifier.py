@@ -217,22 +217,22 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
             f"💰 <b>Harga:</b> Rp {close:,} (<b>{pct_sign}{pct:.2f}%</b>) | <b>VSA Score:</b> {score}/100\n"
             f"⚡ <b>Sinyal:</b> {trigger_lbl} | <b>Pita:</b> {tape_lbl}\n"
             f"📊 <b>Vol Spike:</b> {vol_ratio:.1f}x MA20 | <b>Nilai Transaksi:</b> Rp {val_b:.2f}M\n\n"
-            f"🎯 <b>TRADING PLAN (Take Profit Cepat):</b>\n"
-            f"• <b>Harga Beli:</b> <code>Rp {e_high:,}</code>\n"
-            f"• <b>Stop Loss (SL):</b> <code>Rp {sl:,} ({sl_pct:.1f}%)</code>\n"
-            f"• <b>Target TP1 (+4%):</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code> ➜ <b>Est. Skor Setup: {tp1_win}%</b>\n"
-            f"• <b>Target TP2 (+7%):</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code> ➜ <b>Est. Skor Lanjut: {tp2_win}%</b>\n"
+            f"🎯 <b>TRADING PLAN (RRR 1:2 · Retest VWAP):</b>\n"
+            f"• <b>Harga Antre Beli:</b> <code>Rp {e_high:,}</code>\n"
+            f"• <b>Stop Loss (Closing Basis):</b> <code>Rp {sl:,} ({sl_pct:.1f}%)</code>\n"
+            f"• <b>Target TP1 (+6%):</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code> ➜ <b>Est. Skor Setup: {tp1_win}%</b>\n"
+            f"• <b>Target TP2 (+10%):</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code> ➜ <b>Est. Skor Lanjut: {tp2_win}%</b>\n"
             f"• <b>VWAP 5 Hari:</b> Rp {vwap_5d:,} (Jarak: {diff_vwap:+.1f}%)\n"
         )
         lines.append(card)
 
     footer = (
         "━━━━━━━━━━━━━━━━━━━\n"
-        "💡 <b>Panduan Modal 10 Juta:</b>\n"
-        "• Pilih maksimal 2 saham, porsi Rp 3–5 juta per saham.\n"
-        "• Pasang Buy Limit di Harga Beli saat koreksi.\n"
-        "• Take Profit Cepat: TP1 di +4% (Amankan modal), TP2 di +7% (Realisasi profit penuh).\n"
-        "• Wajib pasang Automatic Stop Loss di aplikasi sekuritas."
+        "💡 <b>Panduan Eksekusi RRR 1:2:</b>\n"
+        "• Wajib pastikan IHSG > MA50 (Hard Macro Gate).\n"
+        "• Pasang Buy Limit di Harga Antre (Retest/VWAP), hindari hajar kanan di pucuk.\n"
+        "• Take Profit Bertahap: TP1 di +6% (Amankan 50% lot), TP2 di +10% (Kawal sisa lot dengan Trailing Stop).\n"
+        "• Evaluasi Stop Loss berbasis harga penutupan (Pre-Closing 15:45 WIB) agar tidak terkena jarum shakeout."
     )
 
     # R1: Rakitan aman per blok agar pemotongan tidak pernah membelah tag HTML (<b, <i, <code)

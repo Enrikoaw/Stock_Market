@@ -160,8 +160,8 @@ class SignalTracker:
                 e_high = float(r.get("entry_high") or r.get("entry_price") or r.get("signal_close") or 0)
                 if e_high <= 0:
                     continue
-                new_tp1 = _round_idx_tick(e_high * 1.04)
-                new_tp2 = _round_idx_tick(e_high * 1.07)
+                new_tp1 = _round_idx_tick(e_high * 1.06)
+                new_tp2 = _round_idx_tick(e_high * 1.10)
                 if new_tp2 <= new_tp1:
                     new_tp2 = _round_idx_tick(new_tp1 + (2 if e_high >= 200 else 1))
                 primary_tp = new_tp2 if self.tp_level == 2 else new_tp1
@@ -748,20 +748,21 @@ class SignalTracker:
                 r["entry_date"] = date
                 r["bars_held"] = 0
 
-                # Jika di hari yang sama harga terus anjlok menembus Stop Loss (l <= sl)
-                if l <= sl:
-                    exit_p = min(o, sl) if o < sl else sl
+                # Parameter 2: Evaluasi Stop Loss berbasis Closing Basis (c <= sl) atau panic crash ekstrim (l <= sl * 0.96)
+                # Mencegah terkena shakeout prematur akibat jarum bawah intraday (wick dip) yang ditarik naik saat penutupan.
+                if c <= sl or l <= sl * 0.96:
+                    exit_p = min(o, sl) if o < sl else (c if c <= sl else sl)
                     self._close(
                         r,
                         date,
                         exit_p,
                         "LOSS",
-                        f"Entry tereksekusi @ Rp {fill:,.0f}, lalu Stop Loss tertembus di hari yang sama (Low Rp {l:,.0f} <= SL Rp {sl:,.0f}).",
+                        f"Entry tereksekusi @ Rp {fill:,.0f}, lalu Stop Loss Closing Basis tertembus di hari yang sama (Close Rp {c:,.0f} <= SL Rp {sl:,.0f}).",
                         changes,
                     )
                     return
 
-                # Kondisi normal: Low menyentuh area antrean dan harga tidak tembus SL -> Posisi masuk RUNNING.
+                # Kondisi normal: Low menyentuh area antrean dan Close bertahan di atas SL -> Posisi masuk RUNNING.
                 # Konservatif (T1): Target Price (TP) tidak dievaluasi pada bar entry yang sama karena urutan High vs Low intraday tidak diketahui;
                 # evaluasi TP dimulai pada bar hari berikutnya.
                 r.update(
@@ -804,10 +805,11 @@ class SignalTracker:
             sl, tp = float(r["stop_loss"]), float(r["target"])
             entry_p = float(r["entry_price"])
 
-            # 1. Stop Loss tersentuh (tetap menggunakan SL terencana tanpa trailing di atas modal)
-            if l <= sl:
-                exit_p = o if o < sl else sl
-                note = "Stop Loss tersentuh." if h < tp else "SL & TP tersentuh di hari yang sama — dihitung LOSS (konservatif)."
+            # 1. Parameter 2: Stop Loss berbasis Closing Basis (Close <= SL) + proteksi Gap Down (Open <= SL) / Panic Crash (Low <= SL * 0.96)
+            hit_sl_close = (c <= sl) or (o <= sl) or (l <= sl * 0.96)
+            if hit_sl_close:
+                exit_p = o if o <= sl else (c if c <= sl else sl)
+                note = "Stop Loss Closing Basis tertembus (Close <= SL)." if h < tp else "SL & TP tersentuh di hari yang sama — dihitung LOSS (konservatif)."
                 self._close(r, date, exit_p, "LOSS", note, changes)
                 return
 
@@ -1075,18 +1077,23 @@ class SignalTracker:
                     sec_cat = classify_idx_sector(str(r.Ticker).upper(), r_sec)
                     if sec_cat in seen_day_sectors:
                         continue
-                    entry_price = _round_idx_tick(c_price)
+                    diff_vwap = round(float(r.Diff_VWAP_Pct), 2) if hasattr(r, "Diff_VWAP_Pct") else 0.0
+                    vwap_5d_val = int(round(float(r.VWAP_5D))) if hasattr(r, "VWAP_5D") and not pd.isna(r.VWAP_5D) else c_price
+                    if (pct_val > 2.0 or diff_vwap > 1.5) and vwap_5d_val > 0 and vwap_5d_val < c_price:
+                        retest_anchor = int(round(max(float(vwap_5d_val), c_price * 0.985, (c_price + vwap_5d_val) * 0.5)))
+                        entry_price = _round_idx_tick(min(c_price, retest_anchor))
+                    else:
+                        entry_price = _round_idx_tick(c_price)
                     entry_low = entry_price
                     entry_high = entry_price
                     atr14_val = int(r.ATR14) if hasattr(r, "ATR14") and not pd.isna(r.ATR14) else max(1, int(round(entry_price * 0.03)))
-                    sl_dist = max(int(round(entry_price * 0.035)), min(int(round(entry_price * 0.050)), int(round(1.4 * atr14_val))))
+                    sl_dist = max(int(round(entry_price * 0.040)), min(int(round(entry_price * 0.050)), int(round(1.5 * atr14_val))))
                     sl = _round_idx_tick(entry_price - sl_dist)
-                    tp1 = _round_idx_tick(entry_price * 1.04)
-                    tp2 = _round_idx_tick(entry_price * 1.07)
+                    tp1 = _round_idx_tick(entry_price * 1.06)
+                    tp2 = _round_idx_tick(entry_price * 1.10)
                     if tp2 <= tp1:
                         tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
 
-                    diff_vwap = round(float(r.Diff_VWAP_Pct), 2) if hasattr(r, "Diff_VWAP_Pct") else 0.0
                     val_idr = float(r.Value_IDR) if hasattr(r, "Value_IDR") else 1_000_000_000.0
                     trig_type = str(r.Trigger_Type)
                     trig_lbl = trigger_labels.get(trig_type, trig_type)

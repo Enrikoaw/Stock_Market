@@ -1213,6 +1213,9 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     df["Top3_BSR"] = (df["Top3_Buy_Lot"] / np.maximum(df["Top3_Sell_Lot"], 1.0)).round(2)
     df["Top1_BSR"] = (df["Top1_Buy_Lot"] / np.maximum(df["Top1_Sell_Lot"], 1.0)).round(2)
     df["Top5_BSR"] = (df["Top5_Buy_Lot"] / np.maximum(df["Top5_Sell_Lot"], 1.0)).round(2)
+    df["Top3_Accum_Share_Pct"] = (
+        (df["Top3_Buy_Lot"] / np.maximum(df["Top3_Buy_Lot"] + df["Top3_Sell_Lot"], 1.0)) * 100.0
+    ).round(1)
     df["Broker_Dominance_Pct"] = ((df["Net_Top3_Lot"] / np.maximum(df["Volume_Lot"], 1.0)) * 100.0).round(2)
 
     df["Net_Foreign_IDR"] = df["Foreign_Buy_Val"] - df["Foreign_Sell_Val"]
@@ -1299,6 +1302,19 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     )
     df["Pilar5_VWAP_Score"] = np.clip(vwap_pts, 0.0, 25.0).round(1)
 
+    # Parameter 5: Validasi Smart Money (Top 3 Broker Accumulation >= 60% atau Foreign Inflow Positif bila Broker Summary Tersedia)
+    sec_lower = df["Sector"].astype(str).str.lower()
+    has_broker_s = (
+        df["Has_Broker_Summary"].fillna(False).astype(bool)
+        if "Has_Broker_Summary" in df.columns
+        else pd.Series(False, index=df.index)
+    )
+    broker_accum_bonus = np.where(
+        has_broker_s & ((df["Top3_Accum_Share_Pct"] >= 60.0) | (df["Net_Foreign_IDR"] > 0)),
+        4.0,
+        np.where(has_broker_s & (df["Top3_Accum_Share_Pct"] < 52.0) & (df["Net_Foreign_IDR"] <= 0), -8.0, 0.0),
+    )
+
     # Total Skor Kuantitatif (Single Unified Value)
     df["Smart_Money_Score"] = np.clip(
         np.round(
@@ -1307,26 +1323,26 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
             + df["Pilar3_Squeeze_Score"]
             + df["Pilar4_Liquidity_Score"]
             + df["Pilar5_VWAP_Score"]
+            + broker_accum_bonus
         ),
         5,
         100,
     ).astype(int)
     df["Daily_SM_Score"] = df["Smart_Money_Score"]
 
-    # Filter Keamanan Swing Pendek: Bukan Saham FCA/Akselerasi, Harga >= Rp 70, Turnover >= 1M,
-    # serta Frekuensi >= 150 (jika data frekuensi asli bursa tersedia)
-    sec_lower = df["Sector"].astype(str).str.lower()
-    has_broker_s = (
-        df["Has_Broker_Summary"].fillna(False).astype(bool)
-        if "Has_Broker_Summary" in df.columns
-        else pd.Series(False, index=df.index)
-    )
+    # Filter Keamanan Swing: Bukan Saham FCA/Akselerasi, Harga >= Rp 70, Turnover >= 1M,
+    # Frekuensi >= 150 (jika data frekuensi asli bursa tersedia), serta Validasi Broker Top 3 >= 60% (jika Broker Summary tersedia)
+    broker_valid_gate = (~has_broker_s) | (df["Top3_Accum_Share_Pct"] >= 60.0) | (df["Net_Foreign_IDR"] > 0)
+    ohlcv_accum_gate = has_broker_s | (df["OBV_5D_Rising"] & (df["UpDown_Vol_Ratio_5D"] >= 1.2) & (df["MA20"] >= df["MA50"] * 0.995))
+
     is_safe_swing = (
         (df["Close"] >= 70)
         & (~sec_lower.str.contains("pemantauan khusus", na=False))
         & (~sec_lower.str.contains("akselerasi", na=False))
         & (df["Value_IDR"] >= 1_000_000_000)
         & ((~has_broker_s) | (df["Frequency"] >= 150))
+        & broker_valid_gate
+        & ohlcv_accum_gate
     )
 
     # Klasifikasi Sinyal Kuantitatif (Trigger Type)
@@ -1358,6 +1374,7 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
         & (df["Diff_VWAP_Pct"] >= -1.0)
         & (df["Diff_VWAP_Pct"] <= 3.5)
         & (df["Volume_Ratio"] <= 1.35)
+        & (df["Close"] >= df["MA20"] * 0.99)
     )
     c_big_accum = (
         is_safe_swing
@@ -1369,6 +1386,7 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
         & (df["Diff_VWAP_Pct"] >= -1.0)
         & (df["Diff_VWAP_Pct"] <= 3.5)
         & (df["Value_IDR"] >= 1_000_000_000)
+        & (df["Close"] >= df["MA20"])
     )
     c_foreign = (
         is_safe_swing
@@ -1421,6 +1439,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         top3_bsr = round(float(latest["Top3_BSR"]), 2)
         top1_bsr = round(float(latest["Top1_BSR"]), 2)
         top5_bsr = round(float(latest["Top5_BSR"]), 2)
+        top3_accum_share_pct = round(float(latest.get("Top3_Accum_Share_Pct", 50.0)), 1)
         bdr_pct = round(float(latest["Broker_Dominance_Pct"]), 2)
         cum_5d_net_top3_lot = int(round(float(last5["Net_Top3_Lot"].sum())))
         cum_5d_vol_lot = max(1, int(round(float(last5["Volume_Lot"].sum()))))
@@ -1537,26 +1556,35 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
                 "detail": fund_safety["summary"] + f" (Turnover Rp {val_idr / 1e9:.2f} M).",
             },
             {
-                "title": "Kualitas Arus Volume (Tape Flow)",
-                "score": "ORGANIC" if tape_quality["is_organic"] else "ANOMALY",
-                "status": "pass" if tape_quality["is_organic"] else ("warn" if tape_quality["code"] == "SUSPICIOUS_CROSSING" else "fail"),
-                "metric": tape_quality["label"],
-                "detail": tape_quality["reason"],
+                "title": "Kualitas Arus Volume & Broker (Smart Money)",
+                "score": f"TOP3 {top3_accum_share_pct}%" if has_real_freq else ("ORGANIC" if tape_quality["is_organic"] else "ANOMALY"),
+                "status": "pass" if (tape_quality["is_organic"] and (not has_real_freq or top3_accum_share_pct >= 60.0 or net_foreign_idr > 0)) else "warn",
+                "metric": f"Top 3 Buy Share: {top3_accum_share_pct}%" if has_real_freq else tape_quality["label"],
+                "detail": (
+                    f"Dominasi 3 sekuritas pembeli teratas mencapai {top3_accum_share_pct}% (BSR {top3_bsr}x). " + tape_quality["reason"]
+                    if has_real_freq
+                    else tape_quality["reason"]
+                ),
             },
         ]
 
-        # Trading Plan: 1 Harga Beli Acuan (Close Hari Sinyal) & SL Proporsional
-        entry_price = _round_idx_tick(close_price)
+        # Parameter 4: Titik Masuk (Entry) di Area Retest / Pullback / VWAP (Buy on Weakness, bukan Hajar Kanan di Pucuk)
+        if (pct_change > 2.0 or diff_vwap_pct > 1.5) and vwap_5d > 0 and vwap_5d < close_price:
+            retest_anchor = int(round(max(float(vwap_5d), close_price * 0.985, (close_price + vwap_5d) * 0.5)))
+            entry_price = _round_idx_tick(min(close_price, retest_anchor))
+        else:
+            entry_price = _round_idx_tick(close_price)
         entry_low = entry_price
         entry_high = entry_price
-        # Batasi Stop Loss proporsional -3.5% s/d -5.0% (1.4 * ATR14) untuk Swing Pendek
-        sl_distance = max(int(round(entry_price * 0.035)), min(int(round(entry_price * 0.050)), int(round(1.4 * atr14_val))))
+
+        # Parameter 2 & 3: Stop Loss Proporsional -4.0% s/d -5.0% (Closing Basis) & Target Profit RRR 1:2 (TP1 +6%, TP2 +10%)
+        sl_distance = max(int(round(entry_price * 0.040)), min(int(round(entry_price * 0.050)), int(round(1.5 * atr14_val))))
         stop_loss = _round_idx_tick(entry_price - sl_distance)
         risk_idr = max(1, entry_price - stop_loss)
         risk_pct = round((risk_idr / max(entry_price, 1)) * 100.0, 2)
 
-        tp1 = _round_idx_tick(entry_price * 1.04)
-        tp2 = _round_idx_tick(entry_price * 1.07)
+        tp1 = _round_idx_tick(entry_price * 1.06)
+        tp2 = _round_idx_tick(entry_price * 1.10)
         if tp2 <= tp1:
             tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
         tp1_pct = round(((tp1 - entry_price) / max(entry_price, 1)) * 100.0, 2)
@@ -1570,28 +1598,28 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
                 "Hindari entry terburu-buru sampai terbentuk sinyal pembalikan (Stopping Volume)."
             )
         elif trigger_type == "MARKUP_BREAKOUT":
-            action_bias = "BUY ON BREAKOUT / RETEST"
+            action_bias = "BUY ON RETEST / PULLBACK"
             rationale = (
-                f"Breakout di atas resisten dengan lonjakan volume {vol_ratio}x baseline. "
-                f"Stop Loss berbasis ATR(14) Rp {atr14_val:,} di level Rp {stop_loss:,} (-{risk_pct}%)."
+                f"Breakout volume {vol_ratio}x baseline. Antre limit di area Retest/VWAP Rp {entry_price:,} "
+                f"(SL Closing Basis Rp {stop_loss:,} [-{risk_pct}%], RRR 1:{rr_ratio})."
             )
         elif trigger_type == "SILENT_ACCUMULATION":
             action_bias = "BUY NEAR VWAP 5H (SWING)"
             rationale = (
-                f"Terdeteksi kompresi volatilitas (Squeeze) dengan harga dijaga ketat di area VWAP 5H (Rp {vwap_5d:,}). "
-                f"Cicil beli dengan batas risiko ATR(14) Rp {atr14_val:,}."
+                f"Terdeteksi kompresi volatilitas (Squeeze) di area VWAP 5H (Rp {vwap_5d:,}). "
+                f"Antre beli di Rp {entry_price:,} dengan SL Closing Basis Rp {stop_loss:,}."
             )
         elif trigger_type == "BIG_ACCUMULATION":
-            action_bias = "BUY ON ACCUMULATION"
+            action_bias = "BUY ON RETEST ACCUMULATION"
             rationale = (
-                f"Akumulasi volume likuiditas besar (Turnover Rp {val_idr / 1e9:.2f} M) di atas VWAP 5H. "
-                f"Target cepat TP1 Rp {tp1:,} (+{tp1_pct}%) & TP2 Rp {tp2:,} (+{tp2_pct}%)."
+                f"Akumulasi institusi (Turnover Rp {val_idr / 1e9:.2f} M) di atas VWAP 5H. "
+                f"Target RRR 1:{rr_ratio} — TP1 Rp {tp1:,} (+{tp1_pct}%) & TP2 Rp {tp2:,} (+{tp2_pct}%)."
             )
         elif trigger_type == "FOREIGN_INFLOW":
             action_bias = "FOLLOW FOREIGN INFLOW"
             rationale = (
                 f"Arus perputaran dana asing positif Rp {net_foreign_idr / 1e9:+.2f} Miliar. "
-                f"Manfaatkan momentum akumulasi dengan Stop Loss Rp {stop_loss:,}."
+                f"Antre di Rp {entry_price:,} dengan SL Closing Basis Rp {stop_loss:,}."
             )
         else:
             action_bias = "BUY ON SUPPORT / WATCHLIST"
@@ -1771,7 +1799,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             return round(((curr - prev) / prev) * 100.0, 1)
         return 100.0 if curr > 0 else 0.0
 
-    # Market Regime Analysis
+    # Market Regime Analysis (Parameter 1: Hard Macro Gate IHSG > MA50 & Breadth MA50 >= 40%)
     latest_dt = max((s["date"] for s in stocks_result), default=global_latest_dt)
     latest_day_df = df[df["Date"] == latest_dt]
     if not latest_day_df.empty:
@@ -1783,34 +1811,60 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         breadth_ma50 = 50.0
         avg_market_pct = 0.0
 
-    # 3. Logika Lock vs Rebound
-    # Shock Drop (<= -1.5%), Breadth Hancur (< 35%), atau Distribusi Massal (dist_now >= 15 dan dist_now >= max(1, accum_now * 3))
-    is_market_crash = (avg_market_pct <= -1.5) or (breadth_ma20 < 35.0) or (dist_now >= 15 and dist_now >= max(1, accum_now * 3))
+    # Cek IHSG > MA50 dari ihsg_5y.csv jika tersedia dan mutakhir (selisih <= 7 hari dari latest_dt)
+    ihsg_above_ma50 = breadth_ma50 >= 40.0
+    try:
+        from pathlib import Path
+        ihsg_csv_path = Path(__file__).resolve().parent.parent / "data" / "ihsg_5y.csv"
+        if ihsg_csv_path.exists():
+            ihsg_df_m = pd.read_csv(ihsg_csv_path, usecols=["Date", "Close"])
+            ihsg_sub = ihsg_df_m[ihsg_df_m["Date"] <= str(latest_dt)].tail(60)
+            if len(ihsg_sub) >= 50:
+                last_ihsg_dt = pd.to_datetime(str(ihsg_sub.iloc[-1]["Date"]))
+                target_dt_obj = pd.to_datetime(str(latest_dt))
+                if abs((target_dt_obj - last_ihsg_dt).days) <= 7:
+                    ihsg_c = float(ihsg_sub.iloc[-1]["Close"])
+                    ihsg_m50 = float(ihsg_sub["Close"].tail(50).mean())
+                    ihsg_above_ma50 = ihsg_c >= ihsg_m50
+    except Exception:
+        ihsg_above_ma50 = breadth_ma50 >= 40.0
 
-    # Rebound valid jika breadth berbalik naik >= 42% dan pergerakan harian positif (>= +0.5%)
-    is_rebound_confirmed = (not is_market_crash) and (breadth_ma20 >= 42.0) and (avg_market_pct >= 0.5)
+    # 3. Logika Lock vs Rebound (Hard Macro Gate: IHSG < MA50 atau Breadth MA50 < 40% mengunci pembelian baru)
+    is_market_crash = (
+        (avg_market_pct <= -1.5)
+        or (breadth_ma20 < 35.0)
+        or (breadth_ma50 < 38.0)
+        or (not ihsg_above_ma50 and breadth_ma50 < 45.0)
+        or (dist_now >= 15 and dist_now >= max(1, accum_now * 3))
+    )
+
+    # Rebound valid jika breadth berbalik naik >= 42%, Breadth MA50 >= 40%, dan pergerakan harian positif (>= +0.5%)
+    is_rebound_confirmed = (not is_market_crash) and ihsg_above_ma50 and (breadth_ma20 >= 42.0) and (avg_market_pct >= 0.5)
 
     if is_market_crash:
         regime_status = "CRASH_LOCKED"
-        regime_label = "Pasar Tertekan (Watchlist Dibekukan)"
+        regime_label = "Pasar Bearish / IHSG < MA50 (Watchlist Dibekukan)"
         regime_color = "rose"
-        regime_alloc = "Cash 100% / Dilarang Entry Baru"
+        regime_alloc = "Cash 100% / Dilarang Entry Baru (IHSG < MA50)"
         allow_watchlist = False
-        regime_note = f"Peringatan Risiko: Pasar anjlok / Breadth {breadth_ma20:.1f}%. Seluruh sinyal beli baru ditahan demi mengamankan modal."
-    elif not is_rebound_confirmed and breadth_ma20 < 45.0:
+        regime_note = (
+            f"Hard Macro Gate Aktif: IHSG di bawah MA50 / Breadth MA20 {breadth_ma20:.1f}% (MA50 {breadth_ma50:.1f}%). "
+            "Seluruh sinyal beli baru dikunci (Cash 100%) demi mengamankan modal."
+        )
+    elif (not ihsg_above_ma50) or (not is_rebound_confirmed and breadth_ma20 < 45.0):
         regime_status = "WAITING_REBOUND"
-        regime_label = "Menunggu Konfirmasi Rebound"
+        regime_label = "Menunggu IHSG > MA50 & Konfirmasi Rebound"
         regime_color = "amber"
-        regime_alloc = "Cash 80% - 90% (Wait & See)"
+        regime_alloc = "Cash 100% (Wait & See — Menunggu IHSG > MA50)"
         allow_watchlist = False
-        regime_note = "Pasar belum membentuk konfirmasi pantulan yang kuat. Menghindari jebakan Dead Cat Bounce."
+        regime_note = "Pasar belum melewati batas aman makro (IHSG > MA50 & Breadth >= 45%). Menghindari jebakan Dead Cat Bounce."
     else:
         regime_status = "NORMAL_ACTIVE"
-        regime_label = "Pasar Kondusif / Rebound Terkonfirmasi"
+        regime_label = "Pasar Kondusif (IHSG > MA50 Terkonfirmasi)"
         regime_color = "emerald"
-        regime_alloc = "Alokasi Modal Normal Terukur"
+        regime_alloc = "Alokasi Modal Normal Terukur (RRR 1:2)"
         allow_watchlist = True
-        regime_note = f"Market Breadth sehat ({breadth_ma20:.1f}% > MA20). Sinyal akumulasi diizinkan muncul."
+        regime_note = f"Hard Macro Gate Lolos (IHSG > MA50, Breadth {breadth_ma20:.1f}% > MA20). Sinyal akumulasi diizinkan muncul."
 
     market_regime = {
         "status": regime_status,
@@ -1819,6 +1873,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         "allocation": regime_alloc,
         "breadth_ma20_pct": round(breadth_ma20, 1),
         "breadth_ma50_pct": round(breadth_ma50, 1),
+        "ihsg_above_ma50": ihsg_above_ma50,
         "allow_watchlist": allow_watchlist,
         "regime_note": regime_note,
         "avg_market_pct": round(avg_market_pct, 2),

@@ -1,0 +1,137 @@
+{
+  "metadata": {
+    "dataset": "220 Liquid IDX Stocks",
+    "total_trading_days": 1199,
+    "period": "2021-10-18 s/d 2026-10-16",
+    "train_period": "2021-10-18 s/d 2024-10-08",
+    "test_period": "2024-10-09 s/d 2026-10-16",
+    "portfolio_constraints": {
+      "max_slots": 10,
+      "max_pos_per_ticker": 1,
+      "roundtrip_fee_pct": 0.4,
+      "initial_capital_idr": 100000000
+    }
+  },
+  "statistical_test": {
+    "t_statistic": 0.4766,
+    "p_value": 0.6357456503502286,
+    "is_significant_99_pct": false,
+    "smart_mean_pnl": -0.45,
+    "random_mean_pnl": -0.69,
+    "edge_excess_return_pct": 0.24
+  },
+  "full_5y": {
+    "smart_money": {
+      "signal_type": "smart_money",
+      "total_trades": 46,
+      "wins": 15,
+      "losses": 25,
+      "timeouts": 6,
+      "win_rate_pct": 32.61,
+      "avg_win_pct": 3.58,
+      "avg_loss_pct": -3.05,
+      "profit_factor": 0.71,
+      "expectancy_pct": -0.89,
+      "final_equity": 970029.0,
+      "total_return_pct": -99.03,
+      "cagr_pct": -61.22,
+      "max_drawdown_pct": -99.03,
+      "sharpe_ratio": -1.53
+    },
+    "random_entry": {
+      "win_rate_pct": 24.55,
+      "profit_factor": 0.61,
+      "expectancy_pct": -0.99,
+      "total_return_pct": -98.99,
+      "cagr_pct": -60.91,
+      "max_drawdown_pct": -98.99,
+      "sharpe_ratio": -1.5
+    },
+    "ihsg_benchmark": {
+      "start_date": "2021-10-18",
+      "end_date": "2026-10-16",
+      "start_close": 6658.77,
+      "end_close": 5185.1,
+      "total_return_pct": -22.13,
+      "cagr_pct": -4.98,
+      "max_drawdown_pct": -43.24,
+      "sharpe_ratio": -0.55
+    }
+  },
+  "in_sample_train_3y": {
+    "smart_money": {
+      "signal_type": "smart_money",
+      "total_trades": 46,
+      "wins": 15,
+      "losses": 25,
+      "timeouts": 6,
+      "win_rate_pct": 32.61,
+      "avg_win_pct": 3.58,
+      "avg_loss_pct": -3.05,
+      "profit_factor": 0.71,
+      "expectancy_pct": -0.89,
+      "final_equity": 970029.0,
+      "total_return_pct": -99.03,
+      "cagr_pct": -79.39,
+      "max_drawdown_pct": -99.03,
+      "sharpe_ratio": -1.92
+    },
+    "random_entry": {
+      "win_rate_pct": 27.86,
+      "profit_factor": 0.77,
+      "expectancy_pct": -0.62,
+      "total_return_pct": -98.94,
+      "cagr_pct": -78.8,
+      "max_drawdown_pct": -98.99,
+      "sharpe_ratio": -1.79
+    },
+    "ihsg_benchmark": {
+      "start_date": "2021-10-18",
+      "end_date": "2024-10-08",
+      "start_close": 6658.77,
+      "end_close": 7557.14,
+      "total_return_pct": 13.49,
+      "cagr_pct": 4.41,
+      "max_drawdown_pct": -10.28,
+      "sharpe_ratio": -0.09
+    }
+  },
+  "out_of_sample_test_2y": {
+    "smart_money": {
+      "signal_type": "smart_money",
+      "total_trades": 111,
+      "wins": 31,
+      "losses": 76,
+      "timeouts": 4,
+      "win_rate_pct": 27.93,
+      "avg_win_pct": 4.16,
+      "avg_loss_pct": -2.16,
+      "profit_factor": 0.78,
+      "expectancy_pct": -0.4,
+      "final_equity": 1014226.0,
+      "total_return_pct": -98.99,
+      "cagr_pct": -90.4,
+      "max_drawdown_pct": -98.99,
+      "sharpe_ratio": -2.71
+    },
+    "random_entry": {
+      "win_rate_pct": 34.49,
+      "profit_factor": 0.9,
+      "expectancy_pct": -0.4,
+      "total_return_pct": -98.9,
+      "cagr_pct": -89.99,
+      "max_drawdown_pct": -98.9,
+      "sharpe_ratio": -2.17
+    },
+    "ihsg_benchmark": {
+      "start_date": "2024-10-09",
+      "end_date": "2026-10-16",
+      "start_close": 7501.29,
+      "end_close": 5185.1,
+      "total_return_pct": -30.88,
+      "cagr_pct": -17.18,
+      "max_drawdown_pct": -43.24,
+      "sharpe_ratio": -0.93
+    }
+  }
+}

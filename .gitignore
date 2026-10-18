@@ -7,3 +7,5 @@ __pycache__/
 env/
 venv/
 *.tmp
+data/real_idx_market_5y.csv
+data/real_idx_market_5y.parquet

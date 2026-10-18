@@ -480,13 +480,13 @@ function renderTodayCandidates(stocks) {
     const strength = getScoreStrengthDots(s.smart_money_score);
     const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
 
-    // Ambil Trading Plan terukur langsung dari backend (TP1 +4%, TP2 +7%, SL ATR14)
+    // Ambil Trading Plan terukur langsung dari backend (TP1 +6%, TP2 +10%, SL Closing Basis)
     const plan = s.trading_plan || {};
     const entryLow = plan.entry_low || Math.round(s.close * 0.99);
     const entryHigh = plan.entry_high || s.close;
-    const stopLoss = plan.stop_loss || Math.round(s.close * 0.93);
-    const target1 = plan.target_1 || Math.round(s.close * 1.04);
-    const target2 = plan.target_2 || Math.round(s.close * 1.07);
+    const stopLoss = plan.stop_loss || Math.round(s.close * 0.95);
+    const target1 = plan.target_1 || Math.round(s.close * 1.06);
+    const target2 = plan.target_2 || Math.round(s.close * 1.10);
 
     const slPct = plan.stop_loss_pct != null ? plan.stop_loss_pct : (((stopLoss - s.close) / s.close) * 100).toFixed(1);
     const tp1Pct = plan.target_1_pct != null ? plan.target_1_pct : (((target1 - s.close) / s.close) * 100).toFixed(1);
@@ -702,8 +702,8 @@ function runModalLotCalculation() {
   const actualRiskRp = Math.round(lots * perShareRisk * 100);
   const actualRiskPct = capital > 0 ? ((actualRiskRp / capital) * 100).toFixed(1) : '0.0';
 
-  // Estimasi Target Profit TP1 (+4% dari harga entry) setelah dikurangi fee sekuritas roundtrip 0.4%
-  const tp1Price = Math.round(entry * 1.04);
+  // Estimasi Target Profit TP1 (+6% dari harga entry) setelah dikurangi fee sekuritas roundtrip 0.4%
+  const tp1Price = Math.round(entry * 1.06);
   const grossProfit = lots * (tp1Price - entry) * 100;
   const totalFee = (grossCost * feeBuyPct) + (lots * tp1Price * 100 * feeSellPct);
   const netProfit = Math.max(0, Math.round(grossProfit - totalFee));

@@ -5,29 +5,29 @@
 HASIL LENGKAP BACKTEST HISTORIS 6 BULAN (SMARTFLOW IDX)
 ======================================================================
 Total Hari Bursa Dievaluasi : 121 hari
-Total Sinyal Teridentifikasi: 5,404 sinyal
-Total Trade Masuk Area Beli : 4,948 trade
+Total Sinyal Teridentifikasi: 1,227 sinyal
+Total Trade Masuk Area Beli : 1,057 trade
 ----------------------------------------------------------------------
 
 [Skor 80 - 100 (High Conviction)]
-  - Total Sinyal Muncul : 2,494 | Masuk Beli: 2,266
-  - Win Rate (TP Hit)   : 56.0% (Menang: 1,063 | Rugi: 836 | Timeout: 367)
-  - Rata-rata Untung    : +4.81%
-  - Rata-rata Rugi      : -7.02%
-  - Profit Factor       : 0.87
-  - Expectancy per Trade: -0.4%
-  - Rata-rata Waktu Hold: 4.7 hari bursa
+  - Total Sinyal Muncul : 947 | Masuk Beli: 798
+  - Win Rate (TP Hit)   : 37.5% (Menang: 299 | Rugi: 257 | Timeout: 242)
+  - Rata-rata Untung    : +6.16%
+  - Rata-rata Rugi      : -5.82%
+  - Profit Factor       : 1.2
+  - Expectancy per Trade: +0.02%
+  - Rata-rata Waktu Hold: 6.4 hari bursa
 
 [Skor 70 - 79 (Strong Accumulation)]
-  - Total Sinyal Muncul : 2,910 | Masuk Beli: 2,682
-  - Win Rate (TP Hit)   : 59.0% (Menang: 1,328 | Rugi: 924 | Timeout: 430)
-  - Rata-rata Untung    : +5.09%
-  - Rata-rata Rugi      : -7.34%
-  - Profit Factor       : 1.0
-  - Expectancy per Trade: -0.01%
-  - Rata-rata Waktu Hold: 4.6 hari bursa
+  - Total Sinyal Muncul : 280 | Masuk Beli: 259
+  - Win Rate (TP Hit)   : 38.2% (Menang: 99 | Rugi: 85 | Timeout: 75)
+  - Rata-rata Untung    : +6.7%
+  - Rata-rata Rugi      : -5.61%
+  - Profit Factor       : 1.36
+  - Expectancy per Trade: +0.34%
+  - Rata-rata Waktu Hold: 6.0 hari bursa
 
 ======================================================================
-Total Waktu Proses: 12.4 detik
+Total Waktu Proses: 4.2 detik
 ======================================================================
 ```

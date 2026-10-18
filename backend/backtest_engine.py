@@ -82,20 +82,37 @@ def run_historical_backtest(
     date_to_idx = {d: i for i, d in enumerate(unique_dates)}
     trade_logs: list[dict[str, Any]] = []
 
+    # Parameter 1: Muat indeks makro IHSG > MA50 dari ihsg_5y.csv bila tersedia
+    ihsg_uptrend_map: dict[str, bool] = {}
+    try:
+        ihsg_csv = BASE_DIR / "data" / "ihsg_5y.csv"
+        if ihsg_csv.exists():
+            ihsg_df = pd.read_csv(ihsg_csv, usecols=["Date", "Close"]).sort_values("Date").reset_index(drop=True)
+            ihsg_df["MA50"] = ihsg_df["Close"].rolling(50, min_periods=20).mean()
+            ihsg_df["Uptrend"] = ihsg_df["Close"] >= ihsg_df["MA50"]
+            ihsg_uptrend_map = dict(zip(ihsg_df["Date"].astype(str), ihsg_df["Uptrend"].astype(bool)))
+    except Exception:
+        ihsg_uptrend_map = {}
+
     # Iterasi tanggal evaluasi sinyal (sampai N hari sebelum tanggal terakhir)
     eval_dates = unique_dates[:-1]
 
     for date_str in eval_dates:
         curr_idx = date_to_idx[date_str]
         sub_latest = df[df["Date"] == date_str]
+        if sub_latest.empty:
+            continue
+
+        # Parameter 1: Filter Pasar Makro Keras (Hard Macro Gate: IHSG > MA50 & Breadth Sehat)
+        # Jika pasar sedang bearish / crash pada date_str, tahan seluruh sinyal beli baru (Cash 100%)
+        breadth_ma50 = float((sub_latest["Close"] >= sub_latest["MA50"]).mean() * 100.0) if "MA50" in sub_latest.columns else 50.0
+        breadth_ma20 = float((sub_latest["Close"] >= sub_latest["MA20"]).mean() * 100.0) if "MA20" in sub_latest.columns else 50.0
+        median_pct = float(sub_latest["Pct_Change"].median()) if "Pct_Change" in sub_latest.columns else 0.0
+        ihsg_ok = ihsg_uptrend_map.get(str(date_str), breadth_ma50 >= 40.0)
+        if len(sub_latest) >= 30 and ((not ihsg_ok and breadth_ma50 < 42.0) or breadth_ma20 < 35.0 or median_pct <= -1.5):
+            continue
 
         # 6 Filter Kuantitatif Wajib SmartFlow IDX:
-        # 1. Trigger Akumulasi Sah (MARKUP_BREAKOUT, BIG_ACCUMULATION, SILENT_ACCUMULATION, FOREIGN_INFLOW)
-        # 2. Smart Money Score >= 70
-        # 3. Jarak ke modal rata-rata bandar (VWAP 5H) <= +5.0%
-        # 4. Trading Plan Terukur (Batas rugi dinamis ATR14, TP 2R)
-        # 5. Saham aktif bukan gocap (Close >= 50) & Volume Ratio >= 1.0x
-        # 6. Nilai Transaksi Harian Minimal Rp 1.0 Miliar (Value_IDR >= min_liquidity_idr)
         score_col = "Daily_SM_Score" if "Daily_SM_Score" in sub_latest.columns else "Smart_Money_Score"
         valid_triggers = ("MARKUP_BREAKOUT", "BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW")
         sec_col = sub_latest["Sector"].astype(str).str.lower() if "Sector" in sub_latest.columns else pd.Series("", index=sub_latest.index)
@@ -123,14 +140,24 @@ def run_historical_backtest(
             # Ambil trading plan
             close_p = float(cand.Close)
             atr14 = float(cand.ATR14) if hasattr(cand, "ATR14") and not np.isnan(cand.ATR14) else max(1.0, close_p * 0.03)
+            vwap_5d = float(cand.VWAP_5D) if hasattr(cand, "VWAP_5D") and not np.isnan(cand.VWAP_5D) else close_p
+            pct_chg = float(cand.Pct_Change) if hasattr(cand, "Pct_Change") and not np.isnan(cand.Pct_Change) else 0.0
+            diff_vwap = float(cand.Diff_VWAP_Pct) if hasattr(cand, "Diff_VWAP_Pct") and not np.isnan(cand.Diff_VWAP_Pct) else 0.0
 
-            entry_high = close_p
-            entry_low = close_p
-            sl_dist = max(int(round(entry_low * 0.035)), min(int(round(entry_low * 0.050)), int(round(1.4 * atr14))))
+            # Parameter 4: Titik Masuk (Entry) di Area Retest / Pullback / VWAP (Buy on Weakness, bukan Hajar Kanan di Pucuk)
+            if (pct_chg > 2.0 or diff_vwap > 1.5) and vwap_5d > 0 and vwap_5d < close_p:
+                retest_anchor = max(vwap_5d, close_p * 0.985, (close_p + vwap_5d) * 0.5)
+                entry_high = float(_round_idx_tick(min(close_p, retest_anchor)))
+            else:
+                entry_high = float(_round_idx_tick(close_p))
+            entry_low = entry_high
+
+            # Parameter 2 & 3: Stop Loss Proporsional -4.0% s/d -5.0% & Target Profit RRR 1:2 (TP1 +6%, TP2 +10%)
+            sl_dist = max(int(round(entry_low * 0.040)), min(int(round(entry_low * 0.050)), int(round(1.5 * atr14))))
             stop_loss = _round_idx_tick(entry_low - sl_dist)
             risk = max(1.0, entry_high - stop_loss)
-            tp1 = _round_idx_tick(entry_high * 1.04)
-            tp2 = _round_idx_tick(entry_high * 1.07)
+            tp1 = _round_idx_tick(entry_high * 1.06)
+            tp2 = _round_idx_tick(entry_high * 1.10)
             if tp2 <= tp1:
                 tp2 = _round_idx_tick(tp1 + (2 if entry_high >= 200 else 1))
 
@@ -147,14 +174,24 @@ def run_historical_backtest(
 
             ticker_prices = price_matrix.get(ticker, {})
 
-            # Cek entry di hari t+1
-            day1_date = future_dates[0]
-            if day1_date not in ticker_prices:
-                continue
+            # Cek antrean entry maksimal 2 hari bursa (Pullback Retest Window)
+            entry_bar_idx = None
+            entry_bar = None
+            gap_down_cancelled = False
+            for wait_i in range(min(2, len(future_dates))):
+                w_date = future_dates[wait_i]
+                if w_date not in ticker_prices:
+                    continue
+                w_bar = ticker_prices[w_date]
+                if w_bar["open"] <= stop_loss:
+                    gap_down_cancelled = True
+                    break
+                if w_bar["low"] <= entry_high:
+                    entry_bar_idx = wait_i
+                    entry_bar = w_bar
+                    break
 
-            day1_bar = ticker_prices[day1_date]
-            # Proteksi Anti Gap-Down seragam dengan SignalTracker: batal beli jika open <= stop_loss
-            if day1_bar["open"] <= stop_loss:
+            if gap_down_cancelled:
                 trade_logs.append({
                     "ticker": ticker,
                     "date": date_str,
@@ -167,10 +204,7 @@ def run_historical_backtest(
                 })
                 continue
 
-            # Order limit beli tersentuh jika low <= entry_high
-            is_entry = day1_bar["low"] <= entry_high
-
-            if not is_entry:
+            if entry_bar is None or entry_bar_idx is None:
                 trade_logs.append({
                     "ticker": ticker,
                     "date": date_str,
@@ -184,29 +218,32 @@ def run_historical_backtest(
                 continue
 
             # Posisi berhasil terbuka (fill di harga open jika gap-down tipis di bawah entry_high, atau di entry_high)
-            entry_price = min(day1_bar["open"], entry_high) if day1_bar["open"] <= entry_high else entry_high
+            entry_price = min(entry_bar["open"], entry_high) if entry_bar["open"] <= entry_high else entry_high
             status = "TIMEOUT"
             exit_price = entry_price
             pnl_pct = 0.0
             bars_held = 0
             hit_tp2 = False
 
-            # Pantau bar-by-bar
-            for b_idx, f_date in enumerate(future_dates[:max_holding_bars]):
+            active_future_dates = future_dates[entry_bar_idx : entry_bar_idx + max_holding_bars]
+
+            # Pantau bar-by-bar mulai dari bar entry
+            for b_idx, f_date in enumerate(active_future_dates):
                 bars_held = b_idx + 1
                 if f_date not in ticker_prices:
                     continue
                 bar = ticker_prices[f_date]
 
-                hit_sl = bar["low"] <= stop_loss
+                # Parameter 2: Evaluasi Stop Loss berbasis Closing Basis (close <= stop_loss) + Gap Down (open <= stop_loss) + Panic Crash (low <= stop_loss * 0.96)
+                hit_sl = (bar["close"] <= stop_loss) or (bar["open"] <= stop_loss) or (bar["low"] <= stop_loss * 0.96)
                 hit_tp = bar["high"] >= tp1
 
                 # Di hari pertama entry (b_idx == 0), TP belum dihitung untuk mencegah look-ahead bias intraday,
-                # namun jika harga jebol menembus SL di hari pertama, catat sebagai LOSS riil.
+                # namun jika harga penutupan jebol menembus SL di hari pertama, catat sebagai LOSS riil.
                 if b_idx == 0:
                     if hit_sl:
                         status = "LOSS"
-                        exit_price = min(bar["open"], stop_loss) if bar["open"] < stop_loss else stop_loss
+                        exit_price = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
                         break
                     continue
 
@@ -216,16 +253,16 @@ def run_historical_backtest(
                 # Jika SL dan TP tersentuh di hari yang sama, secara konservatif prioritaskan SL
                 if hit_sl and hit_tp:
                     status = "WIN" if stop_loss >= entry_price else "LOSS"
-                    exit_price = min(bar["open"], stop_loss) if bar["open"] < stop_loss else stop_loss
+                    exit_price = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
                     break
                 elif hit_tp:
                     status = "WIN"
                     exit_price = max(bar["open"], tp1)
                     if not hit_tp2:
-                        for rem_date in future_dates[b_idx + 1 : max_holding_bars]:
+                        for rem_date in active_future_dates[b_idx + 1 :]:
                             if rem_date in ticker_prices:
                                 rem_bar = ticker_prices[rem_date]
-                                if rem_bar["low"] <= entry_price:
+                                if rem_bar["close"] <= entry_price or rem_bar["low"] <= stop_loss:
                                     break
                                 if rem_bar["high"] >= tp2:
                                     hit_tp2 = True
@@ -233,11 +270,11 @@ def run_historical_backtest(
                     break
                 elif hit_sl:
                     status = "WIN" if stop_loss >= entry_price else "LOSS"
-                    exit_price = min(bar["open"], stop_loss) if bar["open"] < stop_loss else stop_loss
+                    exit_price = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
                     break
 
             if status == "TIMEOUT" and bars_held > 0:
-                last_bar_date = future_dates[min(bars_held - 1, len(future_dates) - 1)]
+                last_bar_date = active_future_dates[min(bars_held - 1, len(active_future_dates) - 1)]
                 if last_bar_date in ticker_prices:
                     exit_price = ticker_prices[last_bar_date]["close"]
 
