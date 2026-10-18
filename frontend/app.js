@@ -103,6 +103,9 @@ function selectTheme(themeName, renderChart = true) {
   if (renderChart && typeof renderInspectorChart === 'function' && selectedStockDetail) {
     renderInspectorChart(selectedStockDetail);
   }
+  if (renderChart && typeof renderIhsgTodayChart === 'function' && lastIhsgChartData) {
+    renderIhsgTodayChart(lastIhsgChartData);
+  }
 }
 
 function applyTheme(theme) {
@@ -2782,6 +2785,207 @@ async function loadMarketRegime() {
   }
 }
 
+// =====================================================================
+// GRAFIK INDEKS IHSG (^JKSE / COMPOSITE) DI TAB HARI INI
+// =====================================================================
+let ihsgChartInstance = null;
+let lastIhsgChartData = null;
+let ihsgChartCollapsed = false;
+
+function fmtIndexNum(n) {
+  if (n == null || isNaN(n)) return '—';
+  return new Intl.NumberFormat('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n));
+}
+
+function toggleIhsgChartCollapse() {
+  ihsgChartCollapsed = !ihsgChartCollapsed;
+  const wrapper = document.getElementById('ihsgChartWrapper');
+  const icon = document.getElementById('ihsgCollapseIcon');
+  if (wrapper) {
+    wrapper.classList.toggle('hidden', ihsgChartCollapsed);
+  }
+  if (icon) {
+    icon.textContent = ihsgChartCollapsed ? '🔽' : '🔼';
+  }
+}
+
+async function loadIhsgTodayChart(period = '3mo') {
+  try {
+    ['1mo', '3mo', '6mo', '1y'].forEach((p) => {
+      const btn = document.getElementById(`ihsgPeriod-${p}`);
+      if (btn) {
+        if (p === period) {
+          btn.className = 'ihsg-period-btn px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold transition';
+        } else {
+          btn.className = 'ihsg-period-btn px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition';
+        }
+      }
+    });
+
+    const res = await fetch(`/api/ihsg/candles?period=${encodeURIComponent(period)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    lastIhsgChartData = data;
+    renderIhsgTodayChart(data);
+  } catch (err) {
+    console.warn('[IHSGChart] Gagal memuat grafik IHSG:', err);
+  }
+}
+
+function renderIhsgTodayChart(data) {
+  if (!data || !Array.isArray(data.candles) || data.candles.length === 0) return;
+
+  const candles = data.candles;
+  const last = candles[candles.length - 1];
+  const chgPct = Number(data.change_pct ?? last.pct_change ?? 0);
+  const chgPts = Number(data.change_pts ?? 0);
+  const isUp = chgPct >= 0;
+
+  const valEl = document.getElementById('ihsgCurrentValue');
+  const badgeEl = document.getElementById('ihsgChangeBadge');
+  const dateEl = document.getElementById('ihsgDateBadge');
+  const subEl = document.getElementById('ihsgSubStats');
+  const dotEl = document.getElementById('ihsgLegendDot');
+
+  if (valEl) {
+    valEl.textContent = fmtIndexNum(data.close ?? last.close);
+  }
+  if (dateEl) {
+    dateEl.textContent = data.latest_date || last.date || '—';
+  }
+  if (badgeEl) {
+    const sign = isUp ? '+' : '';
+    badgeEl.textContent = `${sign}${fmtIndexNum(chgPts)} (${sign}${chgPct.toFixed(2)}%)`;
+    badgeEl.className = isUp
+      ? 'text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/30'
+      : 'text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-400/30';
+  }
+  if (subEl) {
+    const breadth = data.market_regime?.breadth_ma20_pct ?? currentMarketRegime?.breadth_ma20_pct;
+    const breadthTxt = breadth != null ? ` • Breadth >MA20: ${breadth}%` : '';
+    subEl.textContent = `Open: ${fmtIndexNum(last.open)} • High: ${fmtIndexNum(last.high)} • Low: ${fmtIndexNum(last.low)} • MA20: ${fmtIndexNum(last.ma20)}${breadthTxt}`;
+  }
+
+  const canvas = document.getElementById('ihsgTodayChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (ihsgChartInstance) {
+    ihsgChartInstance.destroy();
+  }
+
+  const isAboveMa20 = Number(last.close) >= Number(last.ma20 || last.close);
+  const mainColor = isAboveMa20 ? '#10b981' : '#f43f5e';
+  if (dotEl) {
+    dotEl.className = `w-2.5 h-2.5 rounded-full inline-block ${isAboveMa20 ? 'bg-emerald-400' : 'bg-rose-400'}`;
+  }
+
+  const isLight = document.documentElement.classList.contains('light');
+  const chartSubColor = isLight ? '#64748b' : '#94a3b8';
+  const chartGridColor = isLight ? 'rgba(203, 213, 225, 0.65)' : 'rgba(51, 65, 85, 0.25)';
+
+  const grad = ctx.createLinearGradient(0, 0, 0, 220);
+  if (isAboveMa20) {
+    grad.addColorStop(0, isLight ? 'rgba(16, 185, 129, 0.28)' : 'rgba(16, 185, 129, 0.30)');
+    grad.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+  } else {
+    grad.addColorStop(0, isLight ? 'rgba(244, 63, 94, 0.28)' : 'rgba(244, 63, 94, 0.30)');
+    grad.addColorStop(1, 'rgba(244, 63, 94, 0.0)');
+  }
+
+  const labels = candles.map((c) => c.date.slice(5));
+  const closes = candles.map((c) => Number(c.close));
+  const ma20s = candles.map((c) => Number(c.ma20 || c.close));
+
+  ihsgChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'IHSG Close',
+          data: closes,
+          borderColor: mainColor,
+          backgroundColor: grad,
+          borderWidth: 2.2,
+          fill: true,
+          tension: 0.25,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: mainColor,
+        },
+        {
+          label: 'MA20 Trend',
+          data: ma20s,
+          borderColor: '#f59e0b',
+          borderWidth: 1.6,
+          borderDash: [5, 5],
+          fill: false,
+          tension: 0.25,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false,
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: isLight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(15, 23, 42, 0.95)',
+          titleColor: isLight ? '#0f172a' : '#f8fafc',
+          bodyColor: isLight ? '#334155' : '#cbd5e1',
+          borderColor: isLight ? '#cbd5e1' : 'rgba(255, 255, 255, 0.12)',
+          borderWidth: 1,
+          padding: 10,
+          callbacks: {
+            title: (items) => {
+              const idx = items[0]?.dataIndex;
+              const bar = candles[idx];
+              return bar ? `IHSG — ${bar.date}` : 'IHSG';
+            },
+            label: (ctxItem) => {
+              const idx = ctxItem.dataIndex;
+              const bar = candles[idx];
+              if (ctxItem.dataset.label === 'IHSG Close' && bar) {
+                const s = bar.pct_change >= 0 ? '+' : '';
+                return [
+                  `Close: ${fmtIndexNum(bar.close)} (${s}${Number(bar.pct_change).toFixed(2)}%)`,
+                  `Open: ${fmtIndexNum(bar.open)} | High: ${fmtIndexNum(bar.high)} | Low: ${fmtIndexNum(bar.low)}`,
+                ];
+              }
+              return `MA20: ${fmtIndexNum(ctxItem.raw)}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: chartSubColor,
+            font: { size: 10, family: 'JetBrains Mono' },
+            maxTicksLimit: 8,
+          },
+        },
+        y: {
+          position: 'right',
+          grid: { color: chartGridColor },
+          ticks: {
+            color: chartSubColor,
+            font: { size: 10, family: 'JetBrains Mono' },
+            callback: (v) => fmtNumber(v),
+          },
+        },
+      },
+    },
+  });
+}
+
 function openMarketRegimeModal() {
   const modal = document.getElementById('marketRegimeModal');
   if (!modal) return;
@@ -3351,7 +3555,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   switchMainTab(activeMainTab);
 
   // 2. Muat data awal secepat mungkin
-  await Promise.all([loadScreenerData(false), loadTracker(), loadPortfolio(), loadMarketRegime()]);
+  await Promise.all([loadScreenerData(false), loadTracker(), loadPortfolio(), loadMarketRegime(), loadIhsgTodayChart('3mo')]);
 
   // 3. Setup filter listeners di Tab Jelajah
   ['filterTrigger', 'filterVolRatio', 'filterMinScore', 'filterSortBy'].forEach((id) => {

@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=63.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=64.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -271,6 +271,63 @@
           <span>Buka Screener Lengkap</span>
           <span>→</span>
         </button>
+      </div>
+
+      <!-- Panel Grafik Indeks Harga Saham Gabungan (IHSG / ^JKSE) -->
+      <div class="p-4 rounded-2xl glass-panel border border-white/[0.08] space-y-3 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2.5 sm:gap-4">
+            <div class="flex items-center gap-2">
+              <span class="text-base">📈</span>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-xs sm:text-sm font-extrabold text-white tracking-tight">Grafik Indeks IHSG (COMPOSITE)</h3>
+                  <span id="ihsgDateBadge" class="text-[10px] font-mono text-slate-400 bg-white/[0.05] px-2 py-0.5 rounded border border-white/10">—</span>
+                </div>
+                <div id="ihsgSubStats" class="text-[11px] font-mono text-slate-400 mt-0.5">
+                  Memuat data historis indeks...
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-baseline gap-2 pl-2 border-l border-white/10">
+              <span id="ihsgCurrentValue" class="text-lg sm:text-xl font-black font-mono text-white">—</span>
+              <span id="ihsgChangeBadge" class="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300">—</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <div class="flex items-center bg-slate-900/70 p-1 rounded-xl border border-white/[0.08] text-[11px] font-mono">
+              <button type="button" onclick="loadIhsgTodayChart('1mo')" id="ihsgPeriod-1mo" class="ihsg-period-btn px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition">1B</button>
+              <button type="button" onclick="loadIhsgTodayChart('3mo')" id="ihsgPeriod-3mo" class="ihsg-period-btn px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold transition">3B</button>
+              <button type="button" onclick="loadIhsgTodayChart('6mo')" id="ihsgPeriod-6mo" class="ihsg-period-btn px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition">6B</button>
+              <button type="button" onclick="loadIhsgTodayChart('1y')" id="ihsgPeriod-1y" class="ihsg-period-btn px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition">1T</button>
+            </div>
+            <button
+              type="button"
+              id="btnToggleIhsgChart"
+              onclick="toggleIhsgChartCollapse()"
+              class="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 text-xs font-medium border border-white/10 transition"
+              title="Sembunyikan / Tampilkan Grafik IHSG"
+            >
+              <span id="ihsgCollapseIcon">🔼</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="ihsgChartWrapper" class="h-52 sm:h-64 w-full rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.06] p-2.5 relative shadow-sm dark:shadow-none">
+          <div class="absolute top-2.5 left-3 z-10 flex items-center gap-3 text-[10px] font-mono pointer-events-none">
+            <span class="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+              <span id="ihsgLegendDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>
+              <span>IHSG Close</span>
+            </span>
+            <span class="flex items-center gap-1 text-amber-600 dark:text-amber-300">
+              <span class="w-3 border-b-2 border-dashed border-amber-400 inline-block"></span>
+              <span>MA20 Trend</span>
+            </span>
+          </div>
+          <canvas id="ihsgTodayChart"></canvas>
+        </div>
       </div>
 
       <!-- Header Kandidat Hari Ini -->
@@ -1956,6 +2013,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=63.0"></script>
+  <script src="/static/app.js?v=64.0"></script>
 </body>
 </html>

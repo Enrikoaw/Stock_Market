@@ -1002,7 +1002,140 @@ def export_tracker_csv(status: str = Query(default="ALL")) -> Response:
     )
 
 
-# ===================== MARKET REGIME (BREADTH IHSG) =====================
+# ===================== MARKET REGIME & IHSG CHART (BREADTH & ^JKSE) =====================
+
+IHSG_CACHE: dict[str, dict] = {}
+
+
+def _fetch_ihsg_candles_blocking(period: str = "3mo") -> dict:
+    import time
+    import yfinance as yf
+
+    valid_periods = {"1mo": "1mo", "3mo": "3mo", "6mo": "6mo", "1y": "1y"}
+    yf_period = valid_periods.get(period, "3mo")
+    now_ts = time.time()
+
+    cached = IHSG_CACHE.get(yf_period)
+    if cached and (now_ts - cached.get("ts", 0) < 300) and cached.get("data"):
+        return cached["data"]
+
+    candles: list[dict] = []
+    try:
+        t_obj = yf.Ticker("^JKSE")
+        sub = t_obj.history(period=yf_period, interval="1d", auto_adjust=False)
+        if sub is not None and not sub.empty:
+            sub = sub.dropna(subset=["Close"]).copy()
+            sub = sub[sub["Close"] > 0].reset_index()
+            date_col = "Date" if "Date" in sub.columns else sub.columns[0]
+            sub["date"] = pd.to_datetime(sub[date_col]).dt.strftime("%Y-%m-%d")
+            sub["MA20"] = sub["Close"].rolling(20, min_periods=1).mean()
+            sub["MA50"] = sub["Close"].rolling(50, min_periods=1).mean()
+            sub["Prev_Close"] = sub["Close"].shift(1).fillna(sub["Open"])
+
+            for _, r in sub.iterrows():
+                c_val = round(float(r["Close"]), 2)
+                o_val = round(float(r.get("Open", c_val) or c_val), 2)
+                h_val = round(max(float(r.get("High", c_val) or c_val), c_val, o_val), 2)
+                l_val = round(min(float(r.get("Low", c_val) or c_val), c_val, o_val), 2)
+                prev_c = float(r.get("Prev_Close", o_val) or o_val)
+                pct_chg = round(((c_val - prev_c) / max(prev_c, 1.0)) * 100.0, 2)
+                ma20_val = round(float(r.get("MA20", c_val) or c_val), 2)
+                ma50_val = round(float(r.get("MA50", c_val) or c_val), 2)
+                vol_val = int(round(max(0.0, float(r.get("Volume", 0) or 0))))
+                candles.append({
+                    "date": str(r["date"]),
+                    "open": o_val,
+                    "high": h_val,
+                    "low": l_val,
+                    "close": c_val,
+                    "ma20": ma20_val,
+                    "ma50": ma50_val,
+                    "pct_change": pct_chg,
+                    "volume": vol_val,
+                })
+    except Exception as exc:
+        print(f"[IHSGChart] Gagal tarik ^JKSE dari Yahoo Finance, gunakan fallback komposit: {exc}")
+
+    # Fallback komposit dari histori lokal apabila Yahoo Finance sedang offline
+    if not candles and STATE.get("analysis") and STATE["analysis"].get("details"):
+        date_returns: dict[str, list[float]] = {}
+        for _, d in list(STATE["analysis"]["details"].items())[:100]:
+            hist = d.get("history") or []
+            for idx_h, h in enumerate(hist):
+                dt_str = str(h.get("date", ""))
+                if not dt_str:
+                    continue
+                prev_h_close = float(hist[idx_h - 1]["close"]) if idx_h > 0 else float(h.get("open") or h["close"])
+                cur_h_close = float(h["close"])
+                if prev_h_close > 0:
+                    ret = (cur_h_close - prev_h_close) / prev_h_close
+                    date_returns.setdefault(dt_str, []).append(ret)
+
+        sorted_dates = sorted(date_returns.keys())
+        base_idx = 7200.0
+        closes_arr: list[float] = []
+        for dt_str in sorted_dates:
+            avg_ret = float(np.median(date_returns[dt_str])) if date_returns[dt_str] else 0.0
+            open_idx = round(base_idx, 2)
+            close_idx = round(base_idx * (1.0 + avg_ret), 2)
+            high_idx = round(max(open_idx, close_idx) * 1.004, 2)
+            low_idx = round(min(open_idx, close_idx) * 0.996, 2)
+            closes_arr.append(close_idx)
+            ma20_v = round(float(np.mean(closes_arr[-20:])), 2)
+            ma50_v = round(float(np.mean(closes_arr[-50:])), 2)
+            candles.append({
+                "date": dt_str,
+                "open": open_idx,
+                "high": high_idx,
+                "low": low_idx,
+                "close": close_idx,
+                "ma20": ma20_v,
+                "ma50": ma50_v,
+                "pct_change": round(avg_ret * 100.0, 2),
+                "volume": 0,
+            })
+            base_idx = close_idx
+
+    if not candles:
+        return {
+            "symbol": "^JKSE",
+            "name": "IHSG (IDX Composite)",
+            "period": yf_period,
+            "candles": [],
+        }
+
+    last = candles[-1]
+    prev_close = candles[-2]["close"] if len(candles) >= 2 else last["open"]
+    result = {
+        "symbol": "^JKSE",
+        "name": "IHSG (IDX Composite)",
+        "period": yf_period,
+        "latest_date": last["date"],
+        "close": last["close"],
+        "open": last["open"],
+        "high": last["high"],
+        "low": last["low"],
+        "ma20": last["ma20"],
+        "ma50": last["ma50"],
+        "change_pts": round(last["close"] - prev_close, 2),
+        "change_pct": last["pct_change"],
+        "candles": candles,
+    }
+    IHSG_CACHE[yf_period] = {"ts": now_ts, "data": result}
+    return result
+
+
+@app.get("/api/ihsg/candles")
+async def get_ihsg_candles(period: str = Query(default="3mo")) -> dict:
+    """Mengembalikan data historis candlestick/line Indeks Harga Saham Gabungan (^JKSE) beserta MA20 & MA50."""
+    if STATE["analysis"] is None:
+        init_default_state()
+    data = await asyncio.to_thread(_fetch_ihsg_candles_blocking, period)
+    regime = STATE["analysis"]["kpis"].get("market_regime", {}) if STATE.get("analysis") else {}
+    return {
+        **data,
+        "market_regime": regime,
+    }
 
 
 @app.get("/api/market-regime")
@@ -1020,6 +1153,7 @@ def get_market_regime() -> dict:
         "breadth_ma50_pct": 50.0,
         "regime_note": "Menunggu kalkulasi breadth pasar...",
     })
+
 
 
 # ===================== REAL PORTFOLIO JOURNAL =====================
