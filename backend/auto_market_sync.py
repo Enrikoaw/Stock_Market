@@ -50,7 +50,7 @@ def main() -> None:
         period="auto",
         max_workers=4,
     )
-    real_df["Has_Broker_Summary"] = True
+    real_df["Has_Broker_Summary"] = False
 
     print("[AutoMarketSync] Menganalisis 5-Pilar Smart Money & Auto Trading Plan...")
     analysis = analyze_smart_money_dataframe(real_df)

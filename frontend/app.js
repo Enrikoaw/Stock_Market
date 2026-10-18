@@ -27,10 +27,23 @@ try {
   favoriteTickers = [];
 }
 
-// Formatters
+// Formatters & XSS Sanitizer (T3)
 const fmtNumber = (n) => new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const fmtPrice = (n) => `Rp ${fmtNumber(n)}`;
 const fmtSignPct = (n) => `${n >= 0 ? '+' : ''}${Number(n || 0).toFixed(2)}%`;
+const escHtml = (str) =>
+  String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+// K1: Bersihkan sisa token Telegram plaintext dari localStorage bila ada
+try {
+  localStorage.removeItem('smartflow_telegram_token');
+  localStorage.removeItem('smartflow_tg_token');
+} catch (_) {}
 
 // =====================================================================
 // THEME ENGINE (Emerald · Obsidian Gold · Midnight Blue · Clean Slate · Clean Paper)
@@ -279,6 +292,8 @@ function renderFavorites() {
     };
 
     const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
+    const safeTicker = escHtml(s.ticker);
+    const safeSector = escHtml(s.sector);
     return `
       <div class="p-3.5 rounded-xl glass-subcard border border-white/[0.08] hover:border-amber-400/40 transition flex flex-col justify-between gap-3">
         <div class="flex items-start justify-between">
@@ -286,13 +301,13 @@ function renderFavorites() {
             ${getStockLogoImg(s.ticker, 'w-8 h-8')}
             <div>
               <div class="font-mono font-black text-sm text-white flex items-center gap-1.5">
-                <span>${s.ticker}</span>
-                <span class="text-[10px] font-sans font-bold px-1.5 py-0.2 rounded bg-white/[0.08] text-slate-300">Skor ${s.smart_money_score}</span>
+                <span>${safeTicker}</span>
+                <span class="text-[10px] font-sans font-bold px-1.5 py-0.2 rounded bg-white/[0.08] text-slate-300">Skor ${escHtml(s.smart_money_score)}</span>
               </div>
-              <div class="text-[10px] text-slate-400 truncate max-w-[130px]">${s.sector}</div>
+              <div class="text-[10px] text-slate-400 truncate max-w-[130px]">${safeSector}</div>
             </div>
           </div>
-          <button onclick="toggleFavorite('${s.ticker}', event)" class="text-amber-400 hover:text-rose-400 text-lg transition leading-none" title="Hapus dari favorit">
+          <button onclick="toggleFavorite('${safeTicker}', event)" class="text-amber-400 hover:text-rose-400 text-lg transition leading-none" title="Hapus dari favorit">
             ★
           </button>
         </div>
@@ -303,10 +318,10 @@ function renderFavorites() {
             <div class="font-mono text-[11px] font-semibold ${chgColor}">${s.close ? fmtSignPct(s.pct_change) : ''}</div>
           </div>
           <div class="flex items-center gap-1.5">
-            <button onclick="openLotCalculatorForTicker('${s.ticker}')" class="px-2 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-400/30 text-[10px] font-semibold transition" title="Kalkulator Lot">
+            <button onclick="openLotCalculatorForTicker('${safeTicker}')" class="px-2 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-400/30 text-[10px] font-semibold transition" title="Kalkulator Lot">
               🧮 Lot
             </button>
-            <button onclick="selectStockAndGoToInspector('${s.ticker}')" class="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-[10px] font-semibold transition" title="Buka Detail">
+            <button onclick="selectStockAndGoToInspector('${safeTicker}')" class="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-[10px] font-semibold transition" title="Buka Detail">
               Lihat Detail →
             </button>
           </div>
@@ -356,13 +371,13 @@ function renderTodayCandidates(stocks) {
       <div class="col-span-full p-8 rounded-2xl bg-white dark:bg-[#0b1329]/80 border border-rose-200 dark:border-rose-500/30 shadow-sm text-center space-y-3">
         <span class="text-4xl block">🛡️</span>
         <div class="text-base font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider">
-          ${regime.label || 'MODE DEFENSIF AKTIF — AKSES DIBEKUKAN'}
+          ${escHtml(regime.label || 'MODE DEFENSIF AKTIF — AKSES DIBEKUKAN')}
         </div>
         <p class="max-w-xl mx-auto text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-          ${regime.regime_note || 'IHSG sedang mengalami tekanan jual ekstrem / downtrend. Sistem menahan seluruh sinyal beli sampai terbentuk konfirmasi rebound yang sah.'}
+          ${escHtml(regime.regime_note || 'IHSG sedang mengalami tekanan jual ekstrem / downtrend. Sistem menahan seluruh sinyal beli sampai terbentuk konfirmasi rebound yang sah.')}
         </p>
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-400/30 text-rose-700 dark:text-rose-300 text-xs font-mono font-bold">
-          Rekomendasi Alokasi: ${regime.allocation || '100% Cash'}
+          Rekomendasi Alokasi: ${escHtml(regime.allocation || '100% Cash')}
         </div>
       </div>
     `;
@@ -458,9 +473,11 @@ function renderTodayCandidates(stocks) {
   }
 
   container.innerHTML = candidates.map(s => {
+    const safeTicker = escHtml(s.ticker);
+    const safeSector = escHtml(s.sector);
+    const safeSecCat = escHtml(s.sector_category || 'Sektor');
     const starActive = isFavorite(s.ticker);
     const strength = getScoreStrengthDots(s.smart_money_score);
-    const reasonText = getHumanExplanation(s);
     const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
 
     // Ambil Trading Plan terukur langsung dari backend (TP1 +4%, TP2 +7%, SL ATR14)
@@ -477,7 +494,7 @@ function renderTodayCandidates(stocks) {
 
     // Kualitas Pita (Tape Quality) Badge
     const tapePill = (s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW')
-      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400" title="${s.tape_quality.reason}">⚠️ ${s.tape_quality.label}</span>`
+      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400" title="${escHtml(s.tape_quality.reason)}">⚠️ ${escHtml(s.tape_quality.label)}</span>`
       : '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400">Arus Organik</span>';
 
     // Tingkat Risiko / Status Pantauan
@@ -511,17 +528,17 @@ function renderTodayCandidates(stocks) {
             ${getStockLogoImg(s.ticker, 'w-10 h-10')}
             <div>
               <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="font-mono font-black text-base text-slate-900 dark:text-white">${s.ticker}</span>
-                <span class="text-[10px] font-sans font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">${s.sector_category || 'Sektor'}</span>
+                <span class="font-mono font-black text-base text-slate-900 dark:text-white">${safeTicker}</span>
+                <span class="text-[10px] font-sans font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">${safeSecCat}</span>
                 <button
-                  onclick="toggleFavorite('${s.ticker}', event)"
-                  class="star-btn star-btn-${s.ticker} text-lg leading-none ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-500 hover:text-amber-300'}"
+                  onclick="toggleFavorite('${safeTicker}', event)"
+                  class="star-btn star-btn-${safeTicker} text-lg leading-none ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-500 hover:text-amber-300'}"
                   title="Simpan ke Favorit"
                 >
                   ${starActive ? '★' : '☆'}
                 </button>
               </div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[140px]">${s.sector}</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[140px]">${safeSector}</div>
             </div>
           </div>
 
@@ -536,7 +553,7 @@ function renderTodayCandidates(stocks) {
           <div class="flex items-center gap-1.5">
             <span class="font-mono ${strength.color}">${strength.dots}</span>
             <span class="text-slate-900 dark:text-white font-bold">${strength.label}</span>
-            <span class="text-slate-500 dark:text-slate-400 text-[11px]">(Skor ${s.smart_money_score})</span>
+            <span class="text-slate-500 dark:text-slate-400 text-[11px]">(Skor ${escHtml(s.smart_money_score)})</span>
           </div>
           <div class="flex items-center gap-1.5 flex-wrap justify-end">
             ${tapePill}
@@ -566,14 +583,14 @@ function renderTodayCandidates(stocks) {
         <!-- Tombol Aksi -->
         <div class="flex items-center gap-2 pt-1">
           <button
-            onclick="openLotCalculatorForStockDetails('${s.ticker}', ${s.close}, ${stopLoss})"
+            onclick="openLotCalculatorForStockDetails('${safeTicker}', ${Number(s.close || 0)}, ${Number(stopLoss || 0)})"
             class="flex-1 py-2 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-400/30 text-xs font-semibold transition flex items-center justify-center gap-1"
           >
             <span>🧮</span>
             <span>Hitung Lot</span>
           </button>
           <button
-            onclick="selectStockAndGoToInspector('${s.ticker}')"
+            onclick="selectStockAndGoToInspector('${safeTicker}')"
             class="flex-1 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition flex items-center justify-center gap-1"
           >
             <span>Lihat Detail</span>
@@ -840,9 +857,10 @@ function getScoreColor(score) {
 
 function getStockLogoImg(ticker, sizeCls = 'w-7 h-7') {
   if (!ticker) return '';
-  const cleanTicker = ticker.trim().toUpperCase();
-  const cdnUrl = `https://assets.stockbit.com/logos/companies/${cleanTicker}.png`;
-  const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanTicker)}&background=1e293b&color=38bdf8&bold=true&length=2`;
+  const rawTicker = String(ticker).trim().toUpperCase().replace(/[^A-Z0-9.-]/g, '');
+  const cleanTicker = escHtml(rawTicker);
+  const cdnUrl = `https://assets.stockbit.com/logos/companies/${encodeURIComponent(rawTicker)}.png`;
+  const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(rawTicker)}&background=1e293b&color=38bdf8&bold=true&length=2`;
   return `
     <img
       src="${cdnUrl}"
@@ -882,6 +900,8 @@ function showToast(msg, type = 'success') {
 // =====================================================================
 // DATA LOADING: SCREENER & KPIS
 // =====================================================================
+let lastShownSyncError = null;
+
 async function loadScreenerData(preserveSelection = false) {
   const trigger = document.getElementById('filterTrigger')?.value || 'ALL';
   const minVol = document.getElementById('filterVolRatio')?.value || '0.0';
@@ -909,6 +929,19 @@ async function loadScreenerData(preserveSelection = false) {
     const syncEl = document.getElementById('lastSyncBadge');
     if (syncEl && data.last_sync_time) {
       syncEl.textContent = `Update: ${data.last_sync_time} (Auto ${data.auto_sync_interval_min || 30}m)`;
+      if (data.last_sync_error) {
+        syncEl.title = `Peringatan Sync Terakhir: ${data.last_sync_error}`;
+      } else {
+        syncEl.title = '';
+      }
+    }
+
+    // S5: Tampilkan peringatan bila terjadi error pada background sync
+    if (data.last_sync_error && data.last_sync_error !== lastShownSyncError) {
+      lastShownSyncError = data.last_sync_error;
+      showToast(`⚠️ Peringatan Sync: ${data.last_sync_error}`, 'error');
+    } else if (!data.last_sync_error) {
+      lastShownSyncError = null;
     }
 
     updateKPICards(data.kpis, trigger);
@@ -1032,7 +1065,7 @@ function updateKPICards(kpis, currentTrigger) {
     const badgeCls = isCrash ? 'text-rose-400 font-semibold' : isBull ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold';
 
     if (autoTimerEl) {
-      autoTimerEl.innerHTML = `<span class="${badgeCls}" title="${reg.regime_note}">Regime: ${reg.label || reg.status} (${reg.breadth_ma20_pct}% > MA20)</span>`;
+      autoTimerEl.innerHTML = `<span class="${badgeCls}" title="${escHtml(reg.regime_note)}">Regime: ${escHtml(reg.label || reg.status)} (${escHtml(reg.breadth_ma20_pct)}% &gt; MA20)</span>`;
     }
 
     if (todayRegimeBadge) {
@@ -1128,22 +1161,25 @@ function renderScreenerTable(stocks) {
 
   tbody.innerHTML = pageStocks
     .map((s) => {
+      const safeTicker = escHtml(s.ticker);
+      const safeSector = escHtml(s.sector);
+      const safeSecCat = s.sector_category ? escHtml(s.sector_category) : '';
       const isSelected = s.ticker === selectedTicker;
       const starActive = isFavorite(s.ticker);
       const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
 
       return `
         <tr
-          id="row-${s.ticker}"
-          onclick="selectStock('${s.ticker}', true)"
+          id="row-${safeTicker}"
+          onclick="selectStock('${safeTicker}', true)"
           class="stock-row hover:bg-white/[0.05] transition-colors cursor-pointer ${isSelected ? 'selected-row' : ''}"
         >
           <!-- Ticker & Logo & Star -->
           <td class="py-3 pl-4 pr-2">
             <div class="flex items-center gap-2.5">
               <button
-                onclick="toggleFavorite('${s.ticker}', event)"
-                class="star-btn star-btn-${s.ticker} text-base leading-none transition ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-500 hover:text-amber-300'}"
+                onclick="toggleFavorite('${safeTicker}', event)"
+                class="star-btn star-btn-${safeTicker} text-base leading-none transition ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-500 hover:text-amber-300'}"
                 title="Simpan ke Favorit"
               >
                 ${starActive ? '★' : '☆'}
@@ -1151,10 +1187,10 @@ function renderScreenerTable(stocks) {
               ${getStockLogoImg(s.ticker, 'w-8 h-8')}
               <div>
                 <div class="flex items-center gap-1.5">
-                  <div class="font-mono font-black text-sm text-slate-900 dark:text-white">${s.ticker}</div>
-                  ${s.sector_category ? `<span class="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${s.sector_category}</span>` : ''}
+                  <div class="font-mono font-black text-sm text-slate-900 dark:text-white">${safeTicker}</div>
+                  ${safeSecCat ? `<span class="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${safeSecCat}</span>` : ''}
                 </div>
-                <div class="text-[10px] text-slate-400 truncate max-w-[120px]">${s.sector}</div>
+                <div class="text-[10px] text-slate-400 truncate max-w-[120px]">${safeSector}</div>
               </div>
             </div>
           </td>
@@ -1174,16 +1210,16 @@ function renderScreenerTable(stocks) {
             <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
               ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
             </span>
-            ${s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW' ? `<span class="block text-[8px] font-bold text-amber-800 bg-amber-100 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 mt-0.5 font-mono px-1 py-0.2 rounded" title="${s.tape_quality.reason}">⚠️ ${s.tape_quality.code === 'SUSPICIOUS_CROSSING' ? 'Crossing' : s.tape_quality.code === 'UPTHRUST_DISTRIBUTION' ? 'Upthrust' : 'Thin'}</span>` : ''}
+            ${s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW' ? `<span class="block text-[8px] font-bold text-amber-800 bg-amber-100 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 mt-0.5 font-mono px-1 py-0.2 rounded" title="${escHtml(s.tape_quality.reason)}">⚠️ ${s.tape_quality.code === 'SUSPICIOUS_CROSSING' ? 'Crossing' : s.tape_quality.code === 'UPTHRUST_DISTRIBUTION' ? 'Upthrust' : 'Thin'}</span>` : ''}
             ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">🏆 WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? ((s.tracker_pnl_pct || 0) < 0 ? `<span class="block text-[9px] font-bold text-rose-800 bg-rose-100 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50 mt-1 font-mono px-1 py-0.5 rounded">🔻 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : `<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">🚀 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>`) : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-800 bg-blue-100 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50 mt-1 font-mono px-1 py-0.5 rounded">⏳ WATCHLIST</span>' : ''}
           </td>
 
           <!-- Smart Money Score with Progress Bar -->
           <td class="py-3 px-2 text-right">
             <div class="flex items-center justify-end gap-2.5">
-              <span class="font-mono font-extrabold text-xs text-slate-900 dark:text-white">${s.smart_money_score}</span>
+              <span class="font-mono font-extrabold text-xs text-slate-900 dark:text-white">${escHtml(s.smart_money_score)}</span>
               <div class="w-20 bg-slate-200 dark:bg-white/[0.08] h-2 rounded-full overflow-hidden">
-                <div class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 dark:from-emerald-400 dark:to-teal-300 rounded-full" style="width: ${s.smart_money_score}%"></div>
+                <div class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 dark:from-emerald-400 dark:to-teal-300 rounded-full" style="width: ${Math.min(100, Math.max(0, Number(s.smart_money_score || 0)))}%"></div>
               </div>
             </div>
           </td>
@@ -1194,7 +1230,7 @@ function renderScreenerTable(stocks) {
               VWAP 5H: <span class="text-slate-900 dark:text-white font-bold">${fmtPrice(s.bandar_avg_buy)}</span> <span class="${s.diff_bandar_avg_pct >= 0 ? 'text-amber-500 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-400'} font-semibold">(${s.diff_bandar_avg_pct >= 0 ? '+' : ''}${s.diff_bandar_avg_pct.toFixed(1)}%)</span>
             </div>
             <div class="text-[10px] text-slate-500 dark:text-slate-400">
-              CR: <span class="text-slate-800 dark:text-slate-200 font-semibold">${s.closing_range_pct}%</span> · Val: <span class="text-slate-800 dark:text-slate-200">Rp ${s.value_b_idr} M</span>
+              CR: <span class="text-slate-800 dark:text-slate-200 font-semibold">${escHtml(s.closing_range_pct)}%</span> · Val: <span class="text-slate-800 dark:text-slate-200">Rp ${escHtml(s.value_b_idr)} M</span>
             </div>
           </td>
         </tr>
@@ -1458,11 +1494,11 @@ function renderInspectorPanel(d) {
             <div class="flex items-center justify-between gap-2">
               <div class="flex items-center gap-2">
                 ${icon}
-                <span class="text-xs font-semibold text-slate-900 dark:text-white">${item.title}</span>
+                <span class="text-xs font-semibold text-slate-900 dark:text-white">${escHtml(item.title)}</span>
               </div>
-              <span class="font-mono text-[11px] font-semibold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:text-emerald-300 dark:bg-white/[0.06] dark:border-white/10 px-2 py-0.5 rounded-md">${item.metric}</span>
+              <span class="font-mono text-[11px] font-semibold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:text-emerald-300 dark:bg-white/[0.06] dark:border-white/10 px-2 py-0.5 rounded-md">${escHtml(item.metric)}</span>
             </div>
-            <p class="text-[11px] text-slate-600 dark:text-slate-400 pl-7 leading-relaxed">${item.detail}</p>
+            <p class="text-[11px] text-slate-600 dark:text-slate-400 pl-7 leading-relaxed">${escHtml(item.detail)}</p>
           </div>
         `;
       })
@@ -2367,7 +2403,7 @@ function renderTrackerStats(data) {
             return `
             <div class="glass-subcard rounded-xl p-3 hover:border-white/15 transition">
               <div class="flex items-center justify-between">
-                <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(type)}">${b.label}</span>
+                <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${getTriggerBadgeClass(type)}">${escHtml(b.label)}</span>
                 <span class="font-mono font-bold ${wr === null ? 'text-slate-400' : wr >= 50 ? 'text-emerald-400' : 'text-rose-400'}">${wr === null ? '-' : wr + '%'}</span>
               </div>
               <div class="mt-2 text-[11px] font-mono text-slate-400">
@@ -2394,7 +2430,7 @@ function renderTrackerStats(data) {
   document.querySelectorAll('#trackerTabs .tracker-tab').forEach((btn) => {
     const tab = btn.dataset.tab;
     const label = btn.textContent.replace(/\s*\d+$/, '').trim();
-    btn.innerHTML = `${label}<span class="tab-count ml-1 px-1.5 py-0.2 rounded bg-white/10 text-[10px]">${counts[tab] ?? 0}</span>`;
+    btn.innerHTML = `${escHtml(label)}<span class="tab-count ml-1 px-1.5 py-0.2 rounded bg-white/10 text-[10px]">${counts[tab] ?? 0}</span>`;
     btn.classList.toggle('active', tab === trackerTab);
   });
 }
@@ -2423,6 +2459,10 @@ function renderTrackerTable(rows) {
 
   tbody.innerHTML = rows
     .map((r) => {
+      const safeTicker = escHtml(r.ticker);
+      const safeSector = escHtml(r.sector || (r.source === 'AUTO' ? 'Auto Sinyal' : 'Manual'));
+      const safeTriggerLabel = escHtml(r.trigger_label || '-');
+      const safeSignalDate = escHtml(r.signal_date || '');
       const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' || r.status === 'CANCELLED' ? null : r.pnl_pct;
       const isRunningLoss = r.status === 'RUNNING' && pnl !== null && pnl < 0;
 
@@ -2433,10 +2473,10 @@ function renderTrackerTable(rows) {
 
       const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT', 'CANCELLED'].includes(r.status);
       const exitOrLast = isClosed && r.exit_price
-        ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${r.exit_date || ''}</div>`
+        ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.exit_date || '')}</div>`
         : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">last</div>`;
       const entryCell = r.entry_price
-        ? `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${r.entry_date || ''}</div>`
+        ? `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.entry_date || '')}</div>`
         : r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined
         ? `<span class="text-slate-400 dark:text-slate-500">-</span><div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">jarak ${fmtPctOrDash(r.dist_to_entry_pct)}</div>`
         : '<span class="text-slate-400 dark:text-slate-500">-</span>';
@@ -2447,6 +2487,7 @@ function renderTrackerTable(rows) {
       }
 
       const noteText = String(r.note || '');
+      const safeNote = escHtml(noteText);
       const hasDistWarning = noteText.startsWith('⚠️');
 
       const rowHighlight = hasDistWarning
@@ -2461,15 +2502,15 @@ function renderTrackerTable(rows) {
       <tr class="${rowHighlight}">
         <!-- Saham -->
         <td class="py-3.5 pl-4 pr-2">
-          <div class="flex items-center gap-3 cursor-pointer group" onclick="selectStockAndGoToInspector('${r.ticker}')" title="Klik untuk membuka detail ${r.ticker}">
+          <div class="flex items-center gap-3 cursor-pointer group" onclick="selectStockAndGoToInspector('${safeTicker}')" title="Klik untuk membuka detail ${safeTicker}">
             ${getStockLogoImg(r.ticker, 'w-8 h-8')}
             <div>
               <div class="font-sans font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 flex items-center gap-1.5 transition">
-                <span>${r.ticker}</span>
+                <span>${safeTicker}</span>
                 ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
-                ${hasDistWarning ? `<span class="text-xs animate-pulse" title="${noteText}">⚠️</span>` : ''}
+                ${hasDistWarning ? `<span class="text-xs animate-pulse" title="${safeNote}">⚠️</span>` : ''}
               </div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 truncate max-w-[150px] mt-0.5">${r.sector || (r.source === 'AUTO' ? 'Auto Sinyal' : 'Manual')}</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 truncate max-w-[150px] mt-0.5">${safeSector}</div>
             </div>
           </div>
         </td>
@@ -2477,17 +2518,17 @@ function renderTrackerTable(rows) {
         <!-- Trigger & Score -->
         <td class="py-3.5 px-3">
           <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">
-            <span>${r.trigger_label || '-'}</span>
-            <span class="font-mono font-extrabold text-slate-900 dark:text-white">${r.score ?? '-'}</span>
+            <span>${safeTriggerLabel}</span>
+            <span class="font-mono font-extrabold text-slate-900 dark:text-white">${escHtml(r.score ?? '-')}</span>
           </span>
         </td>
 
         <!-- Tanggal & Waktu Sinyal -->
         <td class="py-3.5 px-3 font-sans font-medium text-slate-800 dark:text-slate-200 text-xs">
-          <div>${r.signal_date}</div>
+          <div>${safeSignalDate}</div>
           <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 mt-0.5" title="Waktu terdeteksi">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
-            ${formatSignalTime(r.created_at)}
+            ${escHtml(formatSignalTime(r.created_at))}
           </div>
         </td>
 
@@ -2501,10 +2542,10 @@ function renderTrackerTable(rows) {
 
         <!-- Status Simulasi -->
         <td class="py-3.5 px-3 text-center">
-          <span class="inline-block min-w-[82px] text-center px-3.5 py-1 rounded-full border text-xs font-bold tracking-wide ${statusCls}" title="${noteText}">
-            ${r.status === 'RUNNING' ? (isRunningLoss ? 'Running Loss' : 'Running') : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : r.status}
+          <span class="inline-block min-w-[82px] text-center px-3.5 py-1 rounded-full border text-xs font-bold tracking-wide ${statusCls}" title="${safeNote}">
+            ${r.status === 'RUNNING' ? (isRunningLoss ? 'Running Loss' : 'Running') : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : escHtml(r.status)}
           </span>
-          ${hasDistWarning ? `<div class="mt-1 text-[9px] font-extrabold text-rose-800 bg-rose-100 border border-rose-200 dark:text-rose-300 dark:bg-rose-500/20 dark:border-rose-500/40 rounded px-1.5 py-0.5 animate-pulse" title="${noteText}">⚠️ AWAS DISTRIBUSI</div>` : ''}
+          ${hasDistWarning ? `<div class="mt-1 text-[9px] font-extrabold text-rose-800 bg-rose-100 border border-rose-200 dark:text-rose-300 dark:bg-rose-500/20 dark:border-rose-500/40 rounded px-1.5 py-0.5 animate-pulse" title="${safeNote}">⚠️ AWAS DISTRIBUSI</div>` : ''}
         </td>
 
         <!-- Harga Masuk -->
@@ -2524,7 +2565,7 @@ function renderTrackerTable(rows) {
 
         <!-- Action / Delete -->
         <td class="py-3.5 pl-1 pr-3 text-right">
-          <button onclick="deleteSignal(${r.id})" class="text-slate-500 hover:text-rose-400 text-base font-bold transition px-1" title="Hapus sinyal">&times;</button>
+          <button onclick="deleteSignal(${Number(r.id)})" class="text-slate-500 hover:text-rose-400 text-base font-bold transition px-1" title="Hapus sinyal">&times;</button>
         </td>
       </tr>`;
     })
@@ -2598,14 +2639,13 @@ async function resetTracker() {
 }
 
 // =====================================================================
-// TELEGRAM NOTIFIER INTEGRATION
+// TELEGRAM NOTIFIER INTEGRATION (K1: Token Never Stored in localStorage)
 // =====================================================================
+let telegramServerConfigured = false;
+
 function openTelegramModal() {
-  const token = localStorage.getItem('smartflow_telegram_token') || '';
   const chatId = localStorage.getItem('smartflow_telegram_chat_id') || '';
-  const tokenInput = document.getElementById('telegramBotToken');
   const chatInput = document.getElementById('telegramChatId');
-  if (tokenInput && !tokenInput.value) tokenInput.value = token;
   if (chatInput && !chatInput.value) chatInput.value = chatId;
   loadTelegramConfig();
   const modal = document.getElementById('telegramModal');
@@ -2620,14 +2660,14 @@ function closeTelegramModal() {
 function getTelegramCredentials() {
   const tokenInput = document.getElementById('telegramBotToken');
   const chatInput = document.getElementById('telegramChatId');
-  const token = (tokenInput ? tokenInput.value.trim() : '') || localStorage.getItem('smartflow_telegram_token') || '';
+  const token = tokenInput ? tokenInput.value.trim() : '';
   const chatId = (chatInput ? chatInput.value.trim() : '') || localStorage.getItem('smartflow_telegram_chat_id') || '';
   return { token, chatId };
 }
 
 async function testTelegramConnection() {
   const { token, chatId } = getTelegramCredentials();
-  if (!token || !chatId) {
+  if ((!token && !telegramServerConfigured) || !chatId) {
     showToast('Masukkan Bot Token dan Chat ID terlebih dahulu.', 'error');
     return;
   }
@@ -2644,8 +2684,12 @@ async function testTelegramConnection() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Gagal terhubung ke Telegram');
-    localStorage.setItem('smartflow_telegram_token', token);
     localStorage.setItem('smartflow_telegram_chat_id', chatId);
+    if (token) {
+      telegramServerConfigured = true;
+      const tokenInput = document.getElementById('telegramBotToken');
+      if (tokenInput) tokenInput.value = '';
+    }
     showToast('🔔 ' + data.message, 'success');
   } catch (err) {
     showToast(err.message, 'error');
@@ -2659,10 +2703,11 @@ async function testTelegramConnection() {
 
 async function handleTelegramClick() {
   const { token, chatId } = getTelegramCredentials();
-  if (!token || !chatId) {
+  if (!token) {
     try {
       const cRes = await fetch('/api/telegram/config');
       const cData = await cRes.json();
+      telegramServerConfigured = Boolean(cData.configured);
       if (!cData.configured) {
         openTelegramModal();
         return;
@@ -2681,13 +2726,13 @@ async function saveAndSendTelegram() {
   const token = tokenInput ? tokenInput.value.trim() : '';
   const chatId = chatInput ? chatInput.value.trim() : '';
 
-  if (!token || !chatId) {
+  if ((!token && !telegramServerConfigured) || !chatId) {
     showToast('Bot Token dan Chat ID wajib diisi.', 'error');
     return;
   }
 
-  localStorage.setItem('smartflow_telegram_token', token);
   localStorage.setItem('smartflow_telegram_chat_id', chatId);
+  if (tokenInput) tokenInput.value = '';
 
   closeTelegramModal();
   await sendTelegramRecommendations(token, chatId);
@@ -3171,6 +3216,11 @@ function renderPortfolioTable(trades) {
   }
 
   tbody.innerHTML = trades.map((t) => {
+    const safeTicker = escHtml(t.ticker);
+    const safeSector = escHtml(t.sector || 'IDX Emiten');
+    const safeEntryDate = escHtml(t.entry_date || '');
+    const safeBroker = escHtml(t.broker || 'Sekuritas');
+    const safeNotes = escHtml(t.notes || '-');
     const isHolding = t.status === 'HOLDING';
     const pnlVal = t.pnl_rp || 0;
     const pnlPct = t.pnl_pct || 0;
@@ -3187,14 +3237,14 @@ function renderPortfolioTable(trades) {
           <div class="flex items-center gap-2">
             ${getStockLogoImg(t.ticker, 'w-6 h-6')}
             <div>
-              <span class="text-sm font-black text-white">${t.ticker}</span>
-              <div class="text-[10px] text-slate-400 font-sans truncate max-w-[120px]">${t.sector || 'IDX Emiten'}</div>
+              <span class="text-sm font-black text-white">${safeTicker}</span>
+              <div class="text-[10px] text-slate-400 font-sans truncate max-w-[120px]">${safeSector}</div>
             </div>
           </div>
         </td>
-        <td class="py-3 px-3 font-mono text-slate-300 text-[11px]">${t.entry_date}</td>
+        <td class="py-3 px-3 font-mono text-slate-300 text-[11px]">${safeEntryDate}</td>
         <td class="py-3 px-3 text-right font-mono text-white font-semibold">${fmtPrice(t.entry_price)}</td>
-        <td class="py-3 px-3 text-center font-mono font-bold text-sky-300">${t.lots} lot</td>
+        <td class="py-3 px-3 text-center font-mono font-bold text-sky-300">${Number(t.lots || 0)} lot</td>
         <td class="py-3 px-3 text-right font-mono text-slate-200">${fmtPrice(t.total_capital)}</td>
         <td class="py-3 px-3 text-right font-mono text-white font-semibold">${fmtPrice(t.current_price)}</td>
         <td class="py-3 px-3 text-right font-mono ${pnlColor}">
@@ -3203,14 +3253,14 @@ function renderPortfolioTable(trades) {
         </td>
         <td class="py-3 px-3 text-center">${statusBadge}</td>
         <td class="py-3 px-3 text-slate-300 text-[11px]">
-          <div class="font-medium text-white">${t.broker || 'Sekuritas'}</div>
-          <div class="text-slate-400 text-[10px] truncate max-w-[150px]">${t.notes || '-'}</div>
+          <div class="font-medium text-white">${safeBroker}</div>
+          <div class="text-slate-400 text-[10px] truncate max-w-[150px]" title="${safeNotes}">${safeNotes}</div>
         </td>
         <td class="py-3 pl-1 pr-4 text-right">
           <div class="flex items-center justify-end gap-1.5">
             ${isHolding ? `
               <button
-                onclick="openPortfolioSellModal(${t.id}, '${t.ticker}', ${t.entry_price}, ${t.lots})"
+                onclick="openPortfolioSellModal(${Number(t.id)}, '${safeTicker}', ${Number(t.entry_price || 0)}, ${Number(t.lots || 0)})"
                 class="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-[11px] font-bold transition active:scale-95"
                 title="Jual dan realisasikan posisi"
               >
@@ -3218,7 +3268,7 @@ function renderPortfolioTable(trades) {
               </button>
             ` : ''}
             <button
-              onclick="deletePortfolioTrade(${t.id})"
+              onclick="deletePortfolioTrade(${Number(t.id)})"
               class="px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-400/20 text-[11px] transition active:scale-95"
               title="Hapus riwayat trade"
             >
@@ -3389,12 +3439,15 @@ function calcSellRealizedPreview() {
   const exit = parseFloat(exitInput?.value) || 0;
 
   if (entry > 0 && lots > 0 && exit > 0) {
-    const diff = (exit - entry) * lots * 100;
-    const pct = ((exit - entry) / entry) * 100;
-    const sign = diff >= 0 ? '+' : '';
+    const grossBuy = entry * lots * 100;
+    const grossSell = exit * lots * 100;
+    const feeRp = (grossBuy * 0.0015) + (grossSell * 0.0025);
+    const netDiff = Math.round(grossSell - grossBuy - feeRp);
+    const pct = (netDiff / grossBuy) * 100;
+    const sign = netDiff >= 0 ? '+' : '';
     if (prevEl) {
-      prevEl.textContent = `${sign}${fmtPrice(diff)} (${sign}${pct.toFixed(2)}%)`;
-      prevEl.className = `font-mono font-bold text-sm ${diff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+      prevEl.textContent = `${sign}${fmtPrice(netDiff)} (${sign}${pct.toFixed(2)}% net)`;
+      prevEl.className = `font-mono font-bold text-sm ${netDiff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
     }
   } else if (prevEl) {
     prevEl.textContent = '-';
@@ -3461,11 +3514,20 @@ async function loadTelegramConfig() {
     if (!res.ok) return;
     const data = await res.json();
 
+    telegramServerConfigured = Boolean(data.configured);
+
     const tokenInput = document.getElementById('telegramBotToken');
     const chatInput = document.getElementById('telegramChatId');
     const autoNotify = document.getElementById('telegramAutoNotify');
 
-    if (tokenInput && data.bot_token) tokenInput.value = data.bot_token;
+    if (tokenInput) {
+      tokenInput.value = '';
+      if (data.configured && data.masked_token) {
+        tokenInput.placeholder = `Tersimpan di server (${data.masked_token}) — kosongkan jika tidak diubah`;
+      } else {
+        tokenInput.placeholder = 'Contoh: 1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ';
+      }
+    }
     if (chatInput && data.chat_id) chatInput.value = data.chat_id;
     if (autoNotify && data.auto_notify !== undefined) autoNotify.checked = data.auto_notify;
   } catch (err) {
@@ -3474,11 +3536,12 @@ async function loadTelegramConfig() {
 }
 
 async function saveTelegramConfig() {
-  const token = document.getElementById('telegramBotToken')?.value.trim() || '';
+  const tokenInput = document.getElementById('telegramBotToken');
+  const token = tokenInput?.value.trim() || '';
   const chatId = document.getElementById('telegramChatId')?.value.trim() || '';
   const autoNotify = document.getElementById('telegramAutoNotify')?.checked ?? true;
 
-  if (!token || !chatId) {
+  if ((!token && !telegramServerConfigured) || !chatId) {
     showToast('Bot Token dan Chat ID wajib diisi.', 'error');
     return;
   }
@@ -3502,8 +3565,10 @@ async function saveTelegramConfig() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Gagal menyimpan konfigurasi.');
 
-    localStorage.setItem('smartflow_telegram_token', token);
+    telegramServerConfigured = true;
+    if (tokenInput) tokenInput.value = '';
     localStorage.setItem('smartflow_telegram_chat_id', chatId);
+    await loadTelegramConfig();
     showToast('✅ ' + data.message, 'success');
   } catch (err) {
     showToast(err.message, 'error');

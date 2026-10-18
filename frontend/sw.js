@@ -1,5 +1,5 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'smartflow-idx-v64';
+const CACHE_NAME = 'smartflow-idx-v65';
 const ASSETS_TO_CACHE = [
   '/',
   '/static/styles.css',
@@ -13,9 +13,13 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
-        console.warn('[SW] Cache pre-fetch failed:', err);
-      });
+      return Promise.allSettled(
+        ASSETS_TO_CACHE.map((assetUrl) =>
+          cache.add(assetUrl).catch((err) => {
+            console.warn('[SW] Failed to cache asset:', assetUrl, err);
+          })
+        )
+      );
     })
   );
   self.skipWaiting();

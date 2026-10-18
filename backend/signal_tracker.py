@@ -144,14 +144,9 @@ class SignalTracker:
             self.engine = self._make_engine(url)
             metadata.create_all(self.engine)
         self.db_backend = "PostgreSQL (permanen)" if url.startswith("postgresql") else "SQLite (file lokal)"
-        try:
-            self.cleanup_non_compliant_signals()
-            self.sync_targets_quick_profit()
-        except Exception as e:
-            print(f"[Tracker] Notice saat pembersihan sinyal 6 filter / sync TP: {e}")
 
     def sync_targets_quick_profit(self) -> int:
-        """Menyesuaikan target price posisi aktif (WATCHLIST & RUNNING) ke formula Quick Profit TP1 (+4%) dan TP2 (+7%)."""
+        """Menyesuaikan target price posisi aktif (WATCHLIST & RUNNING) dengan menghormati konfigurasi self.tp_level."""
         try:
             from backend.screener_engine import _round_idx_tick
         except ImportError:
@@ -169,61 +164,43 @@ class SignalTracker:
                 new_tp2 = _round_idx_tick(e_high * 1.07)
                 if new_tp2 <= new_tp1:
                     new_tp2 = _round_idx_tick(new_tp1 + (2 if e_high >= 200 else 1))
+                primary_tp = new_tp2 if self.tp_level == 2 else new_tp1
                 cur_tp1 = float(r.get("target") or 0)
                 cur_tp2 = float(r.get("target_2") or 0)
-                if cur_tp1 != new_tp1 or cur_tp2 != new_tp2 or float(r.get("entry_low") or 0) != e_high:
+                if cur_tp1 != primary_tp or cur_tp2 != new_tp2 or float(r.get("entry_low") or 0) != e_high:
                     conn.execute(
                         update(signals_table)
                         .where(signals_table.c.id == r["id"])
-                        .values(target=new_tp1, target_2=new_tp2, entry_low=e_high, updated_at=_now_str())
+                        .values(target=primary_tp, target_2=new_tp2, entry_low=e_high, updated_at=_now_str())
                     )
                     updated += 1
-            # Samakan entry_low = entry_high untuk seluruh baris agar format 1 harga beli seragam
-            conn.execute(
-                update(signals_table)
-                .where(signals_table.c.entry_low != signals_table.c.entry_high)
-                .values(entry_low=signals_table.c.entry_high)
-            )
-        if updated > 0:
-            print(f"[Tracker] Berhasil memperbarui {updated} sinyal aktif ke target TP1 (+4%) & TP2 (+7%) dan 1 harga beli tunggal.")
         return updated
 
     def cleanup_non_compliant_signals(self) -> int:
-        """Menghapus seluruh sinyal (WATCHLIST, RUNNING, WIN, LOSS) yang melanggar 6 filter kuantitatif."""
-        data_dir = Path(__file__).resolve().parent.parent / "data"
-        val_map: dict[tuple[str, str], float] = {}
-        for fn in ["real_idx_market_latest.csv", "real_idx_market_6mo.csv"]:
-            p = data_dir / fn
-            if p.exists():
-                try:
-                    df = pd.read_csv(p, usecols=["Ticker", "Date", "Value_IDR"])
-                    for _, r in df.iterrows():
-                        val_map[(str(r["Ticker"]).upper(), str(r["Date"]))] = float(r["Value_IDR"])
-                except Exception:
-                    pass
-
+        """Membatalkan antrean WATCHLIST yang tidak memenuhi syarat tanpa menghapus riwayat sinyal yang sudah selesai (WIN/LOSS/TIMEOUT/EXPIRED)."""
         removed = 0
         with self._lock, self.engine.begin() as conn:
-            rows = conn.execute(select(signals_table)).mappings().all()
-            ids_to_del: list[int] = []
+            rows = conn.execute(
+                select(signals_table).where(signals_table.c.status == "WATCHLIST")
+            ).mappings().all()
+            ids_to_cancel: list[int] = []
             for r in rows:
                 score = int(r.get("score") or 0)
                 trig = str(r.get("trigger_type") or "")
-                ticker = str(r.get("ticker") or "").upper()
-                s_date = str(r.get("signal_date") or "")
-                val_idr = val_map.get((ticker, s_date), 1_000_000_000.0)
                 sig_close = float(r.get("signal_close") or r.get("entry_high") or 0)
                 sec_lower = str(r.get("sector") or "").lower()
                 is_fca_or_penny = ("pemantauan khusus" in sec_lower) or ("akselerasi" in sec_lower) or (sig_close > 0 and sig_close < 70)
 
-                # 6 Filter: Skor >= 70, Sinyal Akumulasi Sah, Nilai Transaksi >= 1 Miliar, Bukan FCA/Penny (< 70)
-                if score < self.min_score or trig not in TRACKABLE_TRIGGERS or val_idr < 1_000_000_000 or is_fca_or_penny:
-                    ids_to_del.append(r["id"])
+                if score < self.min_score or trig not in TRACKABLE_TRIGGERS or is_fca_or_penny:
+                    ids_to_cancel.append(r["id"])
 
-            if ids_to_del:
-                conn.execute(delete(signals_table).where(signals_table.c.id.in_(ids_to_del)))
-                removed = len(ids_to_del)
-                print(f"[Tracker] Berhasil membersihkan {removed} sinyal yang melanggar 6 filter kuantitatif.")
+            if ids_to_cancel:
+                conn.execute(
+                    update(signals_table)
+                    .where(signals_table.c.id.in_(ids_to_cancel))
+                    .values(status="CANCELLED", note="Dibatalkan oleh filter kepatuhan Watchlist.", updated_at=_now_str())
+                )
+                removed = len(ids_to_cancel)
         return removed
 
     @staticmethod
@@ -699,17 +676,14 @@ class SignalTracker:
 
                 for bar in hist:
                     bar_date = str(bar["date"])
-                    if bar_date < r["signal_date"]:
+                    # Bebas Look-Ahead Bias (T1): Sinyal baru hanya boleh dievaluasi pada hari bursa SETELAH signal_date
+                    if bar_date <= r["signal_date"]:
                         continue
 
                     is_live_today = False if force_final else (bar_date == today_str and now_wib().time() < MARKET_CLOSE_CUTOFF)
 
-                    # Jika bar pada tanggal sinyal dan bukan sesi live hari ini serta bukan manual -> lewati (sinyal harian terbentuk saat penutupan)
-                    if bar_date == r["signal_date"] and not is_live_today and r.get("source") != "MANUAL":
-                        continue
-
                     # Jika bar historis yang sudah pernah dievaluasi final dan bukan live today -> lewati
-                    if bar_date <= since and not is_live_today and bar_date != r["signal_date"]:
+                    if bar_date <= since and not is_live_today:
                         continue
 
                     self._step(r, bar, changes, is_live_today=is_live_today)
@@ -787,7 +761,9 @@ class SignalTracker:
                     )
                     return
 
-                # Kondisi normal: Low menyentuh area antrean dan harga tidak tembus SL -> Posisi masuk RUNNING
+                # Kondisi normal: Low menyentuh area antrean dan harga tidak tembus SL -> Posisi masuk RUNNING.
+                # Konservatif (T1): Target Price (TP) tidak dievaluasi pada bar entry yang sama karena urutan High vs Low intraday tidak diketahui;
+                # evaluasi TP dimulai pada bar hari berikutnya.
                 r.update(
                     status="RUNNING",
                     entry_date=date,
@@ -805,18 +781,6 @@ class SignalTracker:
                     "pnl_pct": r["pnl_pct"],
                     "note": r["note"],
                 })
-
-                # Jika di hari yang sama High menyentuh Target Price (tp) -> langsung WIN
-                if h >= r["target"] and c >= fill:
-                    tp_val = float(r["target"])
-                    self._close(
-                        r,
-                        date,
-                        tp_val,
-                        "WIN",
-                        f"Target Price (Rp {tp_val:,.0f}) tercapai di hari yang sama dengan entry (High Rp {h:,.0f}).",
-                        changes,
-                    )
                 return
 
             if not is_live_today:
@@ -834,8 +798,8 @@ class SignalTracker:
 
         if r["status"] == "RUNNING":
             # Entry Price & tanggal masuk sudah terkunci: jangan evaluasi ulang entry,
-            # dan abaikan candle sebelum tanggal entry.
-            if r.get("entry_date") and date < str(r["entry_date"]):
+            # dan abaikan candle pada atau sebelum tanggal entry.
+            if r.get("entry_date") and date <= str(r["entry_date"]):
                 return
             sl, tp = float(r["stop_loss"]), float(r["target"])
             entry_p = float(r["entry_price"])
@@ -935,26 +899,30 @@ class SignalTracker:
         running = by_status("RUNNING")
         win_p = [float(r["pnl_pct"] or 0) for r in wins]
         loss_p = [float(r["pnl_pct"] or 0) for r in losses]
-        closed_p = win_p + loss_p + [float(r["pnl_pct"] or 0) for r in timeouts]
-        decided = len(wins) + len(losses)
-        gross_win, gross_loss = sum(win_p), abs(sum(loss_p))
+        timeout_p = [float(r["pnl_pct"] or 0) for r in timeouts]
+        closed_p = win_p + loss_p + timeout_p
+        decided = len(wins) + len(losses) + len(timeouts)
+        gross_win = sum(win_p) + sum(p for p in timeout_p if p > 0)
+        gross_loss = abs(sum(loss_p)) + abs(sum(p for p in timeout_p if p < 0))
         fee = self.fee_roundtrip_pct
 
         by_trigger: dict[str, dict] = {}
         for r in rows:
             t = r["trigger_type"] or "OTHER"
-            b = by_trigger.setdefault(t, {"label": r["trigger_label"] or t, "total": 0, "win": 0, "loss": 0, "running": 0, "pnls": []})
+            b = by_trigger.setdefault(t, {"label": r["trigger_label"] or t, "total": 0, "win": 0, "loss": 0, "timeout": 0, "running": 0, "pnls": []})
             b["total"] += 1
             if r["status"] == "WIN":
                 b["win"] += 1
             elif r["status"] == "LOSS":
                 b["loss"] += 1
+            elif r["status"] == "TIMEOUT":
+                b["timeout"] += 1
             elif r["status"] == "RUNNING":
                 b["running"] += 1
             if r["status"] in ("WIN", "LOSS", "TIMEOUT"):
                 b["pnls"].append(float(r["pnl_pct"] or 0))
         for b in by_trigger.values():
-            dec = b["win"] + b["loss"]
+            dec = b["win"] + b["loss"] + b["timeout"]
             b["win_rate"] = round(b["win"] / dec * 100.0, 1) if dec else None
             b["avg_pnl"] = round(mean(b["pnls"]), 2) if b["pnls"] else None
             del b["pnls"]
@@ -992,7 +960,7 @@ class SignalTracker:
 
     def rebuild_recent_days(self, market_df: pd.DataFrame, days: int = 10) -> dict:
         """
-        Mengisi ulang database tracker.db dari riwayat pasar 10 hari bursa terakhir.
+        Mengisi ulang database tracker.db dari riwayat pasar 10 hari bursa terakhir (Simulasi Replay Historis).
         Menggunakan aturan kuantitatif terbaru & eksekusi instan (< 1.5 detik).
         """
         try:
@@ -1083,18 +1051,23 @@ class SignalTracker:
                     c_price = int(round(float(r.Close)))
                     val_idr = float(r.Value_IDR) if hasattr(r, "Value_IDR") else 1_000_000_000.0
                     freq_val = float(r.Frequency) if hasattr(r, "Frequency") else 500.0
+                    has_real_freq = bool(getattr(r, "Has_Broker_Summary", False))
                     r_sec = str(r.Sector) if hasattr(r, "Sector") else ""
                     vol_ratio_val = float(r.Volume_Ratio) if hasattr(r, "Volume_Ratio") else 1.0
                     cr_val = float(r.Closing_Range) if hasattr(r, "Closing_Range") else 0.7
                     pct_val = float(r.Pct_Change) if hasattr(r, "Pct_Change") else 0.0
 
                     # Item 4: Filter Fundamental & Board Safety
-                    fund = check_fundamental_and_board_safety(str(r.Ticker).upper(), r_sec, c_price, val_idr / 1e9, freq_val)
+                    fund = check_fundamental_and_board_safety(
+                        str(r.Ticker).upper(), r_sec, c_price, val_idr / 1e9, freq_val, has_real_freq=has_real_freq
+                    )
                     if not fund["is_safe"]:
                         continue
 
                     # Item 5: Filter Kualitas Tape & Anti Manipulasi Pre-Closing
-                    tape = evaluate_tape_and_closing_quality(vol_ratio_val, cr_val, pct_val, val_idr, freq_val, median_val_tx)
+                    tape = evaluate_tape_and_closing_quality(
+                        vol_ratio_val, cr_val, pct_val, val_idr, freq_val, median_val_tx, has_real_freq=has_real_freq
+                    )
                     if not tape["is_organic"]:
                         continue
 
@@ -1144,7 +1117,7 @@ class SignalTracker:
                             "diff_bandar_avg_pct": diff_vwap,
                         },
                     }
-                    ok, _ = self.add_signal(stock_obj, source="AUTO")
+                    ok, _ = self.add_signal(stock_obj, source="REPLAY")
                     if ok:
                         day_added += 1
                         seen_day_sectors.add(sec_cat)

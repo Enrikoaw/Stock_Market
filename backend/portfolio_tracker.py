@@ -148,6 +148,10 @@ class PortfolioTracker:
             "message": f"Transaksi beli {lots} lot {ticker_clean} @ Rp {entry_price:,.0f} berhasil dicatat di Portofolio.",
         }
 
+    # Estimasi standar fee sekuritas BEI: Beli 0.15%, Jual 0.25%
+    BUY_FEE_RATE = 0.0015
+    SELL_FEE_RATE = 0.0025
+
     def close_trade(
         self,
         trade_id: int,
@@ -158,7 +162,7 @@ class PortfolioTracker:
         if exit_price <= 0:
             raise ValueError("Harga jual harus lebih dari 0.")
 
-        date_str = exit_date or datetime.now(WIB).strftime("%Y-%m-%d")
+        date_str = (exit_date or datetime.now(WIB).strftime("%Y-%m-%d")).strip()
         now = _now_str()
 
         with self._lock, self.engine.begin() as conn:
@@ -168,6 +172,13 @@ class PortfolioTracker:
 
             if not row:
                 raise ValueError("Data transaksi tidak ditemukan.")
+
+            if str(row.get("status") or "").upper() == "CLOSED":
+                raise ValueError("Transaksi ini sudah ditutup (CLOSED) sebelumnya.")
+
+            entry_dt_str = str(row.get("entry_date") or "").strip()
+            if len(entry_dt_str) == 10 and len(date_str) == 10 and date_str < entry_dt_str:
+                raise ValueError(f"Tanggal jual ({date_str}) tidak boleh lebih awal dari tanggal beli ({entry_dt_str}).")
 
             upd: dict[str, Any] = {
                 "status": "CLOSED",
@@ -187,8 +198,11 @@ class PortfolioTracker:
 
         entry = float(row["entry_price"])
         lots = int(row["lots"])
-        pnl_rp = (exit_price - entry) * lots * 100
-        pnl_pct = round((exit_price - entry) / entry * 100.0, 2)
+        gross_buy = entry * lots * 100.0
+        gross_sell = float(exit_price) * lots * 100.0
+        total_fee_rp = (gross_buy * self.BUY_FEE_RATE) + (gross_sell * self.SELL_FEE_RATE)
+        pnl_rp = round(gross_sell - gross_buy - total_fee_rp, 0)
+        pnl_pct = round((pnl_rp / max(gross_buy, 1.0)) * 100.0, 2)
 
         return {
             "id": trade_id,
@@ -196,9 +210,10 @@ class PortfolioTracker:
             "entry_price": entry,
             "exit_price": exit_price,
             "lots": lots,
+            "fee_rp": round(total_fee_rp, 0),
             "pnl_rp": pnl_rp,
             "pnl_pct": pnl_pct,
-            "message": f"Posisi {row['ticker']} ditutup @ Rp {exit_price:,.0f} (P/L: Rp {pnl_rp:+,.0f} / {pnl_pct:+.2f}%).",
+            "message": f"Posisi {row['ticker']} ditutup @ Rp {exit_price:,.0f} (Net P/L: Rp {pnl_rp:+,.0f} / {pnl_pct:+.2f}% setelah fee broker).",
         }
 
     def delete_trade(self, trade_id: int) -> bool:
@@ -225,7 +240,7 @@ class PortfolioTracker:
         for r in rows:
             entry_p = float(r["entry_price"])
             lots = int(r["lots"])
-            capital = entry_p * lots * 100
+            capital = entry_p * lots * 100.0
             st = str(r["status"]).upper()
 
             item = dict(r)
@@ -233,20 +248,25 @@ class PortfolioTracker:
 
             if st == "HOLDING":
                 curr_p = float(live_prices.get(str(r["ticker"]).upper(), entry_p))
-                curr_val = curr_p * lots * 100
-                float_pnl_rp = (curr_p - entry_p) * lots * 100
-                float_pnl_pct = round((curr_p - entry_p) / entry_p * 100.0, 2)
+                curr_val = curr_p * lots * 100.0
+                est_fee = (capital * self.BUY_FEE_RATE) + (curr_val * self.SELL_FEE_RATE)
+                float_pnl_rp = round(curr_val - capital - est_fee, 0)
+                float_pnl_pct = round((float_pnl_rp / max(capital, 1.0)) * 100.0, 2)
 
                 item["current_price"] = curr_p
                 item["current_value"] = curr_val
+                item["fee_rp"] = round(est_fee, 0)
                 item["pnl_rp"] = float_pnl_rp
                 item["pnl_pct"] = float_pnl_pct
             else:
                 exit_p = float(r.get("exit_price") or entry_p)
-                pnl_rp = (exit_p - entry_p) * lots * 100
-                pnl_pct = round((exit_p - entry_p) / entry_p * 100.0, 2)
+                exit_val = exit_p * lots * 100.0
+                realized_fee = (capital * self.BUY_FEE_RATE) + (exit_val * self.SELL_FEE_RATE)
+                pnl_rp = round(exit_val - capital - realized_fee, 0)
+                pnl_pct = round((pnl_rp / max(capital, 1.0)) * 100.0, 2)
                 item["current_price"] = exit_p
-                item["current_value"] = exit_p * lots * 100
+                item["current_value"] = exit_val
+                item["fee_rp"] = round(realized_fee, 0)
                 item["pnl_rp"] = pnl_rp
                 item["pnl_pct"] = pnl_pct
 

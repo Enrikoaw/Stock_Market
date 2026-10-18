@@ -153,7 +153,22 @@ def run_historical_backtest(
                 continue
 
             day1_bar = ticker_prices[day1_date]
-            is_entry = day1_bar["low"] <= entry_high and day1_bar["high"] >= entry_low
+            # Proteksi Anti Gap-Down seragam dengan SignalTracker: batal beli jika open <= stop_loss
+            if day1_bar["open"] <= stop_loss:
+                trade_logs.append({
+                    "ticker": ticker,
+                    "date": date_str,
+                    "score": score,
+                    "bucket": bucket_key,
+                    "entered": False,
+                    "result": "EXPIRED_GAP_DOWN",
+                    "pnl_pct": 0.0,
+                    "bars_held": 0,
+                })
+                continue
+
+            # Order limit beli tersentuh jika low <= entry_high
+            is_entry = day1_bar["low"] <= entry_high
 
             if not is_entry:
                 trade_logs.append({
@@ -168,7 +183,7 @@ def run_historical_backtest(
                 })
                 continue
 
-            # Posisi berhasil terbuka
+            # Posisi berhasil terbuka (fill di harga open jika gap-down tipis di bawah entry_high, atau di entry_high)
             entry_price = min(day1_bar["open"], entry_high) if day1_bar["open"] <= entry_high else entry_high
             status = "TIMEOUT"
             exit_price = entry_price
@@ -183,23 +198,25 @@ def run_historical_backtest(
                     continue
                 bar = ticker_prices[f_date]
 
-                if bar["high"] >= tp2:
-                    hit_tp2 = True
-
                 hit_sl = bar["low"] <= stop_loss
                 hit_tp = bar["high"] >= tp1
 
-                # Di hari pertama entry, TP belum dihitung (mencegah look-ahead bias konservatif)
+                # Di hari pertama entry (b_idx == 0), TP belum dihitung untuk mencegah look-ahead bias intraday,
+                # namun jika harga jebol menembus SL di hari pertama, catat sebagai LOSS riil.
                 if b_idx == 0:
                     if hit_sl:
                         status = "LOSS"
-                        exit_price = min(bar["open"], stop_loss)
+                        exit_price = min(bar["open"], stop_loss) if bar["open"] < stop_loss else stop_loss
                         break
                     continue
 
+                if bar["high"] >= tp2 and not hit_sl:
+                    hit_tp2 = True
+
+                # Jika SL dan TP tersentuh di hari yang sama, secara konservatif prioritaskan SL
                 if hit_sl and hit_tp:
                     status = "WIN" if stop_loss >= entry_price else "LOSS"
-                    exit_price = stop_loss
+                    exit_price = min(bar["open"], stop_loss) if bar["open"] < stop_loss else stop_loss
                     break
                 elif hit_tp:
                     status = "WIN"
@@ -208,10 +225,10 @@ def run_historical_backtest(
                         for rem_date in future_dates[b_idx + 1 : max_holding_bars]:
                             if rem_date in ticker_prices:
                                 rem_bar = ticker_prices[rem_date]
+                                if rem_bar["low"] <= entry_price:
+                                    break
                                 if rem_bar["high"] >= tp2:
                                     hit_tp2 = True
-                                    break
-                                if rem_bar["low"] <= entry_price:
                                     break
                     break
                 elif hit_sl:
@@ -245,6 +262,7 @@ def run_historical_backtest(
         ("SCORE_80_PLUS", "Skor 80 - 100 (High Conviction)"),
         ("SCORE_70_79", "Skor 70 - 79 (Strong Accumulation)"),
     ]
+    ROUNDTRIP_FEE_PCT = 0.40  # Estimasi fee sekuritas BEI beli (0.15%) + jual (0.25%)
 
     for b_key, b_label in bucket_order:
         b_trades = [t for t in trade_logs if t["bucket"] == b_key]
@@ -259,20 +277,24 @@ def run_historical_backtest(
         n_win = len(wins)
         n_loss = len(losses)
         n_to = len(timeouts)
+        decided = n_win + n_loss + n_to
 
-        win_rate = round((n_win / max(n_win + n_loss, 1)) * 100.0, 1) if (n_win + n_loss) > 0 else 0.0
+        # Win rate mencakup seluruh posisi yang tereksekusi (WIN + LOSS + TIMEOUT)
+        win_rate = round((n_win / max(decided, 1)) * 100.0, 1) if decided > 0 else 0.0
 
         avg_win = round(float(np.mean([t["pnl_pct"] for t in wins])), 2) if wins else 0.0
         avg_loss = round(float(np.mean([t["pnl_pct"] for t in losses])), 2) if losses else 0.0
 
-        total_gain = sum(t["pnl_pct"] for t in wins)
-        total_loss_abs = abs(sum(t["pnl_pct"] for t in losses))
+        total_gain = sum(t["pnl_pct"] for t in wins) + sum(t["pnl_pct"] for t in timeouts if t["pnl_pct"] > 0)
+        total_loss_abs = abs(sum(t["pnl_pct"] for t in losses) + sum(t["pnl_pct"] for t in timeouts if t["pnl_pct"] < 0))
         profit_factor = round(total_gain / max(total_loss_abs, 1e-4), 2) if total_loss_abs > 0 else (99.0 if total_gain > 0 else 0.0)
 
-        # Expectancy = (Win_Rate * Avg_Win) - (Loss_Rate * |Avg_Loss|)
-        win_prob = n_win / max(n_win + n_loss, 1)
-        loss_prob = n_loss / max(n_win + n_loss, 1)
-        expectancy = round((win_prob * avg_win) - (loss_prob * abs(avg_loss)), 2) if (n_win + n_loss) > 0 else 0.0
+        # Expectancy bersih mencakup seluruh trade yang masuk (WIN, LOSS, TIMEOUT) dikurangi biaya broker
+        expectancy = (
+            round(float(np.mean([t["pnl_pct"] - ROUNDTRIP_FEE_PCT for t in entered_trades])), 2)
+            if entered_trades
+            else 0.0
+        )
 
         avg_bars = round(float(np.mean([t["bars_held"] for t in entered_trades])), 1) if entered_trades else 0.0
 
@@ -301,27 +323,34 @@ def run_historical_backtest(
 
     n_all_w = len(all_wins)
     n_all_l = len(all_losses)
-    all_decided = n_all_w + n_all_l
+    n_all_to = len(all_timeouts)
+    all_decided = n_all_w + n_all_l + n_all_to
 
     ov_win_rate = round((n_all_w / max(all_decided, 1)) * 100.0, 1) if all_decided > 0 else 0.0
-    ov_loss_rate = round(100.0 - ov_win_rate, 1)
+    ov_loss_rate = round((n_all_l / max(all_decided, 1)) * 100.0, 1) if all_decided > 0 else 0.0
     ov_avg_win = round(float(np.mean([t["pnl_pct"] for t in all_wins])), 2) if all_wins else 0.0
     ov_avg_loss = round(float(np.mean([t["pnl_pct"] for t in all_losses])), 2) if all_losses else 0.0
 
-    ov_gain = sum(t["pnl_pct"] for t in all_wins)
-    ov_loss_abs = abs(sum(t["pnl_pct"] for t in all_losses))
+    ov_gain = sum(t["pnl_pct"] for t in all_wins) + sum(t["pnl_pct"] for t in all_timeouts if t["pnl_pct"] > 0)
+    ov_loss_abs = abs(sum(t["pnl_pct"] for t in all_losses) + sum(t["pnl_pct"] for t in all_timeouts if t["pnl_pct"] < 0))
     ov_pf = round(ov_gain / max(ov_loss_abs, 1e-4), 2) if ov_loss_abs > 0 else 0.0
-    ov_rr = round(abs(ov_avg_win / max(abs(ov_avg_loss), 1e-4)), 2)
+    ov_rr = round(abs(ov_avg_win / max(abs(ov_avg_loss), 1e-4)), 2) if ov_avg_loss != 0 else 0.0
+
+    total_emiten_count = int(df["Ticker"].nunique()) if "Ticker" in df.columns else 0
+    total_candles_count = len(df)
+    start_dt_str = str(unique_dates[0])
+    end_dt_str = str(unique_dates[-1])
+    n_trading_days = len(unique_dates)
 
     summary_6m = {
-        "period_label": "13 April 2026 s/d 13 Oktober 2026 (122 Hari Bursa)",
-        "total_emiten": int(df["Ticker"].nunique()) if "Ticker" in df.columns else 875,
-        "total_candles": len(df),
+        "period_label": f"{start_dt_str} s/d {end_dt_str} ({n_trading_days} Hari Bursa)",
+        "total_emiten": total_emiten_count,
+        "total_candles": total_candles_count,
         "total_evaluated_dates": len(eval_dates),
         "total_signals_tested": len(trade_logs),
         "total_trades_entered": len(all_entered),
         "high_quality_signals": {
-            "filter": "6 Filter Ketat (Skor >= 70, 4 Trigger Akumulasi, Jarak VWAP <= +5%, Turnover >= Rp 1.0 Miliar)",
+            "filter": "6 Filter Ketat (Skor >= 70, 4 Trigger Akumulasi, Jarak VWAP <= +3.5%, Turnover >= Rp 500 Juta)",
             "total_trades": len(all_entered),
             "tp1_wins": n_all_w,
             "tp1_win_rate_pct": ov_win_rate,
@@ -332,10 +361,10 @@ def run_historical_backtest(
             "sl_losses": n_all_l,
             "sl_loss_pct": ov_loss_rate,
             "sl_avg_loss_pct": ov_avg_loss,
-            "timeouts": len(all_timeouts),
+            "timeouts": n_all_to,
             "profit_factor": ov_pf,
             "risk_reward_ratio": f"1 : {ov_rr}",
-            "sample_badge": "Terverifikasi 875 Emiten BEI (106.377 Candle Riil - 6 Filter)",
+            "sample_badge": f"Terverifikasi {total_emiten_count:,} Emiten BEI ({total_candles_count:,} Candle Riil - 6 Filter)".replace(",", "."),
         },
     }
 

@@ -318,6 +318,7 @@ def check_fundamental_and_board_safety(
     close: float,
     value_b_idr: float,
     frequency: float,
+    has_real_freq: bool = True,
 ) -> dict[str, Any]:
     """
     Evaluasi Keamanan Fundamental & Papan Bursa (Item 4):
@@ -325,14 +326,14 @@ def check_fundamental_and_board_safety(
     2. Exclude notasi khusus kritis (E, X, A, M, S, PKPU/Pailit).
     3. Minimum Harga Close >= Rp 70 (menolak saham gocap/penny stock).
     4. Minimum Turnover Value >= Rp 1.0 Miliar.
-    5. Minimum Frekuensi Transaksi >= 150 kali perdagangan.
+    5. Minimum Frekuensi Transaksi >= 150 kali perdagangan (jika data frekuensi asli tersedia).
     """
     sec_lower = str(sector).lower()
-    ticker_upper = str(ticker).upper()
+    ticker_upper = str(ticker).upper().strip()
 
     reasons: list[str] = []
     board = "Utama"
-    if "pemantauan khusus" in sec_lower or ".x" in ticker_upper or "{x}" in sec_lower:
+    if "pemantauan khusus" in sec_lower or ticker_upper.endswith(".X") or "{x}" in sec_lower or "[x]" in sec_lower:
         board = "Pemantauan Khusus (FCA)"
         reasons.append("Tercatat di Papan Pemantauan Khusus (FCA)")
     elif "akselerasi" in sec_lower:
@@ -343,15 +344,15 @@ def check_fundamental_and_board_safety(
     elif "utama" in sec_lower:
         board = "Utama"
 
-    # Cek notasi kritis
+    # Cek notasi kritis dengan pencocokan batas kata/kurung agar tidak salah menangkap singkatan nama PT (seperti H.M. Sampoerna)
     critical_notations = []
-    if any(k in sec_lower for k in ("ekuitas negatif", "{e}", ".e")):
+    if any(k in sec_lower for k in ("ekuitas negatif", "{e}", "[e]", "(notasi e)")) or ticker_upper.endswith(".E"):
         critical_notations.append("E (Ekuitas Negatif)")
-    if any(k in sec_lower for k in ("pkpu", "pailit", "{a}", ".a")):
+    if any(k in sec_lower for k in ("pkpu", "pailit", "{a}", "[a]", "(notasi a)")) or ticker_upper.endswith(".A"):
         critical_notations.append("A (Permohonan PKPU / Pailit)")
-    if any(k in sec_lower for k in ("moratorium", "{m}", ".m")):
+    if any(k in sec_lower for k in ("moratorium", "{m}", "[m]", "(notasi m)")) or ticker_upper.endswith(".M"):
         critical_notations.append("M (Moratorium PKPU)")
-    if any(k in sec_lower for k in ("tidak menyampaikan laporan", "{s}", ".s")):
+    if any(k in sec_lower for k in ("tidak menyampaikan laporan", "{s}", "[s]", "(notasi s)")) or ticker_upper.endswith(".S"):
         critical_notations.append("S (Laporan Keuangan Bermasalah)")
 
     if critical_notations:
@@ -365,8 +366,8 @@ def check_fundamental_and_board_safety(
     if value_b_idr < 1.0:
         reasons.append(f"Turnover harian Rp {value_b_idr:.2f} M < Rp 1.0 Miliar (Likuiditas Rendah)")
 
-    # Cek frekuensi transaksi
-    if frequency < 150:
+    # Cek frekuensi transaksi (hanya jika data frekuensi riil bursa tersedia, bukan estimasi OHLCV)
+    if has_real_freq and frequency < 150:
         reasons.append(f"Frekuensi transaksi {int(frequency)}x < 150 transaksi (Partisipasi Pasar Minim)")
 
     is_safe = len(reasons) == 0
@@ -386,17 +387,19 @@ def evaluate_tape_and_closing_quality(
     val_idr: float,
     frequency: float,
     median_val_per_tx: float,
+    has_real_freq: bool = True,
 ) -> dict[str, Any]:
     """
     Evaluasi Pola Tape Jam Bursa & Anti Manipulasi Pre-Closing (Item 5):
-    1. Suspicious Crossing: Volume Spike >= 1.5x namun Frekuensi < 150 atau ticket size >= 8x median bursa.
+    1. Suspicious Crossing: Volume Spike >= 1.5x namun Frekuensi < 150 atau ticket size >= 8x median bursa
+       (hanya dievaluasi jika data frekuensi transaksi asli tersedia).
     2. Upthrust Distribution: Volume Spike >= 1.4x namun Closing Range <= 0.35 (guyur sore / bantingan akhir).
     3. Thin Marking: Kenaikan harga >= +4.0% dengan Volume Ratio < 0.65x dan Turnover < 1.0 Miliar.
     """
     freq_clean = max(frequency, 1.0)
     val_per_tx = val_idr / freq_clean
 
-    is_suspicious_crossing = (vol_ratio >= 1.5) and (
+    is_suspicious_crossing = has_real_freq and (vol_ratio >= 1.5) and (
         (frequency < 150) or (val_per_tx >= median_val_per_tx * 8.0)
     )
     is_upthrust_trap = (vol_ratio >= 1.4) and (closing_range <= 0.35)
@@ -444,7 +447,7 @@ def _clean_col_key(col_name: Any) -> str:
 
 def _get_trading_dates(num_days: int = 15) -> list[str]:
     dates: list[str] = []
-    cur = datetime(2026, 10, 8)
+    cur = datetime.now()
     while len(dates) < num_days:
         if cur.weekday() < 5:
             dates.append(cur.strftime("%Y-%m-%d"))
@@ -588,7 +591,7 @@ def enrich_master_ticker_list(tickers_df: pd.DataFrame, num_days: int = 15) -> p
         matched_df = real_df[real_df["Ticker"].isin(unique_stocks["Ticker"])].copy()
         if not matched_df.empty:
             matched_df["Sector"] = matched_df["Ticker"].map(sector_map).fillna(matched_df["Sector"])
-            matched_df["Has_Broker_Summary"] = True
+            matched_df["Has_Broker_Summary"] = False
             return matched_df.reset_index(drop=True)
 
     tickers = unique_stocks["Ticker"].to_numpy()
@@ -750,6 +753,31 @@ def enrich_master_ticker_list(tickers_df: pd.DataFrame, num_days: int = 15) -> p
     return pd.concat(all_dfs, ignore_index=True)
 
 
+def _parse_single_num_str(val: str) -> str:
+    if not val or val in ("-", "nan", "None", "null"):
+        return ""
+    # Deteksi format ribuan Indonesia (1.234.567 atau 1.234,56) vs US (1,234,567.89)
+    if "." in val and "," in val:
+        if val.rfind(",") > val.rfind("."):
+            return val.replace(".", "").replace(",", ".")
+        return val.replace(",", "")
+    if val.count(".") > 1:
+        return val.replace(".", "")
+    if val.count(",") > 1:
+        return val.replace(",", "")
+    # Satu titik atau satu koma: jika diikuti tepat 3 digit di akhir (misal "10.500" atau "10,500") dan bagian depan bukan "0"
+    if "." in val:
+        parts = val.split(".")
+        if len(parts) == 2 and len(parts[1]) == 3 and parts[1].isdigit() and parts[0].lstrip("-").isdigit() and parts[0].lstrip("-") != "0":
+            return val.replace(".", "")
+    if "," in val:
+        parts = val.split(",")
+        if len(parts) == 2 and len(parts[1]) == 3 and parts[1].isdigit() and len(parts[0].lstrip("-")) >= 1 and parts[0].lstrip("-") != "0":
+            return val.replace(",", "")
+        return val.replace(",", ".")
+    return val
+
+
 def _to_numeric_series(series: pd.Series) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_numeric(series, errors="coerce")
@@ -757,9 +785,10 @@ def _to_numeric_series(series: pd.Series) -> pd.Series:
         series.astype(str)
         .str.replace("Rp", "", regex=False)
         .str.replace("IDR", "", regex=False)
+        .str.replace("%", "", regex=False)
         .str.replace(" ", "", regex=False)
         .str.strip()
-        .str.replace(",", "", regex=False)
+        .map(_parse_single_num_str)
     )
     return pd.to_numeric(cleaned, errors="coerce")
 
@@ -839,7 +868,7 @@ def normalize_columns(df: pd.DataFrame, inferred_date: str | None = None) -> pd.
     df = df.dropna(subset=["Ticker", "Close", "Volume_Lot"]).copy()
     df = df[df["Close"] > 0].copy()
 
-    default_date = inferred_date or "2026-10-08"
+    default_date = inferred_date or datetime.now().strftime("%Y-%m-%d")
     if "Date" not in df.columns:
         df["Date"] = default_date
     else:
@@ -911,7 +940,9 @@ def normalize_columns(df: pd.DataFrame, inferred_date: str | None = None) -> pd.
     if "Foreign_Buy_Val" in df.columns and "Foreign_Sell_Val" in df.columns:
         df["Foreign_Buy_Val"] = df["Foreign_Buy_Val"].fillna(0.0)
         df["Foreign_Sell_Val"] = df["Foreign_Sell_Val"].fillna(0.0)
-        if is_volume_in_shares:
+        # Hanya kalikan dengan typical_price apabila Foreign_Buy_Val jelas bersatuan lembar saham (rasio median terhadap Value_IDR sangat kecil)
+        pos_f = df["Foreign_Buy_Val"] > 0
+        if pos_f.any() and (df.loc[pos_f, "Foreign_Buy_Val"] / np.maximum(df.loc[pos_f, "Value_IDR"], 1.0)).median() < 0.002:
             df["Foreign_Buy_Val"] = (df["Foreign_Buy_Val"] * typical_price).round()
             df["Foreign_Sell_Val"] = (df["Foreign_Sell_Val"] * typical_price).round()
     elif "Net_Foreign_Raw" in df.columns:
@@ -1282,24 +1313,29 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
     df["Daily_SM_Score"] = df["Smart_Money_Score"]
 
-    # Filter Keamanan Swing Pendek: Bukan Saham FCA/Akselerasi, Harga >= Rp 70, Turnover >= 1M, Frekuensi >= 150
+    # Filter Keamanan Swing Pendek: Bukan Saham FCA/Akselerasi, Harga >= Rp 70, Turnover >= 1M,
+    # serta Frekuensi >= 150 (jika data frekuensi asli bursa tersedia)
     sec_lower = df["Sector"].astype(str).str.lower()
+    has_broker_s = (
+        df["Has_Broker_Summary"].fillna(False).astype(bool)
+        if "Has_Broker_Summary" in df.columns
+        else pd.Series(False, index=df.index)
+    )
     is_safe_swing = (
         (df["Close"] >= 70)
         & (~sec_lower.str.contains("pemantauan khusus", na=False))
         & (~sec_lower.str.contains("akselerasi", na=False))
         & (df["Value_IDR"] >= 1_000_000_000)
-        & (df["Frequency"] >= 150)
+        & ((~has_broker_s) | (df["Frequency"] >= 150))
     )
 
     # Klasifikasi Sinyal Kuantitatif (Trigger Type)
-    # Proteksi Anti False-Crash: Hanya saham yang aktif diperdagangkan (Value_IDR >= 500 Juta) yang dievaluasi sebagai distribusi
+    # Distribusi aktif murni berdasarkan aksi harga-volume (bukan sekadar skor rendah pada saham konsolidasi)
     c_dist = (
         (df["Value_IDR"] >= 500_000_000)
-        & (
-            ((df["Closing_Range"] <= 0.35) & (df["Pct_Change"] <= -1.5) & (df["Volume_Ratio"] >= 1.2))
-            | (df["Smart_Money_Score"] <= 35)
-        )
+        & (df["Closing_Range"] <= 0.35)
+        & (df["Pct_Change"] <= -1.5)
+        & (df["Volume_Ratio"] >= 1.15)
     )
     c_markup = (
         is_safe_swing
@@ -1336,6 +1372,7 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     )
     c_foreign = (
         is_safe_swing
+        & has_broker_s
         & (df["Smart_Money_Score"] >= 64)
         & (df["Closing_Range"] >= 0.65)
         & (df["Pct_Change"] >= -1.5)
@@ -1364,6 +1401,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
     stocks_result: list[dict[str, Any]] = []
     stocks_detail_map: dict[str, dict[str, Any]] = {}
     median_val_per_tx = max(1_000_000.0, float(df["Val_Per_Tx"].median())) if "Val_Per_Tx" in df.columns else 2_500_000.0
+    global_latest_dt = str(df["Date"].max()) if not df.empty and "Date" in df.columns else datetime.now().strftime("%Y-%m-%d")
 
     for ticker, g in df.groupby("Ticker", sort=False):
         n = len(g)
@@ -1410,9 +1448,15 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         pilar4_score = float(latest["Pilar4_Liquidity_Score"])
         pilar5_score = float(latest["Pilar5_VWAP_Score"])
         smart_money_score = int(latest["Smart_Money_Score"])
-        trigger_type = str(latest["Trigger_Type"])
+        row_date_str = str(latest["Date"])
+        is_stale_data = row_date_str < global_latest_dt
+        trigger_type = "NEUTRAL_FLOW" if is_stale_data else str(latest["Trigger_Type"])
 
-        if trigger_type == "DISTRIBUTION_WARNING":
+        if is_stale_data:
+            trigger_label = "Suspended / Stale Data"
+            bandar_status = "Neutral"
+            vsa_pattern = f"Tidak diperdagangkan pada sesi terbaru ({row_date_str})"
+        elif trigger_type == "DISTRIBUTION_WARNING":
             trigger_label = "Distribution Warning"
             bandar_status = "Distribution"
             vsa_pattern = "Supply Pressure (Tekanan Jual Melebihi Permintaan)"
@@ -1439,9 +1483,14 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             vsa_pattern = "Normal Consolidation Activity"
 
         freq_val = float(latest["Frequency"]) if "Frequency" in latest and not pd.isna(latest["Frequency"]) else 500.0
+        has_real_freq = bool(latest.get("Has_Broker_Summary", False))
         sector_category = classify_idx_sector(str(ticker), str(latest["Sector"]))
-        fund_safety = check_fundamental_and_board_safety(str(ticker), str(latest["Sector"]), close_price, val_idr / 1e9, freq_val)
-        tape_quality = evaluate_tape_and_closing_quality(vol_ratio, closing_range, pct_change, val_idr, freq_val, median_val_per_tx)
+        fund_safety = check_fundamental_and_board_safety(
+            str(ticker), str(latest["Sector"]), close_price, val_idr / 1e9, freq_val, has_real_freq=has_real_freq
+        )
+        tape_quality = evaluate_tape_and_closing_quality(
+            vol_ratio, closing_range, pct_change, val_idr, freq_val, median_val_per_tx, has_real_freq=has_real_freq
+        )
 
         # 5-Pillar Quantitative Checklist + Safety Filters
         checklist = [
@@ -1485,7 +1534,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
                 "score": "PASS" if fund_safety["is_safe"] else "FAIL",
                 "status": "pass" if fund_safety["is_safe"] else "fail",
                 "metric": f"{fund_safety['board']} | Rp {close_price:,}",
-                "detail": fund_safety["summary"] + f" (Frekuensi {int(freq_val):,} tx, Turnover Rp {val_idr / 1e9:.2f} M).",
+                "detail": fund_safety["summary"] + f" (Turnover Rp {val_idr / 1e9:.2f} M).",
             },
             {
                 "title": "Kualitas Arus Volume (Tape Flow)",
@@ -1546,22 +1595,21 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             )
         else:
             action_bias = "BUY ON SUPPORT / WATCHLIST"
-            rationale = f"Struktur konsolidasi normal. Pantau konfirmasi lonjakan volume di atas 1.5x baseline."
+            rationale = "Struktur konsolidasi normal. Pantau konfirmasi lonjakan volume di atas 1.5x baseline."
 
-        # Kalkulasi Probabilitas Empiris Win vs Loss (berdasarkan skor & audit 6 bulan 106.377 candle - Quick Profit TP1 +4% & TP2 +7%)
-        base_win_tp1 = 55.0 + min(22.0, max(0.0, (smart_money_score - 40) * 0.45))
+        # Estimasi Kualitas Setup Teknikal berbasis skor 5 Pilar (Indikator heuristik kualitas setup, bukan jaminan probabilitas)
+        base_win_tp1 = 50.0 + min(22.0, max(0.0, (smart_money_score - 45) * 0.42))
         if vol_ratio >= 2.0:
-            base_win_tp1 += 3.0
-        if trigger_type == "MARKUP_BREAKOUT":
             base_win_tp1 += 2.5
+        if trigger_type == "MARKUP_BREAKOUT":
+            base_win_tp1 += 2.0
         elif trigger_type == "DISTRIBUTION_WARNING":
             base_win_tp1 = max(25.0, base_win_tp1 - 25.0)
 
-        tp1_win = round(min(85.0, max(35.0, base_win_tp1)), 1)
+        tp1_win = round(min(78.0, max(30.0, base_win_tp1)), 1)
         tp1_loss = round(100.0 - tp1_win, 1)
 
-        # TP2 memiliki target +7% (rasio sukses mencapai TP2 sekitar 60% dari TP1)
-        tp2_win = round(min(65.0, max(20.0, tp1_win * 0.60)), 1)
+        tp2_win = round(min(60.0, max(18.0, tp1_win * 0.58)), 1)
         tp2_loss = round(100.0 - tp2_win, 1)
 
         trading_plan = {
@@ -1579,7 +1627,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             "tp1_loss_prob": tp1_loss,
             "tp2_win_prob": tp2_win,
             "tp2_loss_prob": tp2_loss,
-            "win_loss_ratio": f"{int(round(tp1_win))}% Win : {int(round(tp1_loss))}% Loss",
+            "win_loss_ratio": f"Skor Setup {smart_money_score}/100 (Est. {int(round(tp1_win))}%)",
             "risk_reward": f"1 : {rr_ratio}",
             "bandar_avg_buy": vwap_5d,
             "diff_bandar_avg_pct": diff_vwap_pct,
@@ -1589,7 +1637,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         }
 
         history_records = []
-        for r in g.tail(25).itertuples():
+        for r in g.tail(60).itertuples():
             history_records.append(
                 {
                     "date": str(r.Date),
@@ -1613,7 +1661,9 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         summary_item = {
             "ticker": str(ticker),
             "sector": str(latest["Sector"]),
-            "date": str(latest["Date"]),
+            "date": row_date_str,
+            "is_stale_data": is_stale_data,
+            "has_broker_summary": has_real_freq,
             "close": close_price,
             "pct_change": pct_change,
             "volume_lot": int(round(float(latest["Volume_Lot"]))),
@@ -1722,7 +1772,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         return 100.0 if curr > 0 else 0.0
 
     # Market Regime Analysis
-    latest_dt = max((s["date"] for s in stocks_result), default="2026-10-08")
+    latest_dt = max((s["date"] for s in stocks_result), default=global_latest_dt)
     latest_day_df = df[df["Date"] == latest_dt]
     if not latest_day_df.empty:
         breadth_ma20 = float((latest_day_df["Close"] >= latest_day_df["MA20"]).mean() * 100.0)

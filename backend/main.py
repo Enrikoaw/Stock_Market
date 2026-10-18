@@ -12,10 +12,11 @@ import asyncio
 import os
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Literal, Optional
 
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,7 +56,6 @@ from screener_engine import (
     read_uploaded_file,
 )
 
-BASE_DIR = BACKEND_DIR.parent
 DATA_DIR = BASE_DIR / "data"
 FRONTEND_DIR = BASE_DIR / "frontend"
 USER_EXCEL_DIR = BASE_DIR / "data" / "user_excel"
@@ -70,6 +70,7 @@ STATE: dict = {
     "analysis": None,
     "last_sync_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     "is_syncing": False,
+    "last_sync_error": None,
     "auto_sync_interval_min": AUTO_SYNC_INTERVAL_SECONDS // 60,
     "is_real_market": False,
     "last_tracker_run": None,
@@ -78,11 +79,78 @@ STATE: dict = {
 TRACKER = SignalTracker(BASE_DIR / "data" / "tracker.db")
 PORTFOLIO = PortfolioTracker(BASE_DIR / "data" / "tracker.db")
 LAST_DAILY_BROADCAST_DATE: str | None = None
+LAST_CLOSE_SYNC_DATE: str | None = None
+
+
+def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> None:
+    """Sinkronkan status sinyal tracker ke objek saham/detail TANPA menimpa harga pasar terbaru (close/history).
+    Hanya mengunci level trading_plan jika sinyal berstatus aktif (WATCHLIST/RUNNING) atau baru selesai hari ini."""
+    st = str(sig.get("status", "")).upper()
+    exit_dt = str(sig.get("exit_date") or "")
+    is_active = st in ("WATCHLIST", "RUNNING")
+    is_closed_today = st in ("WIN", "LOSS") and exit_dt == latest_dt
+
+    if not is_active and not is_closed_today:
+        return
+
+    live_close = float(item.get("close") or 0)
+    e_p = float(sig.get("entry_price") or sig.get("entry_high") or sig.get("entry_low") or 0)
+    pnl_val = sig.get("pnl_pct")
+    if st == "RUNNING" and live_close > 0 and e_p > 0:
+        pnl_val = round(((live_close - e_p) / e_p) * 100.0, 2)
+
+    item["tracker_status"] = st
+    item["tracker_pnl_pct"] = pnl_val
+    item["tracker_entry_price"] = sig.get("entry_price")
+    item["tracker_signal_date"] = sig.get("signal_date")
+
+    plan = dict(item.get("trading_plan") or {})
+    plan["status"] = st
+    plan["tracker_id"] = sig["id"]
+    plan["signal_date"] = sig.get("signal_date")
+    if e_p > 0:
+        plan["entry_price"] = e_p
+        plan["entry_high"] = e_p
+        plan["entry_low"] = e_p
+    if sig.get("stop_loss") is not None:
+        plan["stop_loss"] = float(sig["stop_loss"])
+    if sig.get("target") is not None:
+        plan["target_1"] = float(sig["target"])
+    if sig.get("target_2") is not None:
+        plan["target_2"] = float(sig["target_2"])
+    if e_p > 0:
+        if plan.get("stop_loss"):
+            plan["stop_loss_pct"] = round(((plan["stop_loss"] - e_p) / e_p) * 100.0, 2)
+        if plan.get("target_1"):
+            plan["target_1_pct"] = round(((plan["target_1"] - e_p) / e_p) * 100.0, 2)
+        if plan.get("target_2"):
+            plan["target_2_pct"] = round(((plan["target_2"] - e_p) / e_p) * 100.0, 2)
+    if pnl_val is not None:
+        plan["pnl_pct"] = float(pnl_val)
+
+    if st == "WIN":
+        pnl = pnl_val or 0
+        plan["action_bias"] = f"🏆 TARGET TERCAPAI (WIN +{pnl}%)"
+        plan["rationale"] = f"Target untung (TP1) telah tercapai (+{pnl}%). Rencana trading selesai (Take Profit)."
+    elif st == "RUNNING":
+        pnl = float(pnl_val or 0)
+        icon = "🔻" if pnl < 0 else "🚀"
+        plan["action_bias"] = f"{icon} POSISI AKTIF ({pnl:+.1f}%)"
+        plan["rationale"] = f"Posisi beli aktif sejak {sig.get('entry_date', sig.get('signal_date'))} @ Rp {e_p:,.0f}."
+    elif st == "WATCHLIST":
+        plan["action_bias"] = "⏳ MENUNGGU ENTRY (WATCHLIST)"
+        plan["rationale"] = f"Sinyal aktif di Watchlist sejak {sig.get('signal_date')}. Menunggu harga menyentuh area beli."
+    elif st == "LOSS":
+        pnl = pnl_val or 0
+        plan["action_bias"] = f"🛑 CUT LOSS ({pnl}%)"
+        plan["rationale"] = f"Posisi ditutup disiplin batas rugi pada {sig.get('exit_date', sig.get('signal_date'))}."
+
+    item["trading_plan"] = plan
 
 
 def sync_tracker_to_analysis(analysis: dict | None) -> None:
-    """Sinkronkan status riil dari database tracker (WATCHLIST, RUNNING, WIN, LOSS)
-    ke objek saham dan trading_plan agar Tab Hari Ini, Screener, dan Inspector 100% konsisten dengan Pantauan."""
+    """Sinkronkan status aktif dari database tracker (WATCHLIST, RUNNING, atau WIN/LOSS hari ini)
+    ke objek saham dan trading_plan tanpa menimpa harga penutupan pasar terbaru."""
     if not analysis or "stocks" not in analysis or "details" not in analysis:
         return
 
@@ -90,137 +158,24 @@ def sync_tracker_to_analysis(analysis: dict | None) -> None:
     if not sig_map:
         return
 
+    latest_dt = str(analysis.get("kpis", {}).get("latest_date", ""))
+
     for stock in analysis["stocks"]:
         t = str(stock.get("ticker", "")).upper()
         if t in sig_map:
-            sig = sig_map[t]
-            st = str(sig.get("status", "")).upper()
-            stock["tracker_status"] = st
-            stock["tracker_pnl_pct"] = sig.get("pnl_pct")
-            stock["tracker_entry_price"] = sig.get("entry_price")
-            stock["tracker_signal_date"] = sig.get("signal_date")
-
-            plan = stock.get("trading_plan") or {}
-            plan["status"] = st
-            plan["tracker_id"] = sig["id"]
-            plan["signal_date"] = sig.get("signal_date")
-            e_p = sig.get("entry_price") or sig.get("entry_high") or sig.get("entry_low")
-            if e_p:
-                plan["entry_price"] = float(e_p)
-                plan["entry_high"] = float(e_p)
-                plan["entry_low"] = float(e_p)
-            if sig.get("stop_loss") is not None:
-                plan["stop_loss"] = float(sig["stop_loss"])
-            if sig.get("target") is not None:
-                plan["target_1"] = float(sig["target"])
-            if sig.get("target_2") is not None:
-                plan["target_2"] = float(sig["target_2"])
-            if e_p and float(e_p) > 0:
-                base_ep = float(e_p)
-                if plan.get("stop_loss"):
-                    plan["stop_loss_pct"] = round(((plan["stop_loss"] - base_ep) / base_ep) * 100.0, 2)
-                if plan.get("target_1"):
-                    plan["target_1_pct"] = round(((plan["target_1"] - base_ep) / base_ep) * 100.0, 2)
-                if plan.get("target_2"):
-                    plan["target_2_pct"] = round(((plan["target_2"] - base_ep) / base_ep) * 100.0, 2)
-            if sig.get("pnl_pct") is not None:
-                plan["pnl_pct"] = float(sig["pnl_pct"])
-            if sig.get("last_close") and float(sig["last_close"]) > 0:
-                stock["close"] = int(round(float(sig["last_close"])))
-
-            if st == "WIN":
-                pnl = sig.get("pnl_pct", 0)
-                plan["action_bias"] = f"🏆 TARGET TERCAPAI (WIN +{pnl}%)"
-                plan["rationale"] = f"Target untung (TP1) telah tercapai (+{pnl}%). Rencana trading selesai (Take Profit)."
-            elif st == "RUNNING":
-                pnl = float(sig.get("pnl_pct", 0) or 0)
-                icon = "🔻" if pnl < 0 else "🚀"
-                plan["action_bias"] = f"{icon} POSISI AKTIF ({pnl:+.1f}%)"
-                plan["rationale"] = f"Posisi beli aktif sejak {sig.get('entry_date', sig.get('signal_date'))} @ Rp {float(sig.get('entry_price', 0)):,.0f}."
-            elif st == "WATCHLIST":
-                plan["action_bias"] = "⏳ MENUNGGU ENTRY (WATCHLIST)"
-                plan["rationale"] = f"Sinyal aktif di Watchlist sejak {sig.get('signal_date')}. Menunggu harga menyentuh area beli."
-            elif st == "LOSS":
-                pnl = sig.get("pnl_pct", 0)
-                plan["action_bias"] = f"🛑 CUT LOSS ({pnl}%)"
-                plan["rationale"] = f"Posisi ditutup disiplin batas rugi pada {sig.get('exit_date', sig.get('signal_date'))}."
-            elif st in ("EXPIRED", "TIMEOUT", "CANCELLED"):
-                plan["action_bias"] = f"⏹️ KADALUARSA ({st})"
-                plan["rationale"] = f"Sinyal ditutup ({st}) karena melewati batas waktu toleransi."
-
-            stock["trading_plan"] = plan
+            _overlay_tracker_signal_on_plan(stock, sig_map[t], latest_dt)
 
     for t, detail in analysis["details"].items():
         t_up = str(t).upper()
         if t_up in sig_map:
-            sig = sig_map[t_up]
-            st = str(sig.get("status", "")).upper()
-            detail["tracker_status"] = st
-            detail["tracker_pnl_pct"] = sig.get("pnl_pct")
-            detail["tracker_entry_price"] = sig.get("entry_price")
-            detail["tracker_signal_date"] = sig.get("signal_date")
-
-            plan = detail.get("trading_plan") or {}
-            plan["status"] = st
-            plan["tracker_id"] = sig["id"]
-            plan["signal_date"] = sig.get("signal_date")
-            e_p = sig.get("entry_price") or sig.get("entry_high") or sig.get("entry_low")
-            if e_p:
-                plan["entry_price"] = float(e_p)
-                plan["entry_high"] = float(e_p)
-                plan["entry_low"] = float(e_p)
-            if sig.get("stop_loss") is not None:
-                plan["stop_loss"] = float(sig["stop_loss"])
-            if sig.get("target") is not None:
-                plan["target_1"] = float(sig["target"])
-            if sig.get("target_2") is not None:
-                plan["target_2"] = float(sig["target_2"])
-            if e_p and float(e_p) > 0:
-                base_ep = float(e_p)
-                if plan.get("stop_loss"):
-                    plan["stop_loss_pct"] = round(((plan["stop_loss"] - base_ep) / base_ep) * 100.0, 2)
-                if plan.get("target_1"):
-                    plan["target_1_pct"] = round(((plan["target_1"] - base_ep) / base_ep) * 100.0, 2)
-                if plan.get("target_2"):
-                    plan["target_2_pct"] = round(((plan["target_2"] - base_ep) / base_ep) * 100.0, 2)
-            if sig.get("pnl_pct") is not None:
-                plan["pnl_pct"] = float(sig["pnl_pct"])
-            if sig.get("last_close") and float(sig["last_close"]) > 0:
-                lc = int(round(float(sig["last_close"])))
-                detail["close"] = lc
-                if detail.get("history") and len(detail["history"]) > 0:
-                    detail["history"][-1]["close"] = lc
-                    if lc > detail["history"][-1].get("high", lc):
-                        detail["history"][-1]["high"] = lc
-                    if lc < detail["history"][-1].get("low", lc):
-                        detail["history"][-1]["low"] = lc
-
-            if st == "WIN":
-                pnl = sig.get("pnl_pct", 0)
-                plan["action_bias"] = f"🏆 TARGET TERCAPAI (WIN +{pnl}%)"
-                plan["rationale"] = f"Target untung (TP1) telah tercapai (+{pnl}%). Rencana trading selesai (Take Profit)."
-            elif st == "RUNNING":
-                pnl = float(sig.get("pnl_pct", 0) or 0)
-                icon = "🔻" if pnl < 0 else "🚀"
-                plan["action_bias"] = f"{icon} POSISI AKTIF ({pnl:+.1f}%)"
-                plan["rationale"] = f"Posisi beli aktif sejak {sig.get('entry_date', sig.get('signal_date'))} @ Rp {float(sig.get('entry_price', 0)):,.0f}."
-            elif st == "WATCHLIST":
-                plan["action_bias"] = "⏳ MENUNGGU ENTRY (WATCHLIST)"
-                plan["rationale"] = f"Sinyal aktif di Watchlist sejak {sig.get('signal_date')}. Menunggu harga menyentuh area beli."
-            elif st == "LOSS":
-                pnl = sig.get("pnl_pct", 0)
-                plan["action_bias"] = f"🛑 CUT LOSS ({pnl}%)"
-                plan["rationale"] = f"Posisi ditutup disiplin batas rugi pada {sig.get('exit_date', sig.get('signal_date'))}."
-            elif st in ("EXPIRED", "TIMEOUT", "CANCELLED"):
-                plan["action_bias"] = f"⏹️ KADALUARSA ({st})"
-                plan["rationale"] = f"Sinyal ditutup ({st}) karena melewati batas waktu toleransi."
-
-            detail["trading_plan"] = plan
+            _overlay_tracker_signal_on_plan(detail, sig_map[t_up], latest_dt)
 
 
-def _process_tracker(analysis: dict, sync_live_network: bool = False) -> dict:
+def _process_tracker(analysis: dict, sync_live_network: bool = False, force_auto_track: bool = False) -> dict:
     """Evaluasi sinyal aktif dengan candle baru, lalu catat sinyal akumulasi baru ke Watchlist.
-    Hanya berjalan untuk data pasar REAL (bukan simulasi / upload manual)."""
+    Hanya berjalan untuk data pasar REAL (bukan simulasi / upload manual).
+    Pencatatan sinyal baru (auto_track) secara default hanya dilakukan saat sesi bursa telah tutup (EOD)
+    agar tidak menangkap candle intraday parsial."""
     result = {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "added": 0, "skipped": False}
     if not STATE.get("is_real_market"):
         result["skipped"] = True
@@ -236,7 +191,8 @@ def _process_tracker(analysis: dict, sync_live_network: bool = False) -> dict:
             main_res = TRACKER.evaluate(analysis["details"])
             for k in ("entered", "win", "loss", "expired", "timeout"):
                 result[k] = max(result.get(k, 0), main_res.get(k, 0))
-            result["added"] = TRACKER.auto_track(analysis)
+            if force_auto_track or not is_idx_market_open_now():
+                result["added"] = TRACKER.auto_track(analysis)
             sync_tracker_to_analysis(analysis)
 
             # Kirim realtime Telegram Alert jika bot sudah terkonfigurasi
@@ -277,7 +233,8 @@ def _run_sync_job_blocking() -> dict:
         tickers_df = generate_900_idx_master_tickers_df()
 
     real_df = fetch_real_idx_market_data(tickers_df, output_csv_path=REAL_CACHE_CSV, period="auto", max_workers=2)
-    real_df["Has_Broker_Summary"] = True
+    if "Has_Broker_Summary" not in real_df.columns:
+        real_df["Has_Broker_Summary"] = False
     analysis = analyze_smart_money_dataframe(real_df)
     del real_df
     import gc
@@ -288,6 +245,7 @@ def _run_sync_job_blocking() -> dict:
     STATE["source_name"] = f"Live IDX ({latest_dt})"
     STATE["analysis"] = analysis
     STATE["last_sync_time"] = now_str
+    STATE["last_sync_error"] = None
     STATE["is_real_market"] = True
     tracker_res = _process_tracker(analysis, sync_live_network=False)
     return {
@@ -320,7 +278,12 @@ async def trigger_safe_sync() -> bool:
         STATE["is_syncing"] = True
         try:
             await asyncio.to_thread(_run_sync_job_blocking)
+            STATE["last_sync_error"] = None
             return True
+        except Exception as exc:
+            STATE["last_sync_error"] = f"Sinkronisasi gagal: {exc}"
+            print(f"[SyncError] {exc}")
+            return False
         finally:
             STATE["is_syncing"] = False
 
@@ -353,7 +316,7 @@ def _get_now_wib() -> datetime:
         return datetime.now(timezone(timedelta(hours=7)))
 
 
-def _is_idx_holiday(dt: datetime.date) -> bool:
+def _is_idx_holiday(dt: date) -> bool:
     return dt.strftime("%Y-%m-%d") in IDX_HOLIDAYS
 
 
@@ -408,29 +371,37 @@ async def _background_market_session_worker() -> None:
     """
     Worker Otomatis Jam Bursa & Penjaga Kesegaran Data Startup:
     - Saat server pertama kali menyala (atau bangun dari tidur): jika tanggal cache tertinggal dari
-      hari bursa terakhir, otomatis melakukan Fast Sync (< 3s) diikuti Full Sync seluruh 844 saham!
-    - Selama jam bursa aktif (09:00 - 16:10 WIB, Senin-Jumat): Otomatis memantau harga realtime,
-      memperbarui tabel Screener, grafik Inspector, & status Watchlist/Running setiap 90 detik,
-      serta menyimpan pembaruan penuh ke CSV setiap ~15 menit.
+      hari bursa terakhir, otomatis melakukan sinkronisasi penuh seluruh saham!
+    - Selama jam bursa aktif (09:00 - 16:05 WIB, Senin-Jumat): Otomatis menyinkronkan setiap 15 menit.
+    - Tepat setelah penutupan pasar (>= 16:10 WIB): Menjalankan sinkronisasi final EOD wajib agar
+      candle penutupan hari ini tersimpan dan dievaluasi oleh SignalTracker.
     """
     print("[MarketWorker] Background Market Session Worker aktif.")
+    global LAST_DAILY_BROADCAST_DATE, LAST_CLOSE_SYNC_DATE
     loop_count = 0
     last_sync_attempt_ts = 0.0
     import time
+    from datetime import time as dtime
     while True:
         loop_count += 1
         try:
             market_open = is_idx_market_open_now()
             cache_stale = _is_cache_stale()
             now_ts = time.time()
+            now_wib = _get_now_wib()
+            today_str = now_wib.strftime("%Y-%m-%d")
+            is_trading_day = now_wib.weekday() < 5 and not _is_idx_holiday(now_wib.date())
+            needs_post_close_sync = (
+                is_trading_day
+                and dtime(16, 8) <= now_wib.time() <= dtime(17, 30)
+                and LAST_CLOSE_SYNC_DATE != today_str
+            )
 
-            # Jadwal Sinkronisasi Background Terukur:
-            # - Selama jam bursa aktif (market_open): interval 15 menit (900 detik) sesuai rencana awal
-            # - Di luar jam bursa saat cache tertinggal: coba maksimal 1x tiap 30 menit (1800 detik) agar tidak membebani CPU/IP
-            # - Saat pertama kali server dinyalakan: hanya sync jika file cache belum ada sama sekali
             should_sync = False
             if not STATE["is_syncing"] and not get_sync_lock().locked():
-                if market_open and (now_ts - last_sync_attempt_ts >= 900):
+                if needs_post_close_sync:
+                    should_sync = True
+                elif market_open and (now_ts - last_sync_attempt_ts >= 900):
                     should_sync = True
                 elif cache_stale and (now_ts - last_sync_attempt_ts >= 1800):
                     should_sync = True
@@ -438,17 +409,20 @@ async def _background_market_session_worker() -> None:
                     should_sync = True
 
             if should_sync:
-                print(f"[MarketWorker] Menjalankan sinkronisasi background (market_open={market_open}, cache_stale={cache_stale})...")
+                print(
+                    f"[MarketWorker] Menjalankan sinkronisasi background "
+                    f"(market_open={market_open}, cache_stale={cache_stale}, post_close={needs_post_close_sync})..."
+                )
                 last_sync_attempt_ts = now_ts
-                await trigger_safe_sync()
+                synced_ok = await trigger_safe_sync()
+                if synced_ok and needs_post_close_sync:
+                    LAST_CLOSE_SYNC_DATE = today_str
 
             # Auto-Broadcast Penutupan Pasar (16:15 WIB) ke Telegram
-            global LAST_DAILY_BROADCAST_DATE
-            from datetime import time as dtime
             now_wib = _get_now_wib()
             today_str = now_wib.strftime("%Y-%m-%d")
-            if now_wib.weekday() < 5 and not _is_idx_holiday(now_wib.date()):
-                if dtime(16, 15) <= now_wib.time() <= dtime(16, 35) and LAST_DAILY_BROADCAST_DATE != today_str:
+            if is_trading_day:
+                if dtime(16, 15) <= now_wib.time() <= dtime(16, 45) and LAST_DAILY_BROADCAST_DATE != today_str:
                     tg_cfg = load_telegram_config()
                     if tg_cfg.get("bot_token") and tg_cfg.get("chat_id") and tg_cfg.get("auto_notify", True):
                         try:
@@ -516,7 +490,7 @@ def init_default_state() -> None:
 
     if REAL_CACHE_CSV.exists():
         real_df = pd.read_csv(REAL_CACHE_CSV)
-        real_df["Has_Broker_Summary"] = True
+        real_df["Has_Broker_Summary"] = False
         STATE["source_name"] = "Daftar Saham IDX - REAL Market Data (24/7 Active)"
         STATE["analysis"] = analyze_smart_money_dataframe(real_df)
         STATE["last_sync_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -543,6 +517,7 @@ def health_check() -> dict:
         "status": "online",
         "market_open": is_idx_market_open_now(),
         "last_sync_time": STATE["last_sync_time"],
+        "last_sync_error": STATE.get("last_sync_error"),
         "last_tracker_run": STATE["last_tracker_run"],
         "is_syncing": STATE["is_syncing"],
         "total_emiten": STATE["analysis"]["kpis"]["total_emiten"] if STATE["analysis"] else 0,
@@ -616,6 +591,7 @@ def get_screener_data(
     return {
         "source_name": STATE["source_name"],
         "last_sync_time": STATE["last_sync_time"],
+        "last_sync_error": STATE.get("last_sync_error"),
         "is_syncing": STATE["is_syncing"],
         "auto_sync_interval_min": STATE["auto_sync_interval_min"],
         "kpis": analysis["kpis"],
@@ -636,11 +612,21 @@ def get_stock_detail(ticker: str) -> dict:
     return details_map[key]
 
 
+TICKER_CANDLE_CACHE: dict[tuple[str, str], dict] = {}
+
+
 def _fetch_ticker_candles_blocking(ticker: str, period: str = "6mo") -> list[dict]:
+    import time
     import yfinance as yf
 
     valid_periods = {"1mo": "1mo", "3mo": "3mo", "6mo": "6mo", "1y": "1y"}
     yf_period = valid_periods.get(period, "6mo")
+    cache_key = (ticker.upper(), yf_period)
+    now_ts = time.time()
+    cached = TICKER_CANDLE_CACHE.get(cache_key)
+    if cached and (now_ts - cached.get("ts", 0) < 300) and cached.get("candles"):
+        return cached["candles"]
+
     try:
         t_obj = yf.Ticker(f"{ticker}.JK")
         sub = t_obj.history(period=yf_period, interval="1d", auto_adjust=False)
@@ -665,6 +651,7 @@ def _fetch_ticker_candles_blocking(ticker: str, period: str = "6mo") -> list[dic
                     "volume_lot": vol_lot,
                 })
             if candles:
+                TICKER_CANDLE_CACHE[cache_key] = {"ts": now_ts, "candles": candles}
                 return candles
     except Exception as exc:
         print(f"[CandlesAPI] Fallback ke history lokal untuk {ticker}: {exc}")
@@ -682,7 +669,7 @@ async def get_stock_candles(ticker: str, period: str = Query(default="6mo")) -> 
 
     # Prioritaskan data histori lokal dari memori/cache (< 1ms) jika mencukupi rentang candle yang diminta
     candles = []
-    required_bars = 100 if period in ("6mo", "1y", "2y") else 20
+    required_bars = 100 if period in ("6mo", "1y", "2y") else (50 if period == "3mo" else 20)
     if detail and detail.get("history") and len(detail["history"]) >= required_bars:
         candles = [
             {
@@ -697,6 +684,18 @@ async def get_stock_candles(ticker: str, period: str = Query(default="6mo")) -> 
         ]
     else:
         candles = await asyncio.to_thread(_fetch_ticker_candles_blocking, key, period)
+        if not candles and detail and detail.get("history"):
+            candles = [
+                {
+                    "date": h["date"],
+                    "open": h["open"],
+                    "high": h["high"],
+                    "low": h["low"],
+                    "close": h["close"],
+                    "volume_lot": h.get("volume_lot", 0),
+                }
+                for h in detail["history"]
+            ]
 
     if candles and detail and detail.get("close"):
         lc = int(round(float(detail["close"])))
@@ -740,7 +739,7 @@ async def sync_unified_market_data() -> dict:
         if synced:
             print("[SyncAPI] Sinkronisasi background selesai dengan sukses.")
         else:
-            print("[SyncAPI] Sinkronisasi dilewati karena sedang berjalan.")
+            print("[SyncAPI] Sinkronisasi dilewati atau gagal.")
 
     asyncio.create_task(_async_sync_runner())
     return {
@@ -833,9 +832,9 @@ async def upload_excel_files(
 def load_excel_from_local_path(req: LocalPathRequest) -> dict:
     raw_path = req.path.strip().strip('"').strip("'")
     target = Path(raw_path).resolve()
-    # Proteksi Keamanan: Hanya izinkan akses file/folder di dalam direktori aplikasi
+    # Proteksi Keamanan: Hanya izinkan akses file/folder di dalam direktori data aplikasi (DATA_DIR)
     try:
-        target.relative_to(BASE_DIR.resolve())
+        target.relative_to(DATA_DIR.resolve())
     except ValueError:
         raise HTTPException(
             status_code=403,
@@ -860,6 +859,11 @@ def load_excel_from_local_path(req: LocalPathRequest) -> dict:
             df = read_multiple_uploaded_files(payload)
             src_label = f"{target.name}/ ({len(excel_files)} file)"
         else:
+            if target.suffix.lower() not in (".xlsx", ".xls", ".csv"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Format file '{target.name}' tidak didukung. Gunakan file .xlsx, .xls, atau .csv.",
+                )
             df = read_uploaded_file(target.read_bytes(), target.name)
             src_label = f"{target.name} (Real Market Data)"
 
@@ -1058,43 +1062,46 @@ def _fetch_ihsg_candles_blocking(period: str = "3mo") -> dict:
 
     # Fallback komposit dari histori lokal apabila Yahoo Finance sedang offline
     if not candles and STATE.get("analysis") and STATE["analysis"].get("details"):
-        date_returns: dict[str, list[float]] = {}
-        for _, d in list(STATE["analysis"]["details"].items())[:100]:
-            hist = d.get("history") or []
-            for idx_h, h in enumerate(hist):
-                dt_str = str(h.get("date", ""))
-                if not dt_str:
-                    continue
-                prev_h_close = float(hist[idx_h - 1]["close"]) if idx_h > 0 else float(h.get("open") or h["close"])
-                cur_h_close = float(h["close"])
-                if prev_h_close > 0:
-                    ret = (cur_h_close - prev_h_close) / prev_h_close
-                    date_returns.setdefault(dt_str, []).append(ret)
+        try:
+            date_returns: dict[str, list[float]] = {}
+            for _, d in list(STATE["analysis"]["details"].items())[:100]:
+                hist = d.get("history") or []
+                for idx_h, h in enumerate(hist):
+                    dt_str = str(h.get("date", ""))
+                    if not dt_str:
+                        continue
+                    prev_h_close = float(hist[idx_h - 1]["close"]) if idx_h > 0 else float(h.get("open") or h["close"])
+                    cur_h_close = float(h["close"])
+                    if prev_h_close > 0:
+                        ret = (cur_h_close - prev_h_close) / prev_h_close
+                        date_returns.setdefault(dt_str, []).append(ret)
 
-        sorted_dates = sorted(date_returns.keys())
-        base_idx = 7200.0
-        closes_arr: list[float] = []
-        for dt_str in sorted_dates:
-            avg_ret = float(np.median(date_returns[dt_str])) if date_returns[dt_str] else 0.0
-            open_idx = round(base_idx, 2)
-            close_idx = round(base_idx * (1.0 + avg_ret), 2)
-            high_idx = round(max(open_idx, close_idx) * 1.004, 2)
-            low_idx = round(min(open_idx, close_idx) * 0.996, 2)
-            closes_arr.append(close_idx)
-            ma20_v = round(float(np.mean(closes_arr[-20:])), 2)
-            ma50_v = round(float(np.mean(closes_arr[-50:])), 2)
-            candles.append({
-                "date": dt_str,
-                "open": open_idx,
-                "high": high_idx,
-                "low": low_idx,
-                "close": close_idx,
-                "ma20": ma20_v,
-                "ma50": ma50_v,
-                "pct_change": round(avg_ret * 100.0, 2),
-                "volume": 0,
-            })
-            base_idx = close_idx
+            sorted_dates = sorted(date_returns.keys())
+            base_idx = 7200.0
+            closes_arr: list[float] = []
+            for dt_str in sorted_dates:
+                avg_ret = float(np.median(date_returns[dt_str])) if date_returns[dt_str] else 0.0
+                open_idx = round(base_idx, 2)
+                close_idx = round(base_idx * (1.0 + avg_ret), 2)
+                high_idx = round(max(open_idx, close_idx) * 1.004, 2)
+                low_idx = round(min(open_idx, close_idx) * 0.996, 2)
+                closes_arr.append(close_idx)
+                ma20_v = round(float(np.mean(closes_arr[-20:])), 2)
+                ma50_v = round(float(np.mean(closes_arr[-50:])), 2)
+                candles.append({
+                    "date": dt_str,
+                    "open": open_idx,
+                    "high": high_idx,
+                    "low": low_idx,
+                    "close": close_idx,
+                    "ma20": ma20_v,
+                    "ma50": ma50_v,
+                    "pct_change": round(avg_ret * 100.0, 2),
+                    "volume": 0,
+                })
+                base_idx = close_idx
+        except Exception as fb_exc:
+            print(f"[IHSGChart] Fallback komposit gagal: {fb_exc}")
 
     if not candles:
         return {
@@ -1283,14 +1290,29 @@ class TelegramConfigSaveRequest(BaseModel):
     auto_notify: Optional[bool] = True
 
 
+def _resolve_telegram_credentials(req_token: Optional[str], req_chat_id: Optional[str]) -> tuple[str, str]:
+    """Resolusi kredensial Telegram dengan aman: jika token kosong atau berupa nilai ter-masking ('...'/'***'),
+    gunakan token tersimpan dari konfigurasi disk atau environment variable."""
+    saved_cfg = load_telegram_config()
+    raw_tok = (req_token or "").strip()
+    if not raw_tok or "..." in raw_tok or "*" in raw_tok:
+        token = (saved_cfg.get("bot_token") or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
+    else:
+        token = raw_tok
+
+    raw_cid = (req_chat_id or "").strip()
+    chat_id = raw_cid or (saved_cfg.get("chat_id") or os.environ.get("TELEGRAM_CHAT_ID", "")).strip()
+    return token, chat_id
+
+
 @app.get("/api/telegram/config")
 def get_telegram_config() -> dict:
     cfg = load_telegram_config()
     token = cfg.get("bot_token", "")
     masked_token = f"{token[:5]}...{token[-4:]}" if len(token) > 10 else ("***" if token else "")
     return {
-        "configured": bool(cfg.get("bot_token") and cfg.get("chat_id")),
-        "bot_token": token,
+        "configured": bool(token and cfg.get("chat_id")),
+        "bot_token": "",
         "masked_token": masked_token,
         "chat_id": cfg.get("chat_id", ""),
         "auto_notify": cfg.get("auto_notify", True),
@@ -1299,9 +1321,10 @@ def get_telegram_config() -> dict:
 
 @app.post("/api/telegram/config")
 def save_telegram_config_endpoint(req: TelegramConfigSaveRequest) -> dict:
+    token, chat_id = _resolve_telegram_credentials(req.bot_token, req.chat_id)
     cfg = {
-        "bot_token": (req.bot_token or "").strip(),
-        "chat_id": (req.chat_id or "").strip(),
+        "bot_token": token,
+        "chat_id": chat_id,
         "auto_notify": bool(req.auto_notify),
     }
     if cfg["bot_token"]:
@@ -1311,13 +1334,23 @@ def save_telegram_config_endpoint(req: TelegramConfigSaveRequest) -> dict:
     ok = save_telegram_config(cfg)
     if not ok:
         raise HTTPException(status_code=500, detail="Gagal menyimpan konfigurasi Telegram ke file disk.")
-    return {"status": "success", "message": "Konfigurasi Telegram berhasil disimpan permanen!", "config": cfg}
+    masked_token = f"{token[:5]}...{token[-4:]}" if len(token) > 10 else ("***" if token else "")
+    return {
+        "status": "success",
+        "message": "Konfigurasi Telegram berhasil disimpan permanen!",
+        "config": {
+            "configured": bool(token and chat_id),
+            "bot_token": "",
+            "masked_token": masked_token,
+            "chat_id": chat_id,
+            "auto_notify": cfg["auto_notify"],
+        },
+    }
 
 
 @app.post("/api/telegram/test")
 def test_telegram_connection(req: TelegramConfigRequest) -> dict:
-    token = (req.bot_token or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
-    chat_id = (req.chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")).strip()
+    token, chat_id = _resolve_telegram_credentials(req.bot_token, req.chat_id)
     if not token or not chat_id:
         raise HTTPException(
             status_code=400,
@@ -1331,8 +1364,7 @@ def test_telegram_connection(req: TelegramConfigRequest) -> dict:
 
 @app.post("/api/telegram/send")
 async def send_smart_telegram_recommendations(req: TelegramSendRequest) -> dict:
-    token = (req.bot_token or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
-    chat_id = (req.chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")).strip()
+    token, chat_id = _resolve_telegram_credentials(req.bot_token, req.chat_id)
     if not token or not chat_id:
         raise HTTPException(
             status_code=400,
@@ -1343,13 +1375,14 @@ async def send_smart_telegram_recommendations(req: TelegramSendRequest) -> dict:
     if STATE["analysis"] is None:
         init_default_state()
 
-    # 2. Saring kandidat saham terbaik yang belum terbang
+    # 2. Saring kandidat saham terbaik yang belum terbang (dibatasi maksimal 5 saham agar tidak terpotong batas Telegram)
     stocks = STATE["analysis"]["stocks"] if STATE["analysis"] else []
     market_date = STATE["analysis"]["kpis"]["latest_date"] if STATE["analysis"] else "Hari Ini"
+    safe_max_picks = max(1, min(int(req.max_picks or 3), 5))
 
     picks = filter_smart_telegram_picks(
         stocks=stocks,
-        max_picks=req.max_picks,
+        max_picks=safe_max_picks,
         max_pct_change=req.max_pct_change,
         min_score=req.min_score,
     )

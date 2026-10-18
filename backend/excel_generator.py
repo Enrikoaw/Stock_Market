@@ -312,7 +312,7 @@ COLUMN_GUIDES = [
 
 def _get_trading_dates(num_days: int = 25) -> list[str]:
     dates: list[str] = []
-    cur = datetime(2026, 10, 8)
+    cur = datetime.now()
     while len(dates) < num_days:
         if cur.weekday() < 5:
             dates.append(cur.strftime("%Y-%m-%d"))

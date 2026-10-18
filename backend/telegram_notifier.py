@@ -220,13 +220,13 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
             f"🎯 <b>TRADING PLAN (Take Profit Cepat):</b>\n"
             f"• <b>Harga Beli:</b> <code>Rp {e_high:,}</code>\n"
             f"• <b>Stop Loss (SL):</b> <code>Rp {sl:,} ({sl_pct:.1f}%)</code>\n"
-            f"• <b>Target TP1 (+4%):</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code> ➜ <b>{tp1_win}% Win / {tp1_loss}% Loss</b>\n"
-            f"• <b>Target TP2 (+7%):</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code> ➜ <b>{tp2_win}% Win</b>\n"
+            f"• <b>Target TP1 (+4%):</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code> ➜ <b>Est. Skor Setup: {tp1_win}%</b>\n"
+            f"• <b>Target TP2 (+7%):</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code> ➜ <b>Est. Skor Lanjut: {tp2_win}%</b>\n"
             f"• <b>VWAP 5 Hari:</b> Rp {vwap_5d:,} (Jarak: {diff_vwap:+.1f}%)\n"
         )
         lines.append(card)
 
-    lines.append(
+    footer = (
         "━━━━━━━━━━━━━━━━━━━\n"
         "💡 <b>Panduan Modal 10 Juta:</b>\n"
         "• Pilih maksimal 2 saham, porsi Rp 3–5 juta per saham.\n"
@@ -235,11 +235,21 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
         "• Wajib pasang Automatic Stop Loss di aplikasi sekuritas."
     )
 
-    result_text = "\n".join(lines)
-    # Proteksi batas 4096 karakter Telegram
-    if len(result_text) > 4000:
-        result_text = result_text[:3980] + "\n\n<i>[Pesan dipersingkat demi batas limit Telegram]</i>"
-    return result_text
+    # R1: Rakitan aman per blok agar pemotongan tidak pernah membelah tag HTML (<b, <i, <code)
+    safe_blocks: list[str] = lines[:4]
+    max_body_len = 4000 - len(footer) - 80
+    omitted_count = 0
+    for block in lines[4:]:
+        candidate_text = "\n".join(safe_blocks + [block])
+        if len(candidate_text) <= max_body_len:
+            safe_blocks.append(block)
+        else:
+            omitted_count += 1
+
+    if omitted_count > 0:
+        safe_blocks.append(f"<i>[+{omitted_count} saham lainnya disingkat agar tidak melampaui batas pesan Telegram]</i>")
+    safe_blocks.append(footer)
+    return "\n".join(safe_blocks)
 
 
 def format_test_message() -> str:

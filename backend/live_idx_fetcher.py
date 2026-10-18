@@ -11,6 +11,7 @@ dengan arsitektur Super Cepat & Aman:
 from __future__ import annotations
 
 import concurrent.futures
+import threading
 import time
 from pathlib import Path
 
@@ -18,36 +19,16 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+_YF_DOWNLOAD_LOCK = threading.Lock()
+
 
 def _download_batch_safe(yf_symbols: list[str], period: str) -> pd.DataFrame | None:
-    """Mengunduh 1 batch secara aman dengan retry otomatis dan fallback split mini-batch jika error sesaat (Bug 4 Fix)."""
+    """Mengunduh 1 batch secara aman dengan lock thread-safe, retry otomatis, dan fallback split mini-batch."""
     for attempt in range(2):
         try:
-            raw = yf.download(
-                yf_symbols,
-                period=period,
-                interval="1d",
-                group_by="ticker",
-                threads=False,
-                progress=False,
-                auto_adjust=False,
-            )
-            if raw is not None and not raw.empty:
-                return raw
-        except Exception:
-            if attempt == 0:
-                time.sleep(0.8)
-
-    # Bug 4 Fix: Jika batch gagal (misal 120 ticker timeout), jangan abaikan diam-diam.
-    # Retry dengan memecah menjadi mini-batch (25 ticker per mini-batch)
-    if len(yf_symbols) > 25:
-        mini_dfs = []
-        chunk_size = 25
-        for i in range(0, len(yf_symbols), chunk_size):
-            chunk = yf_symbols[i : i + chunk_size]
-            try:
-                sub_raw = yf.download(
-                    chunk,
+            with _YF_DOWNLOAD_LOCK:
+                raw = yf.download(
+                    yf_symbols,
                     period=period,
                     interval="1d",
                     group_by="ticker",
@@ -55,6 +36,30 @@ def _download_batch_safe(yf_symbols: list[str], period: str) -> pd.DataFrame | N
                     progress=False,
                     auto_adjust=False,
                 )
+            if raw is not None and not raw.empty:
+                return raw
+        except Exception:
+            if attempt == 0:
+                time.sleep(0.8)
+
+    # Jika batch gagal (misal 120 ticker timeout), jangan abaikan diam-diam.
+    # Retry dengan memecah menjadi mini-batch (25 ticker per mini-batch)
+    if len(yf_symbols) > 25:
+        mini_dfs = []
+        chunk_size = 25
+        for i in range(0, len(yf_symbols), chunk_size):
+            chunk = yf_symbols[i : i + chunk_size]
+            try:
+                with _YF_DOWNLOAD_LOCK:
+                    sub_raw = yf.download(
+                        chunk,
+                        period=period,
+                        interval="1d",
+                        group_by="ticker",
+                        threads=False,
+                        progress=False,
+                        auto_adjust=False,
+                    )
                 if sub_raw is not None and not sub_raw.empty:
                     mini_dfs.append(sub_raw)
             except Exception:
@@ -175,7 +180,7 @@ def _process_ticker_sub(sub: pd.DataFrame, t_code: str, sector_map: dict[str, st
                 "Bandar_Avg_Buy": vwap_5d.values,
                 "Foreign_Buy_Val": f_buy_val,
                 "Foreign_Sell_Val": f_sell_val,
-                "Has_Broker_Summary": True,
+                "Has_Broker_Summary": False,
             }
         )
     except Exception:
@@ -195,7 +200,7 @@ def fetch_real_idx_market_data(
     Didesain khusus Hemat Memori (< 200MB RAM) agar aman di server Render Free Tier (512MB RAM):
     - Menggunakan 2 worker paralel (mencegah memory spike).
     - Data mentah langsung dibersihkan dengan gc.collect() per batch.
-    - Cache dibatasi maksimum 20 baris per ticker (mencegah file CSV membengkak).
+    - Cache menyimpan hingga 90 baris per ticker agar MA50 dan ATR14 100% akurat.
     """
     import gc
 
@@ -232,8 +237,27 @@ def fetch_real_idx_market_data(
         and output_csv_path.stat().st_size > 50000
     )
 
+    cache_sufficient_for_incremental = False
+    if has_existing_cache and not force_full and output_csv_path is not None:
+        try:
+            meta_df = pd.read_csv(output_csv_path, usecols=["Ticker", "Date"])
+            if not meta_df.empty:
+                median_bars = float(meta_df.groupby("Ticker").size().median())
+                max_dt = pd.to_datetime(meta_df["Date"].max(), errors="coerce")
+                days_gap = (pd.Timestamp.now() - max_dt).days if pd.notna(max_dt) else 999
+                if median_bars >= 55 and days_gap <= 5:
+                    cache_sufficient_for_incremental = True
+                else:
+                    print(
+                        f"[LiveIDX] Cache lokal memiliki median {median_bars:.0f} bar (gap {days_gap} hari) "
+                        f"-> otomatis upgrade ke Full Sync (90d) untuk akurasi MA50."
+                    )
+            del meta_df
+        except Exception:
+            cache_sufficient_for_incremental = False
+
     if period == "auto":
-        download_period = "5d" if (has_existing_cache and not force_full) else "90d"
+        download_period = "5d" if cache_sufficient_for_incremental else "90d"
     else:
         download_period = period
 
@@ -284,7 +308,9 @@ def fetch_real_idx_market_data(
     if not all_records:
         if has_existing_cache:
             print("[LiveIDX] Penarikan kosong/timeout, menggunakan cache lokal (Fallback).")
-            return pd.read_csv(output_csv_path)
+            fb_df = pd.read_csv(output_csv_path)
+            fb_df["Has_Broker_Summary"] = False
+            return fb_df
         raise RuntimeError("Gagal mengambil data pasar dari Yahoo Finance.")
 
     new_batch_df = pd.concat(all_records, ignore_index=True)
@@ -324,6 +350,7 @@ def fetch_real_idx_market_data(
         pv_roll = result_df.assign(_pv=pv_val).groupby("Ticker")["_pv"].transform(lambda s: s.rolling(5, min_periods=1).sum())
         v_roll = result_df.assign(_v=v_val).groupby("Ticker")["_v"].transform(lambda s: s.rolling(5, min_periods=1).sum())
         result_df["Bandar_Avg_Buy"] = (pv_roll / np.maximum(v_roll, 1.0)).round().astype(np.int64)
+        result_df["Has_Broker_Summary"] = False
 
     if output_csv_path is not None:
         output_csv_path.parent.mkdir(parents=True, exist_ok=True)
