@@ -819,10 +819,24 @@ class SignalTracker:
                 self._close(r, date, exit_p, "WIN", f"Target Price (Rp {tp:,.0f}) tersentuh pada High Rp {h:,.0f}.", changes)
                 return
 
+            # Milestone Profit Alert untuk Orang Sibuk (Floating >= +4.5%):
+            # Mengingatkan pekerja sibuk untuk mengamankan modal (pindah SL ke BEP) agar tidak berbalik rugi di sore hari.
+            if h >= entry_p * 1.045 and "[BEP_ALERTED]" not in (r.get("note") or ""):
+                r["note"] = f"{r.get('note', '')} [BEP_ALERTED]"
+                changes.setdefault("events", []).append({
+                    "event": "MILESTONE_BEP",
+                    "ticker": r["ticker"],
+                    "price": round(h, 2),
+                    "pnl_pct": round((h - entry_p) / entry_p * 100.0, 2),
+                    "note": f"Floating High mencapai Rp {h:,.0f} (+{round((h - entry_p)/entry_p*100, 1)}%). Waktunya orang sibuk amankan profit TP1 & pasang SL BEP!",
+                })
+
             # 3. Belum tersentuh SL maupun TP -> tetap RUNNING dengan floating P/L terupdate
             r["last_close"] = c
             r["pnl_pct"] = round((c - entry_p) / entry_p * 100.0, 2)
-            r["note"] = f"Running: Entry Rp {entry_p:,.0f}, Last Rp {c:,.0f} ({r['pnl_pct']:+.2f}%). High hari ini Rp {h:,.0f}."
+            base_note = r.get("note", "").replace(" [BEP_ALERTED]", "")
+            bep_flag = " [BEP_ALERTED]" if "[BEP_ALERTED]" in r.get("note", "") else ""
+            r["note"] = f"Running: Entry Rp {entry_p:,.0f}, Last Rp {c:,.0f} ({r['pnl_pct']:+.2f}%). High hari ini Rp {h:,.0f}.{bep_flag}"
 
             if not is_live_today:
                 r["bars_held"] = int(r.get("bars_held") or 0) + 1

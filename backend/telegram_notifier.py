@@ -228,11 +228,11 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
 
     footer = (
         "━━━━━━━━━━━━━━━━━━━\n"
-        "💡 <b>Panduan Eksekusi RRR 1:2:</b>\n"
-        "• Wajib pastikan IHSG > MA50 (Hard Macro Gate).\n"
-        "• Pasang Buy Limit di Harga Antre (Retest/VWAP), hindari hajar kanan di pucuk.\n"
-        "• Take Profit Bertahap: TP1 di +6% (Amankan 50% lot), TP2 di +10% (Kawal sisa lot dengan Trailing Stop).\n"
-        "• Evaluasi Stop Loss berbasis harga penutupan (Pre-Closing 15:45 WIB) agar tidak terkena jarum shakeout."
+        "💡 <b>PANDUAN EKSEKUSI ORANG SIBUK (SET & FORGET):</b>\n"
+        "• <b>Malam/Pagi Ini:</b> Pasang antrean Buy Limit GTC di Harga Antre pada aplikasi sekuritas.\n"
+        "• <b>Split Exit 50:50:</b> Pasang GTC Sell Limit 50% lot di TP1 (+6%) & kawal 50% lot sisa di TP2 (+10%).\n"
+        "• <b>Auto-BEP:</b> Begitu TP1 match di siang hari, geser Stop Loss sisa lot ke modal (BEP) agar bebas risiko rugi.\n"
+        "• <b>Closing Basis SL:</b> Kebal gocekan jarum jam 10 pagi; evaluasi cut loss hanya jika Close <= SL pada 15:45 WIB."
     )
 
     # R1: Rakitan aman per blok agar pemotongan tidak pernah membelah tag HTML (<b, <i, <code)
@@ -263,23 +263,38 @@ def format_test_message() -> str:
 
 
 def format_tracker_event_message(event_type: str, ticker: str, price: float, pnl_pct: float | None = None, note: str = "") -> str:
-    """Format notifikasi instan event pergerakan sinyal ke Telegram."""
-    if event_type == "WIN":
-        pnl_str = f"+{pnl_pct:.2f}%" if pnl_pct is not None else ""
+    """Format notifikasi instan event pergerakan sinyal ke Telegram dengan instruksi presisi untuk pekerja sibuk."""
+    pnl_str = f"+{pnl_pct:.2f}%" if pnl_pct is not None else ""
+    if event_type == "MILESTONE_BEP":
         return (
-            f"🏆 <b>TARGET TERCAPAI (WIN)!</b>\n\n"
-            f"Saham: <b>#{html.escape(ticker)}</b>\n"
-            f"Harga Exit: <b>Rp {price:,.0f}</b> ({pnl_str})\n"
+            f"⚡ <b>[ALERT ORANG SIBUK: AMANKAN CUAN!] #{html.escape(ticker)}</b>\n\n"
+            f"📈 <b>Floating High Hari Ini:</b> Rp {price:,.0f} (<b>{pnl_str}</b>)\n"
             f"Catatan: <i>{html.escape(note)}</i>\n\n"
-            f"🎯 <i>Sinyal berhasil mencapai target profit. Amankan modal!</i>"
+            f"🛡️ <b>Panduan Tindakan 10 Detik:</b>\n"
+            f"1. <b>Kunci Cuan:</b> Jika pasang Auto-Order TP1 (50% lot), separuh modal & profit sudah masuk kantong secara otomatis.\n"
+            f"2. <b>Geser SL ke Modal (BEP):</b> Segera pindahkan Stop Loss sisa 50% lot ke harga beli modal.\n"
+            f"3. <b>Zero-Risk Trade:</b> Posisi Anda kini 100% bebas risiko rugi sore hari!"
+        )
+    elif event_type == "WIN":
+        return (
+            f"🏆 <b>TARGET TP TERCAPAI (WIN)!</b>\n\n"
+            f"Saham: <b>#{html.escape(ticker)}</b>\n"
+            f"Harga Exit: <b>Rp {price:,.0f}</b> (<b>{pnl_str}</b>)\n"
+            f"Catatan: <i>{html.escape(note)}</i>\n\n"
+            f"🎯 <b>Strategi 2-Leg Swing Pekerja:</b>\n"
+            f"• 50% Lot Pertama sukses Take Profit (+6%).\n"
+            f"• 50% Lot Sisa kawal dengan Trailing Stop ke target lanjutan TP2 (+10%) atau amankan di BEP modal."
         )
     elif event_type == "RUNNING":
         return (
-            f"🚀 <b>POSISI ENTRY AKTIF!</b>\n\n"
-            f"Saham: <b>#{html.escape(ticker)}</b>\n"
-            f"Harga Beli: <b>Rp {price:,.0f}</b>\n"
+            f"🚀 <b>ORDER BELI TERJEMPUT: #{html.escape(ticker)}!</b>\n\n"
+            f"Harga Masuk: <b>Rp {price:,.0f}</b>\n"
             f"Catatan: <i>{html.escape(note)}</i>\n\n"
-            f"🛡️ <i>Order beli diskon terjemput. Pantau trailing profit otomatis!</i>"
+            f"⏰ <b>PANDUAN 1 MENIT SET-AND-FORGET:</b>\n"
+            f"Buka aplikasi sekuritas Anda (Stockbit / IPOT / Mirae / Ajaib / MOST):\n"
+            f"1. Pasang <b>GTC Sell Limit</b> 50% lot di Target TP1 (+6%).\n"
+            f"2. Pasang <b>GTC Auto Stop Loss</b> di Batas Rugi Closing Basis (-4.5%).\n"
+            f"Setelah order terpasang, tutup aplikasi sekuritas dan fokus bekerja dengan tenang!"
         )
     elif event_type == "EXPIRED_GAP_DOWN":
         return (
@@ -288,7 +303,7 @@ def format_tracker_event_message(event_type: str, ticker: str, price: float, pnl
             f"Harga Pembukaan: <b>Rp {price:,.0f}</b>\n"
             f"Status: <b>Batal Beli (EXPIRED)</b>\n"
             f"Catatan: <i>{html.escape(note)}</i>\n\n"
-            f"🛡️ <i>Modal Anda terselamatkan dari guyuran pembukaan pasar.</i>"
+            f"🛡️ <i>Sistem membatalkan antrean karena pasar dibuka crash di bawah batas aman. Modal Anda terselamatkan!</i>"
         )
     else:
         return (

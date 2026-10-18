@@ -199,7 +199,7 @@ def _process_tracker(analysis: dict, sync_live_network: bool = False, force_auto
             tg_cfg = load_telegram_config()
             if tg_cfg.get("bot_token") and tg_cfg.get("chat_id") and tg_cfg.get("auto_notify", True):
                 for ev in main_res.get("events", []):
-                    if ev.get("event") in ("WIN", "EXPIRED_GAP_DOWN", "RUNNING"):
+                    if ev.get("event") in ("WIN", "EXPIRED_GAP_DOWN", "RUNNING", "MILESTONE_BEP"):
                         alert_text = format_tracker_event_message(
                             event_type=ev["event"],
                             ticker=ev["ticker"],

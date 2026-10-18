@@ -1640,6 +1640,15 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         tp2_win = round(min(60.0, max(18.0, tp1_win * 0.58)), 1)
         tp2_loss = round(100.0 - tp2_win, 1)
 
+        auto_order_text = (
+            f"[Trading Plan Orang Sibuk - #{ticker}]\n"
+            f"1. Antre Beli: Rp {entry_high:,} (GTC Buy Limit)\n"
+            f"2. Kunci Cuan TP1 (50% Lot): Rp {tp1:,} (+{tp1_pct:.1f}%) [Pasang GTC Sell Limit]\n"
+            f"3. Kawal Trend TP2 (50% Lot): Rp {tp2:,} (+{tp2_pct:.1f}%) [Trailing Stop / SL BEP]\n"
+            f"4. Batas Rugi (SL Closing): Rp {stop_loss:,} (-{risk_pct:.1f}%)\n"
+            f"Aturan Emas: Begitu TP1 match di siang hari, geser Stop Loss sisa lot ke Rp {entry_high:,} (BEP/Modal) agar posisi 100% bebas risiko."
+        )
+
         trading_plan = {
             "action_bias": action_bias,
             "entry_price": entry_price,
@@ -1662,6 +1671,13 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             "atr14": atr14_val,
             "atr_pct": atr_pct,
             "rationale": rationale,
+            "auto_order_text": auto_order_text,
+            "worker_guidance": {
+                "leg1_label": f"Jual 50% Lot @ Rp {tp1:,} (+{tp1_pct:.1f}%)",
+                "leg2_label": f"Kawal 50% Lot @ Rp {tp2:,} (+{tp2_pct:.1f}%)",
+                "sl_label": f"SL Closing @ Rp {stop_loss:,} (-{risk_pct:.1f}%)",
+                "mode": "Set-and-Forget (Bebas pantau bursa saat kerja)",
+            },
         }
 
         history_records = []

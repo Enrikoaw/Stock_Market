@@ -561,23 +561,37 @@ function renderTodayCandidates(stocks) {
           </div>
         </div>
 
-        <!-- Rencana Trading Terukur (Entry, SL, TP) -->
+        <!-- Rencana Trading Terukur 2-Leg Swing (Entry, SL, TP1, TP2) -->
         <div class="p-3 rounded-xl bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.06] space-y-2 text-xs shadow-sm dark:shadow-none">
           <div class="grid grid-cols-3 gap-1.5 text-center font-mono">
             <div class="p-2 rounded-lg bg-slate-50 text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
               <div class="text-[10px] text-slate-500 dark:text-slate-400 font-sans font-semibold">${entryLabel}</div>
               <div class="text-slate-900 dark:text-white font-bold text-[11px] mt-0.5">${entryValue}</div>
+              <div class="text-[9px] text-slate-400 font-sans mt-0.5">Buy Limit GTC</div>
             </div>
             <div class="p-2 rounded-lg bg-rose-50 text-rose-700 border border-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/30">
               <div class="text-[10px] text-rose-600 dark:text-rose-300 font-sans font-semibold">Batas Rugi (SL)</div>
               <div class="text-rose-700 dark:text-rose-300 font-bold text-[11px] mt-0.5">${fmtNumber(stopLoss)} (${slPct}%)</div>
+              <div class="text-[9px] text-rose-500/80 font-sans mt-0.5">Closing 15:45</div>
             </div>
             <div class="p-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30">
-              <div class="text-[10px] text-emerald-600 dark:text-emerald-300 font-sans font-semibold">Target (TP1)</div>
+              <div class="text-[10px] text-emerald-600 dark:text-emerald-300 font-sans font-semibold">TP1 (50% Lot)</div>
               <div class="text-emerald-700 dark:text-emerald-300 font-bold text-[11px] mt-0.5">${fmtNumber(target1)} (+${tp1Pct}%)</div>
+              <div class="text-[9px] text-emerald-600/80 font-sans mt-0.5">Kunci Cuan Cepat</div>
             </div>
           </div>
-          ${target2 > 0 ? `<div class="text-[10px] text-slate-500 dark:text-slate-400 font-mono text-center pt-0.5">TP2: <span class="text-emerald-700 dark:text-emerald-300 font-semibold">${fmtNumber(target2)} (+${tp2Pct}%)</span> · Disiplin SL ATR14</div>` : ''}
+          ${target2 > 0 ? `<div class="text-[10px] text-slate-500 dark:text-slate-400 font-mono text-center pt-0.5">Target 2 (Kawal 50% Lot): <span class="text-emerald-700 dark:text-emerald-300 font-semibold">${fmtNumber(target2)} (+${tp2Pct}%)</span> · Trailing Stop / SL BEP</div>` : ''}
+
+          <!-- Tombol Cepat Salin Auto-Order untuk Orang Sibuk -->
+          <button
+            type="button"
+            onclick="copyAutoOrderForTicker('${safeTicker}', event)"
+            class="w-full mt-1.5 py-1.5 px-2 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-400/30 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
+            title="Salin parameter Auto-Order siap pasang di Stockbit, IPOT, Mirae, Ajaib, atau MOST"
+          >
+            <span>📋</span>
+            <span>Salin Format Auto-Order (Orang Sibuk)</span>
+          </button>
         </div>
 
         <!-- Tombol Aksi -->
@@ -3581,6 +3595,320 @@ async function saveTelegramConfig() {
 }
 
 // =====================================================================
+// PANDUAN OTOMASI SEKURITAS UNTUK ORANG SIBUK (SET & FORGET)
+// =====================================================================
+const AUTO_ORDER_GUIDE_CONTENT = {
+  golden_rules: `
+    <div class="space-y-3.5">
+      <div class="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-400/25 space-y-1.5">
+        <div class="font-bold text-sm text-indigo-300 flex items-center gap-2">
+          <span>🎯</span>
+          <span>Prinsip Inti: Mengapa Banyak Trader Pekerja Gagal?</span>
+        </div>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          Penyebab #1 kekalahan trader karyawan adalah: <b>Antre pagi, siang sudah floating +5%, pasang TP di +8% tanpa geser SL BEP, lalu sore tiba-tiba longsor terkena cut loss -5%</b>. SmartFlow IDX mengatasi masalah ini secara sistematis dengan 4 pilar di bawah:
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+        <div class="p-3 rounded-xl bg-slate-900/40 border border-white/[0.08] space-y-1.5">
+          <div class="font-bold text-xs text-emerald-400 flex items-center gap-1.5">
+            <span>1️⃣</span>
+            <span>Split Exit 50:50 (Kunci Kemenangan)</span>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            Jangan pernah pasang 1 target tunggal 100% all-or-nothing (+8% atau +10%). Pasang GTC Sell Limit <b>50% Lot di TP1 (+6%)</b> sejak pagi. Begitu harga menyentuh TP1 di siang hari, order otomatis match tanpa Anda perlu membuka HP. Separuh modal & profit Anda sudah aman di kantong!
+          </p>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-900/40 border border-white/[0.08] space-y-1.5">
+          <div class="font-bold text-xs text-amber-400 flex items-center gap-1.5">
+            <span>2️⃣</span>
+            <span>Proteksi Auto-BEP (Zero-Risk Trade)</span>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            Begitu notifikasi Telegram berbunyi bahwa TP1 match, Anda hanya butuh 10 detik untuk menggeser Stop Loss sisa 50% lot ke <b>harga modal (BEP = Break Even Point)</b>. Jika bandar mengguyur balik di sore hari, trade Anda <b>tetap cuan bersih +3%</b> (bukan rugi -5%)!
+          </p>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-900/40 border border-white/[0.08] space-y-1.5">
+          <div class="font-bold text-xs text-sky-400 flex items-center gap-1.5">
+            <span>3️⃣</span>
+            <span>Gunakan Order GTC (Good-Til-Cancelled)</span>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            Order GTC berlaku selama 7 hingga 30 hari di server sekuritas. Anda tidak perlu repot bangun jam 08:50 WIB untuk input antrean setiap hari. Cukup input santai pada malam hari setelah pulang kerja.
+          </p>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-900/40 border border-white/[0.08] space-y-1.5">
+          <div class="font-bold text-xs text-rose-400 flex items-center gap-1.5">
+            <span>4️⃣</span>
+            <span>Closing Basis SL (Kebal Jarum Shakeout)</span>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            Di sesi 1 pukul 09:30 - 10:30 WIB, bandar kerap memancing panic sell ritel lewat jarum bawah sekejap. Sistem SmartFlow IDX mengevaluasi batas rugi hanya saat Pre-Closing (15:45 WIB), melindungi posisi Anda dari tipuan wick intraday.
+          </p>
+        </div>
+      </div>
+    </div>
+  `,
+  stockbit: `
+    <div class="space-y-3">
+      <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-400/25 flex items-center justify-between">
+        <div class="font-bold text-xs text-emerald-300 flex items-center gap-2">
+          <span>🟢</span>
+          <span>Fitur Auto Order di Stockbit (Bebas Pantau Layar)</span>
+        </div>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-900/50 text-emerald-300">GTC Max 30 Hari</span>
+      </div>
+
+      <ol class="space-y-2.5 text-xs text-slate-300 list-decimal list-inside leading-relaxed">
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Buka Menu Auto Order:</b> Cari saham pilihan di Stockbit ➔ klik tombol <b>Order</b> ➔ pilih tab <b>Auto Order</b> (bukan Reguler).
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Langkah 1 (Beli GTC):</b> Pilih Kondisi: <code>Last Price &lt;= [Harga Antre Beli]</code> ➔ Aksi: <b>BUY</b> ➔ Tipe: Limit ➔ Durasi: <b>GTC (30 Hari)</b>.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Langkah 2 (Take Profit 1 - 50% Lot):</b> Buat Auto Order baru ➔ Kondisi: <code>Last Price &gt;= [Target TP1]</code> ➔ Aksi: <b>SELL</b> ➔ Jumlah: <b>50% dari total lot</b> ➔ Durasi: GTC.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Langkah 3 (Kawal TP2 dengan Trailing Stop):</b> Pilih tab <b>Trailing Stop</b> ➔ Trigger: <code>Last Price &gt;= [Target TP1]</code> ➔ Trailing Distance: <b>1.5% atau 2 Ticks</b> ➔ Jumlah: <b>50% sisa lot</b> ➔ Durasi: GTC.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Langkah 4 (Stop Loss Pengaman):</b> Buat Auto Order ➔ Kondisi: <code>Last Price &lt;= [Batas Rugi SL]</code> ➔ Aksi: SELL ➔ Jumlah: 100% lot ➔ Durasi: GTC.
+        </li>
+      </ol>
+      <div class="p-2.5 rounded-lg bg-white/[0.03] text-[11px] text-slate-400">
+        💡 <i>Catatan: Setelah keempat order di atas disimpan, seluruh siklus trading Anda akan berjalan otomatis di server Stockbit tanpa perlu mengecek layar.</i>
+      </div>
+    </div>
+  `,
+  ipot: `
+    <div class="space-y-3">
+      <div class="p-3 rounded-xl bg-blue-500/10 border border-blue-400/25 flex items-center justify-between">
+        <div class="font-bold text-xs text-blue-300 flex items-center gap-2">
+          <span>🔵</span>
+          <span>Fitur Robo Trading di IPOT (Indo Premier)</span>
+        </div>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-900/50 text-blue-300">Robo Server 24/7</span>
+      </div>
+
+      <ol class="space-y-2.5 text-xs text-slate-300 list-decimal list-inside leading-relaxed">
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Masuk Menu Robo Trading:</b> Di aplikasi IPOT, buka menu <b>Robo Trading</b> ➔ klik <b>Create New Task</b>.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Task 1 (Auto Buy Limit GTC):</b> Pilih Price Condition ➔ <code>Price &lt;= [Harga Antre]</code> ➔ Aksi: Buy Limit ➔ Masa Berlaku: 30 Hari.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Task 2 (Auto Profit Taking 50% Lot):</b> Pilih Profit Target ➔ <code>Price &gt;= [Target TP1]</code> ➔ Aksi: Sell 50% Lot.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Task 3 (Auto Cut Loss Pengaman):</b> Pilih Stop Loss Condition ➔ <code>Price &lt;= [Batas Rugi SL]</code> ➔ Aksi: Sell All.
+        </li>
+      </ol>
+      <div class="p-2.5 rounded-lg bg-white/[0.03] text-[11px] text-slate-400">
+        💡 <i>Keunggulan IPOT Robo: Server Robo Trading memantau langsung dari bursa BEI, sehingga eksekusi tetap jalan meski HP Anda mati atau tidak ada sinyal.</i>
+      </div>
+    </div>
+  `,
+  mirae: `
+    <div class="space-y-3">
+      <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-400/25 flex items-center justify-between">
+        <div class="font-bold text-xs text-amber-300 flex items-center gap-2">
+          <span>🟡</span>
+          <span>Fitur Automatic Order di Mirae Asset (M-STOCK / HOTS)</span>
+        </div>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-900/50 text-amber-300">Automatic Order GTC</span>
+      </div>
+
+      <ol class="space-y-2.5 text-xs text-slate-300 list-decimal list-inside leading-relaxed">
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Buka Automatic Order:</b> Buka M-Stock Mirae ➔ menu <b>Trading</b> ➔ pilih <b>Automatic Order</b>.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Order Beli:</b> Tentukan kode saham ➔ batas harga beli limit ➔ atur expiry date 30 hari ke depan.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Order Jual Otomatis (Setelah Terbeli):</b> Buka tab Automatic Sell:
+          <div class="pl-4 pt-1 space-y-1 text-[11px] text-slate-300">
+            <div>• Centang <b>Profit Taking Condition</b>: Isi harga TP1, kuantitas 50% lot.</div>
+            <div>• Centang <b>Trailing Stop Condition</b>: Trigger harga TP1, step 1.5%, kuantitas 50% sisa lot.</div>
+            <div>• Centang <b>Stop Loss Condition</b>: Isi harga SL Closing.</div>
+          </div>
+        </li>
+      </ol>
+      <div class="p-2.5 rounded-lg bg-white/[0.03] text-[11px] text-slate-400">
+        💡 <i>Mirae Asset memungkinkan penggabungan kondisi Profit Taking & Stop Loss dalam 1 tiket otomatis!</i>
+      </div>
+    </div>
+  `,
+  ajaib: `
+    <div class="space-y-3">
+      <div class="p-3 rounded-xl bg-purple-500/10 border border-purple-400/25 flex items-center justify-between">
+        <div class="font-bold text-xs text-purple-300 flex items-center gap-2">
+          <span>🟣</span>
+          <span>Fitur Auto Order di Ajaib Sekuritas</span>
+        </div>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-900/50 text-purple-300">Auto Order GTC</span>
+      </div>
+
+      <ol class="space-y-2.5 text-xs text-slate-300 list-decimal list-inside leading-relaxed">
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Order Beli Auto:</b> Buka saham pilihan ➔ klik <b>Beli</b> ➔ ubah tipe dari <b>Limit Order</b> menjadi <b>Auto Order</b>.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Parameter Antrean:</b> Masukkan kondisi: Jika harga &lt;= [Harga Antre], kirim limit order beli. Masa aktif pilih maksimal (30 Hari).
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Order Jual Auto (Take Profit & Stop Loss):</b> Masuk ke tab Portofolio ➔ klik saham yang sudah terbeli ➔ pilih <b>Auto Order Jual</b>:
+          <div class="pl-4 pt-1 space-y-1 text-[11px] text-slate-300">
+            <div>• Atur <b>Ambil Untung (TP1)</b>: Target harga +6%, jual 50% lot.</div>
+            <div>• Atur <b>Stop Loss</b>: Batas harga rugi -4.5%.</div>
+          </div>
+        </li>
+      </ol>
+      <div class="p-2.5 rounded-lg bg-white/[0.03] text-[11px] text-slate-400">
+        💡 <i>Ajaib sangat ramah pengguna mobile untuk karyawan yang hanya memiliki waktu beberapa menit di sela jam kerja.</i>
+      </div>
+    </div>
+  `,
+  most: `
+    <div class="space-y-3">
+      <div class="p-3 rounded-xl bg-sky-500/10 border border-sky-400/25 flex items-center justify-between">
+        <div class="font-bold text-xs text-sky-300 flex items-center gap-2">
+          <span>🔵</span>
+          <span>Fitur Smart Order & GTC di Mandiri Sekuritas (MOST)</span>
+        </div>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-900/50 text-sky-300">Smart Order Mandiri</span>
+      </div>
+
+      <ol class="space-y-2.5 text-xs text-slate-300 list-decimal list-inside leading-relaxed">
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Akses Menu Smart Order:</b> Buka MOST Mobile ➔ menu <b>Order</b> ➔ pilih <b>Smart Order</b>.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>GTC Buy Order:</b> Masukkan kode saham ➔ pilih kondisi Trigger Price &lt;= [Harga Antre] ➔ Durasi GTC.
+        </li>
+        <li class="p-2.5 rounded-lg bg-slate-900/40 border border-white/[0.06]">
+          <b>Smart Sell Multi-Leg:</b> Buat tiket Smart Sell:
+          <div class="pl-4 pt-1 space-y-1 text-[11px] text-slate-300">
+            <div>• Target 1: Sell 50% Lot jika harga &gt;= TP1.</div>
+            <div>• Stop Loss: Sell jika harga &lt;= Batas SL.</div>
+          </div>
+        </li>
+      </ol>
+      <div class="p-2.5 rounded-lg bg-white/[0.03] text-[11px] text-slate-400">
+        💡 <i>Mandiri Sekuritas didukung kestabilan server BUMN terpercaya untuk antrean jangka panjang.</i>
+      </div>
+    </div>
+  `
+};
+
+function openAutoOrderGuideModal(initialTab = 'golden_rules') {
+  const modal = document.getElementById('autoOrderGuideModal');
+  if (modal) modal.classList.remove('hidden');
+  switchAutoOrderGuideTab(initialTab);
+}
+
+function closeAutoOrderGuideModal() {
+  const modal = document.getElementById('autoOrderGuideModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function switchAutoOrderGuideTab(tabKey) {
+  const container = document.getElementById('autoOrderGuideContent');
+  if (!container) return;
+
+  const tabKeys = ['golden_rules', 'stockbit', 'ipot', 'mirae', 'ajaib', 'most'];
+  tabKeys.forEach((key) => {
+    const btn = document.getElementById(`tabGuide_${key}`);
+    if (btn) {
+      if (key === tabKey) {
+        btn.className = 'guide-tab-btn active px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-indigo-600 text-white shadow';
+      } else {
+        btn.className = 'guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-white/[0.05] text-slate-300 hover:text-white transition';
+      }
+    }
+  });
+
+  container.innerHTML = AUTO_ORDER_GUIDE_CONTENT[tabKey] || AUTO_ORDER_GUIDE_CONTENT.golden_rules;
+}
+
+function copyAutoOrderPlan() {
+  if (!selectedStockDetail) {
+    showToast('Pilih salah satu saham terlebih dahulu.', 'error');
+    return;
+  }
+  const s = selectedStockDetail;
+  const plan = s.trading_plan || {};
+  const entry = plan.entry_price || plan.entry_high || s.close;
+  const sl = plan.stop_loss || Math.round(entry * 0.955);
+  const slPct = plan.stop_loss_pct != null ? plan.stop_loss_pct : (((sl - entry) / entry) * 100).toFixed(1);
+  const tp1 = plan.target_1 || Math.round(entry * 1.06);
+  const tp1Pct = plan.target_1_pct != null ? plan.target_1_pct : (((tp1 - entry) / entry) * 100).toFixed(1);
+  const tp2 = plan.target_2 || Math.round(entry * 1.10);
+  const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : (((tp2 - entry) / entry) * 100).toFixed(1);
+
+  const text = plan.auto_order_text || [
+    `[Auto-Order Sekuritas: #${s.ticker} - SmartFlow IDX]`,
+    `1. Antre Beli (GTC Buy Limit): Rp ${fmtNumber(entry)}`,
+    `2. Kunci Cuan TP1 (Jual 50% Lot): Rp ${fmtNumber(tp1)} (+${tp1Pct}%) [GTC Sell Limit]`,
+    `3. Kawal Trend TP2 (Kawal 50% Lot): Rp ${fmtNumber(tp2)} (+${tp2Pct}%) [Trailing Stop / SL BEP]`,
+    `4. Batas Rugi (SL Closing Basis): Rp ${fmtNumber(sl)} (${slPct}%)`,
+    ``,
+    `💡 Aturan Orang Sibuk: Begitu TP1 match di siang hari, geser SL sisa 50% lot ke Rp ${fmtNumber(entry)} (BEP/Modal) agar posisi 100% bebas risiko.`
+  ].join('\n');
+
+  navigator.clipboard.writeText(text).then(() => {
+    const btnText = document.getElementById('btnCopyAutoOrderText');
+    if (btnText) {
+      const orig = btnText.textContent;
+      btnText.textContent = '✓ Parameter Berhasil Disalin!';
+      setTimeout(() => { btnText.textContent = orig; }, 2500);
+    }
+    showToast(`Format Auto-Order #${s.ticker} berhasil disalin! Silakan gunakan di aplikasi sekuritas Anda.`, 'success');
+  }).catch(() => {
+    showToast(`Gagal menyalin ke clipboard.`, 'error');
+  });
+}
+
+function copyAutoOrderForTicker(ticker, event) {
+  if (event) event.stopPropagation();
+  const s = currentStocks.find(x => x.ticker === ticker);
+  if (!s) {
+    showToast(`Data saham ${ticker} tidak ditemukan.`, 'error');
+    return;
+  }
+  const plan = s.trading_plan || {};
+  const entry = plan.entry_price || plan.entry_high || s.close;
+  const sl = plan.stop_loss || Math.round(entry * 0.955);
+  const slPct = plan.stop_loss_pct != null ? plan.stop_loss_pct : (((sl - entry) / entry) * 100).toFixed(1);
+  const tp1 = plan.target_1 || Math.round(entry * 1.06);
+  const tp1Pct = plan.target_1_pct != null ? plan.target_1_pct : (((tp1 - entry) / entry) * 100).toFixed(1);
+  const tp2 = plan.target_2 || Math.round(entry * 1.10);
+  const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : (((tp2 - entry) / entry) * 100).toFixed(1);
+
+  const text = plan.auto_order_text || [
+    `[Auto-Order Sekuritas: #${s.ticker} - SmartFlow IDX]`,
+    `1. Antre Beli (GTC Buy Limit): Rp ${fmtNumber(entry)}`,
+    `2. Kunci Cuan TP1 (Jual 50% Lot): Rp ${fmtNumber(tp1)} (+${tp1Pct}%) [GTC Sell Limit]`,
+    `3. Kawal Trend TP2 (Kawal 50% Lot): Rp ${fmtNumber(tp2)} (+${tp2Pct}%) [Trailing Stop / SL BEP]`,
+    `4. Batas Rugi (SL Closing Basis): Rp ${fmtNumber(sl)} (${slPct}%)`,
+    ``,
+    `💡 Aturan Orang Sibuk: Begitu TP1 match di siang hari, geser SL sisa 50% lot ke Rp ${fmtNumber(entry)} (BEP/Modal) agar posisi 100% bebas risiko.`
+  ].join('\n');
+
+  navigator.clipboard.writeText(text).then(() => {
+    showToast(`Format Auto-Order #${s.ticker} berhasil disalin! Siap dipasang di sekuritas Anda.`, 'success');
+  }).catch(() => {
+    showToast(`Gagal menyalin otomatis.`, 'error');
+  });
+}
+
+// =====================================================================
 // GLOBAL KEYBOARD & BACKDROP MODAL HANDLERS
 // =====================================================================
 function closeAllModals() {
@@ -3594,6 +3922,7 @@ function closeAllModals() {
   closeMarketRegimeModal();
   closePortfolioBuyModal();
   closePortfolioSellModal();
+  closeAutoOrderGuideModal();
 }
 
 window.addEventListener('keydown', (e) => {
@@ -3603,7 +3932,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Tutup modal jika user mengklik backdrop / area hitam di luar modal
-document.querySelectorAll('#settingsModal, #lotCalculatorModal, #glossaryModal, #uploadModal, #guideModal, #telegramModal, #tradingViewModal, #marketRegimeModal, #portfolioBuyModal, #portfolioSellModal').forEach(modalEl => {
+document.querySelectorAll('#settingsModal, #lotCalculatorModal, #glossaryModal, #uploadModal, #guideModal, #telegramModal, #tradingViewModal, #marketRegimeModal, #portfolioBuyModal, #portfolioSellModal, #autoOrderGuideModal').forEach(modalEl => {
   modalEl.addEventListener('click', (e) => {
     if (e.target === modalEl) {
       modalEl.classList.add('hidden');
