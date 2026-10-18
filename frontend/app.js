@@ -821,12 +821,83 @@ function openSettingsModal() {
     modal.classList.remove('hidden');
     const current = localStorage.getItem('smartflow_theme') || 'emerald';
     selectTheme(current, false);
+    loadBrokerConfig();
   }
 }
 
 function closeSettingsModal() {
   const modal = document.getElementById('settingsModal');
   if (modal) modal.classList.add('hidden');
+}
+
+async function loadBrokerConfig() {
+  try {
+    const res = await fetch('/api/broker/config');
+    if (!res.ok) return;
+    const data = await res.json();
+    const badge = document.getElementById('brokerConfigBadge');
+    const provSelect = document.getElementById('brokerProviderSelect');
+    if (provSelect && data.provider) {
+      provSelect.value = data.provider;
+      toggleBrokerProviderFields();
+    }
+    if (badge) {
+      if (data.has_stockbit_token || data.has_goapi_key) {
+        badge.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+        badge.textContent = data.has_stockbit_token ? 'Stockbit Aktif' : 'GoAPI Aktif';
+      } else {
+        badge.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/10';
+        badge.textContent = 'Belum Aktif';
+      }
+    }
+  } catch (e) {
+    console.warn('Gagal memuat config broker:', e);
+  }
+}
+
+function toggleBrokerProviderFields() {
+  const prov = document.getElementById('brokerProviderSelect')?.value || 'stockbit';
+  const sbField = document.getElementById('fieldStockbitToken');
+  const goField = document.getElementById('fieldGoapiKey');
+  if (prov === 'stockbit') {
+    if (sbField) sbField.classList.remove('hidden');
+    if (goField) goField.classList.add('hidden');
+  } else {
+    if (sbField) sbField.classList.add('hidden');
+    if (goField) goField.classList.remove('hidden');
+  }
+}
+
+async function saveBrokerConfigFromModal() {
+  const prov = document.getElementById('brokerProviderSelect')?.value || 'stockbit';
+  const sbToken = document.getElementById('inputStockbitToken')?.value?.trim();
+  const goKey = document.getElementById('inputGoapiKey')?.value?.trim();
+  const btn = document.getElementById('btnSaveBrokerConfig');
+  const btnText = document.getElementById('btnSaveBrokerConfigText');
+
+  const payload = { provider: prov };
+  if (prov === 'stockbit' && sbToken) payload.stockbit_token = sbToken;
+  if (prov === 'goapi' && goKey) payload.goapi_key = goKey;
+
+  try {
+    if (btnText) btnText.textContent = 'Menyimpan...';
+    if (btn) btn.disabled = true;
+    const res = await fetch('/api/broker/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Gagal menyimpan.');
+    showToast('Konfigurasi Broker Summary berhasil disimpan!', 'success');
+    if (btnText) btnText.textContent = '✓ Tersimpan';
+    setTimeout(() => { if (btnText) btnText.textContent = 'Simpan Pengaturan Broker'; }, 2000);
+    await loadBrokerConfig();
+  } catch (err) {
+    showToast('Gagal menyimpan konfigurasi broker: ' + err.message, 'error');
+    if (btnText) btnText.textContent = 'Simpan Pengaturan Broker';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function toggleExpertPillarsView() {

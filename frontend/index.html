@@ -1284,7 +1284,49 @@
           </button>
         </div>
 
-        <!-- 3. Unggah Berkas Excel -->
+        <!-- 3. Integrasi Broker Summary (Stockbit / GoAPI) -->
+        <div class="p-3 rounded-xl glass-subcard space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="font-bold text-white flex items-center gap-1.5">
+              <span>📊</span>
+              <span>Integrasi Broker Summary (Bandarmologi)</span>
+            </div>
+            <span id="brokerConfigBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/10">
+              Belum Aktif
+            </span>
+          </div>
+          <p class="text-slate-300 leading-relaxed text-[11px]">
+            Tarik data Top 3 Broker Accumulation &amp; Bandar Avg Price asli bursa secara otomatis via Stockbit atau GoAPI.
+          </p>
+          <div class="space-y-2 pt-1">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Pilih Provider:</label>
+              <select id="brokerProviderSelect" onchange="toggleBrokerProviderFields()" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950/60 border border-white/10 text-white text-xs">
+                <option value="stockbit">Stockbit (Bearer Token)</option>
+                <option value="goapi">GoAPI.io (API Key)</option>
+              </select>
+            </div>
+            <div id="fieldStockbitToken">
+              <label class="block text-[11px] text-slate-400 mb-1">Stockbit Bearer Token:</label>
+              <input type="password" id="inputStockbitToken" placeholder="Paste Bearer Token Stockbit di sini..." class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950/60 border border-white/10 font-mono text-white text-xs focus:border-indigo-400 focus:outline-none" />
+            </div>
+            <div id="fieldGoapiKey" class="hidden">
+              <label class="block text-[11px] text-slate-400 mb-1">GoAPI.io API Key:</label>
+              <input type="password" id="inputGoapiKey" placeholder="Paste API Key GoAPI di sini..." class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950/60 border border-white/10 font-mono text-white text-xs focus:border-indigo-400 focus:outline-none" />
+            </div>
+            <button
+              type="button"
+              id="btnSaveBrokerConfig"
+              onclick="saveBrokerConfigFromModal()"
+              class="w-full py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>💾</span>
+              <span id="btnSaveBrokerConfigText">Simpan Pengaturan Broker</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4. Unggah Berkas Excel -->
         <div class="p-3 rounded-xl glass-subcard space-y-2">
           <div class="font-bold text-white flex items-center gap-1.5">
             <span>📄</span>
