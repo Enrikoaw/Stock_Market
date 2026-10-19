@@ -28,7 +28,7 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "broker_api_conf
 def load_broker_api_config() -> dict[str, Any]:
     """Memuat konfigurasi API broker dari file data/broker_api_config.json atau environment variables."""
     cfg = {
-        "provider": os.environ.get("BROKER_API_PROVIDER", "goapi").strip().lower(),  # goapi / stockbit / mock
+        "provider": os.environ.get("BROKER_API_PROVIDER", "stockbit").strip().lower(),  # stockbit / goapi / mock
         "goapi_key": os.environ.get("GOAPI_KEY", "").strip(),
         "stockbit_token": os.environ.get("STOCKBIT_BEARER_TOKEN", "").strip(),
         "delay_ms": int(os.environ.get("BROKER_FETCH_DELAY_MS", "1000")),
@@ -42,6 +42,13 @@ def load_broker_api_config() -> dict[str, Any]:
                     cfg.update({k: v for k, v in saved.items() if v is not None})
         except Exception:
             pass
+
+    # Otomatis pilih provider yang memiliki kredensial aktif
+    if cfg.get("stockbit_token") and not cfg.get("goapi_key"):
+        cfg["provider"] = "stockbit"
+    elif cfg.get("goapi_key") and not cfg.get("stockbit_token"):
+        cfg["provider"] = "goapi"
+
     return cfg
 
 
@@ -143,26 +150,46 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
     d = payload.get("data", payload) if isinstance(payload.get("data"), dict) else payload
 
     # Format Stockbit marketdetectors
-    if isinstance(d, dict) and "bandar_detector" in d and isinstance(d["bandar_detector"], dict):
-        d = d["bandar_detector"]
+    bd = d.get("bandar_detector") if isinstance(d, dict) and isinstance(d.get("bandar_detector"), dict) else (d if isinstance(d, dict) else {})
 
     buyers = (
+        bd.get("top_buyers") or
+        bd.get("top_buyer") or
+        bd.get("broker_buy") or
+        bd.get("buyers") or
+        bd.get("buy") or
         d.get("top_buyers") or
+        d.get("top_buyer") or
         d.get("broker_buy") or
         d.get("buyers") or
-        d.get("buy") or
         []
     )
     sellers = (
+        bd.get("top_sellers") or
+        bd.get("top_seller") or
+        bd.get("broker_sell") or
+        bd.get("sellers") or
+        bd.get("sell") or
         d.get("top_sellers") or
+        d.get("top_seller") or
         d.get("broker_sell") or
         d.get("sellers") or
-        d.get("sell") or
         []
     )
 
+    if not buyers and isinstance(bd.get("top3"), dict):
+        buyers = bd["top3"].get("buyer") or bd["top3"].get("buyers") or []
+        sellers = bd["top3"].get("seller") or bd["top3"].get("sellers") or []
+
+    def _extract_code(item: dict) -> str:
+        for k in ("broker_code", "broker", "code", "brokerCode", "b_code", "symbol"):
+            c = str(item.get(k) or "").strip().upper()
+            if len(c) == 2 and c.isalpha():
+                return c
+        return ""
+
     def _norm(item: dict, is_buyer: bool) -> dict:
-        code = str(item.get("broker_code") or item.get("code") or item.get("broker") or "").upper().strip()
+        code = _extract_code(item)
         val = abs(float(
             item.get("net_val") or
             item.get("nval") or
@@ -181,8 +208,8 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
         )
         return {"code": code, "net_val": val, "avg_price": price}
 
-    norm_buyers = [_norm(b, True) for b in buyers if isinstance(b, dict) and (b.get("broker_code") or b.get("code") or b.get("broker"))]
-    norm_sellers = [_norm(s, False) for s in sellers if isinstance(s, dict) and (s.get("broker_code") or s.get("code") or s.get("broker"))]
+    norm_buyers = [_norm(b, True) for b in buyers if isinstance(b, dict) and _extract_code(b)]
+    norm_sellers = [_norm(s, False) for s in sellers if isinstance(s, dict) and _extract_code(s)]
     return norm_buyers, norm_sellers
 
 
@@ -361,3 +388,66 @@ def run_stage2_broker_enrichment(
 
     print(f"[BrokerPipeline] Stage 2 Selesai. {len(enriched)} saham berhasil diperkaya dengan data Broker Summary.")
     return enriched
+
+
+def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | None = None) -> dict:
+    """Mengambil dan memperkaya data broker summary untuk 1 saham secara on-demand."""
+    from datetime import datetime, timedelta
+
+    config = cfg or load_broker_api_config()
+    provider = config.get("provider", "stockbit")
+    ticker = str(s.get("ticker", "")).upper().strip()
+    if not ticker:
+        return s
+
+    raw_data = None
+    dates_to_try = [date_str] if date_str else []
+    now = datetime.now()
+    for d in range(7):
+        dt = (now - timedelta(days=d)).strftime("%Y-%m-%d")
+        if dt not in dates_to_try:
+            dates_to_try.append(dt)
+
+    for dt_candidate in dates_to_try:
+        try:
+            if provider == "stockbit" and config.get("stockbit_token"):
+                raw_data = fetch_broker_summary_stockbit(ticker, dt_candidate, config["stockbit_token"])
+            elif provider == "goapi" and config.get("goapi_key"):
+                raw_data = fetch_broker_summary_goapi(ticker, dt_candidate, config["goapi_key"])
+            if raw_data:
+                break
+        except Exception as ex:
+            print(f"[BrokerOnDemand] Error fetch {ticker} on {dt_candidate}: {ex}")
+
+    if raw_data:
+        top_buyers, top_sellers = extract_brokers_from_payload(raw_data)
+        metrics = analyze_broker_summary(top_buyers, top_sellers)
+
+        s["broker_analysis"] = metrics
+        s["has_broker_summary"] = True
+        s["has_real_broker_summary"] = bool(metrics.get("top_buyers_list") or metrics.get("top_sellers_list"))
+        s["bdr_pct"] = metrics["bdr"]
+        s["top_buyers_list"] = metrics.get("top_buyers_list", [b["code"] for b in top_buyers[:3]])
+        s["top_sellers_list"] = metrics.get("top_sellers_list", [sel["code"] for sel in top_sellers[:3]])
+        s["top_buyers"] = ", ".join(s["top_buyers_list"])
+        s["top_sellers"] = ", ".join(s["top_sellers_list"])
+
+        if metrics.get("bandar_avg"):
+            s["bandar_avg_buy"] = metrics["bandar_avg"]
+            if s.get("close") and s["close"] > 0:
+                s["diff_bandar_avg_pct"] = round(((s["close"] - s["bandar_avg_buy"]) / s["bandar_avg_buy"]) * 100.0, 2)
+
+        if metrics.get("score_modifier"):
+            s["smart_money_score"] = min(100, max(5, int(s.get("smart_money_score", 50) + metrics["score_modifier"])))
+
+        if metrics.get("retail_trap"):
+            s["retail_trap"] = True
+            s["trigger_type"] = "DISTRIBUTION_WARNING"
+            s["trigger_label"] = "Distribusi (Ritel Trap)"
+
+        if metrics.get("bandar_avg") and s.get("trading_plan"):
+            orig_entry = s["trading_plan"].get("entry_high", s.get("close", 0))
+            s["trading_plan"]["bandar_avg_buy"] = metrics["bandar_avg"]
+            s["trading_plan"]["entry_high"] = min(orig_entry, metrics["bandar_avg"])
+
+    return s

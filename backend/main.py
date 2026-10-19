@@ -43,6 +43,7 @@ from broker_summary_fetcher import (
     save_broker_api_config,
     run_stage2_broker_enrichment,
     test_broker_connection,
+    enrich_single_stock_broker,
 )
 from portfolio_tracker import PortfolioTracker
 from signal_tracker import SignalTracker
@@ -617,6 +618,16 @@ def get_screener_data(
     }
 
 
+def _has_real_broker_codes(item: dict) -> bool:
+    buyers = item.get("top_buyers_list") or item.get("top_buyers") or []
+    if isinstance(buyers, str):
+        buyers = [b.strip() for b in buyers.split(",") if b.strip()]
+    for b in buyers:
+        if len(b) == 2 and b.isalpha() and b.isupper():
+            return True
+    return False
+
+
 @app.get("/api/stock/{ticker}")
 def get_stock_detail(ticker: str) -> dict:
     if STATE["analysis"] is None:
@@ -626,7 +637,63 @@ def get_stock_detail(ticker: str) -> dict:
     details_map = STATE["analysis"]["details"]
     if key not in details_map:
         raise HTTPException(status_code=404, detail=f"Saham '{key}' tidak ditemukan pada dataset aktif.")
-    return details_map[key]
+
+    item = details_map[key]
+
+    # Auto-fetch Broker Summary on-demand jika belum ada kode broker sah dan token tersedia
+    if not _has_real_broker_codes(item):
+        cfg = load_broker_api_config()
+        if cfg.get("stockbit_token") or cfg.get("goapi_key"):
+            try:
+                latest_dt = str(item.get("date") or STATE["analysis"]["kpis"].get("latest_date") or "")
+                enrich_single_stock_broker(item, latest_dt, cfg)
+            except Exception as ex:
+                print(f"[BrokerOnDemand] Error auto-enrich {key}: {ex}")
+
+    return item
+
+
+@app.post("/api/stock/{ticker}/fetch-broker")
+def fetch_single_stock_broker_endpoint(ticker: str) -> dict:
+    if STATE["analysis"] is None:
+        init_default_state()
+
+    key = ticker.strip().upper()
+    details_map = STATE["analysis"]["details"]
+    if key not in details_map:
+        raise HTTPException(status_code=404, detail=f"Saham '{key}' tidak ditemukan pada dataset aktif.")
+
+    cfg = load_broker_api_config()
+    if not cfg.get("stockbit_token") and not cfg.get("goapi_key"):
+        raise HTTPException(
+            status_code=400,
+            detail="Token Stockbit belum diatur. Silakan buka menu Pengaturan (Alat ⚙️) dan simpan Bearer Token Stockbit Anda.",
+        )
+
+    item = details_map[key]
+    latest_dt = str(item.get("date") or STATE["analysis"]["kpis"].get("latest_date") or "")
+    enrich_single_stock_broker(item, latest_dt, cfg)
+
+    # Sinkronisasi ke list analysis["stocks"]
+    for s in STATE["analysis"].get("stocks", []):
+        if s.get("ticker", "").upper() == key:
+            for field in (
+                "broker_analysis", "has_broker_summary", "has_real_broker_summary", "bdr_pct",
+                "top_buyers_list", "top_sellers_list", "top_buyers", "top_sellers",
+                "bandar_avg_buy", "diff_bandar_avg_pct", "smart_money_score", "retail_trap",
+                "trigger_type", "trigger_label"
+            ):
+                if field in item:
+                    s[field] = item[field]
+            break
+
+    if not _has_real_broker_codes(item):
+        raise HTTPException(
+            status_code=502,
+            detail=f"Tidak ada data broker summary yang diterima untuk #{key}. Pastikan token Stockbit Anda masih aktif dan belum expired.",
+        )
+
+    return item
 
 
 TICKER_CANDLE_CACHE: dict[tuple[str, str], dict] = {}

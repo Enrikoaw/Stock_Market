@@ -366,30 +366,37 @@ const RETAIL_BROKERS = new Set(['YP', 'PD', 'XC', 'XL', 'KK', 'NI', 'SQ', 'BQ', 
 const INST_FOREIGN_BROKERS = new Set(['AK', 'BK', 'ZP', 'KZ', 'RX', 'YU', 'CC', 'CS', 'DX', 'LG', 'OD', 'BB', 'CP']);
 
 function formatBrokerPills(brokerCodes, isBuyer = true) {
-  if (!brokerCodes || !brokerCodes.length) {
-    return `<span class="text-[10px] text-slate-400 font-mono">-</span>`;
+  if (!brokerCodes) {
+    return `<span class="text-[10px] text-slate-400 font-sans italic">Belum ada data</span>`;
   }
-  const codes = Array.isArray(brokerCodes)
+  const rawList = Array.isArray(brokerCodes)
     ? brokerCodes
     : String(brokerCodes).split(',').map(s => s.trim()).filter(Boolean);
-  if (!codes.length) return `<span class="text-[10px] text-slate-400 font-mono">-</span>`;
 
-  return codes.map(code => {
-    const clean = code.toUpperCase();
+  // Saring HANYA kode broker bursa efek yang sah (2 huruf kapital: AK, BK, YP, PD, dll.)
+  const realCodes = rawList
+    .map(c => String(c).trim().toUpperCase())
+    .filter(c => /^[A-Z]{2}$/.test(c));
+
+  if (!realCodes.length) {
+    return `<span class="text-[10px] text-amber-500/90 dark:text-amber-400/90 font-sans italic">Belum ditarik</span>`;
+  }
+
+  return realCodes.map(code => {
     if (isBuyer) {
-      if (INST_FOREIGN_BROKERS.has(clean)) {
-        return `<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[10px] border border-emerald-500/40 inline-flex items-center gap-0.5" title="Broker Institusi / Smart Money: ${clean}"><span>🏛️</span>${clean}</span>`;
-      } else if (RETAIL_BROKERS.has(clean)) {
-        return `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-mono text-[10px] border border-amber-500/30 inline-flex items-center gap-0.5" title="Broker Ritel: ${clean}"><span>👥</span>${clean}</span>`;
+      if (INST_FOREIGN_BROKERS.has(code)) {
+        return `<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[10px] border border-emerald-500/40 inline-flex items-center gap-0.5" title="Broker Institusi / Smart Money: ${code}"><span>🏛️</span>${code}</span>`;
+      } else if (RETAIL_BROKERS.has(code)) {
+        return `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-mono text-[10px] border border-amber-500/30 inline-flex items-center gap-0.5" title="Broker Ritel: ${code}"><span>👥</span>${code}</span>`;
       }
-      return `<span class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono font-bold text-[10px] border border-emerald-500/20" title="${clean}">${clean}</span>`;
+      return `<span class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono font-bold text-[10px] border border-emerald-500/20" title="${code}">${code}</span>`;
     } else {
-      if (RETAIL_BROKERS.has(clean)) {
-        return `<span class="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 font-mono font-bold text-[10px] border border-rose-500/30 inline-flex items-center gap-0.5" title="Broker Ritel Jual (Bagus): ${clean}"><span>👥</span>${clean}</span>`;
-      } else if (INST_FOREIGN_BROKERS.has(clean)) {
-        return `<span class="px-1.5 py-0.5 rounded bg-rose-900/40 text-rose-400 font-mono text-[10px] border border-rose-500/30 inline-flex items-center gap-0.5" title="Institusi Keluar: ${clean}"><span>⚠️</span>${clean}</span>`;
+      if (RETAIL_BROKERS.has(code)) {
+        return `<span class="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 font-mono font-bold text-[10px] border border-rose-500/30 inline-flex items-center gap-0.5" title="Broker Ritel Jual (Bagus): ${code}"><span>👥</span>${code}</span>`;
+      } else if (INST_FOREIGN_BROKERS.has(code)) {
+        return `<span class="px-1.5 py-0.5 rounded bg-rose-900/40 text-rose-400 font-mono text-[10px] border border-rose-500/30 inline-flex items-center gap-0.5" title="Institusi Keluar: ${code}"><span>⚠️</span>${code}</span>`;
       }
-      return `<span class="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono text-[10px] border border-rose-500/20" title="${clean}">${clean}</span>`;
+      return `<span class="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono text-[10px] border border-rose-500/20" title="${code}">${code}</span>`;
     }
   }).join(' ');
 }
@@ -1064,6 +1071,45 @@ async function testBrokerConfigFromModal() {
   }
 }
 
+async function fetchBrokerSummaryForSelectedStock() {
+  if (!selectedTicker) return;
+  const btn = document.getElementById('btnFetchBrokerSingle');
+  const btnText = document.getElementById('btnFetchBrokerSingleText');
+
+  if (btnText) btnText.textContent = 'Menarik...';
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch(`/api/stock/${encodeURIComponent(selectedTicker)}/fetch-broker`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (res.status === 400) {
+        // Token belum dimasukkan, buka modal settings
+        openSettingsModal();
+        const inputSb = document.getElementById('inputStockbitToken');
+        if (inputSb) {
+          inputSb.focus();
+          inputSb.classList.add('ring-2', 'ring-indigo-400');
+          setTimeout(() => inputSb.classList.remove('ring-2', 'ring-indigo-400'), 3000);
+        }
+      }
+      throw new Error(data.detail || 'Gagal menarik data broker summary');
+    }
+
+    selectedStockDetail = data;
+    renderInspectorPanel(data);
+    showToast(`✓ Broksum #${selectedTicker} berhasil ditarik: ${data.top_buyers || '-'} vs ${data.top_sellers || '-'}`, 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btnText) btnText.textContent = 'Perbarui Broksum';
+    if (btn) btn.disabled = false;
+  }
+}
+
 function toggleExpertPillarsView() {
   const content = document.getElementById('expertPillarsContent');
   const btn = document.getElementById('btnTogglePillars');
@@ -1716,6 +1762,22 @@ function renderInspectorPanel(d) {
         ? `Diskon ${Math.abs(bandarDiff)}% dr Modal Bandar`
         : `Jarak ${bandarDiffSign}${bandarDiff}%`;
       planBandarAvgDiff.className = `font-mono ${bandarDiff <= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`;
+    }
+
+    const hasRealBuyers = Array.isArray(d.top_buyers_list) && d.top_buyers_list.some(c => /^[A-Z]{2}$/.test(c));
+    const hasRealSellers = Array.isArray(d.top_sellers_list) && d.top_sellers_list.some(c => /^[A-Z]{2}$/.test(c));
+    const hasRealBrokerData = hasRealBuyers || hasRealSellers;
+
+    const btnFetchSingle = document.getElementById('btnFetchBrokerSingle');
+    const btnFetchSingleText = document.getElementById('btnFetchBrokerSingleText');
+    if (btnFetchSingle && btnFetchSingleText) {
+      if (hasRealBrokerData) {
+        btnFetchSingleText.textContent = 'Perbarui Broksum';
+        btnFetchSingle.className = 'px-2 py-0.5 rounded-md bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold transition active:scale-95 flex items-center gap-1 cursor-pointer';
+      } else {
+        btnFetchSingleText.textContent = 'Tarik Broksum';
+        btnFetchSingle.className = 'px-2 py-0.5 rounded-md bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-700 dark:text-indigo-300 border border-indigo-400/30 text-[10px] font-semibold transition active:scale-95 flex items-center gap-1 cursor-pointer';
+      }
     }
 
     if (btnWatch) {
