@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=73.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=74.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -360,9 +360,115 @@
       <div id="todayCandidatesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <!-- Kartu di-render dinamis oleh app.js -->
         <div class="p-6 rounded-2xl glass-panel text-center text-slate-300 text-xs col-span-full py-12">
-          <span class="inline-block animate-spin text-2xl mb-2">🔄</span>
           <p>Menganalisis saham kandidat terbaik hari ini...</p>
         </div>
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- MODUL BERITA & SENTIMEN PASAR SAHAM (INTEGRASI SMART MONEY)       -->
+      <!-- ================================================================= -->
+      <div id="sectionMarketNews" class="glass-panel rounded-2xl p-4 sm:p-5 border border-white/[0.08] space-y-4 shadow-lg">
+        
+        <!-- Header Modul Berita (Clean & Professional, Tanpa Emoji) -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.08] pb-3.5">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400">Arus Berita &amp; Katalis Pasar</span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">BEI Terverifikasi</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">Informasi dan sentimen emiten terkini yang dikorelasikan langsung dengan analisis Smart Money &amp; Trading Plan.</p>
+          </div>
+
+          <!-- Filter Kategori Berita & Refresh -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <div class="flex items-center bg-slate-900/80 p-0.5 rounded-xl border border-white/[0.08] text-[11px] font-medium">
+              <button
+                type="button"
+                onclick="setNewsCategoryFilter('ALL')"
+                id="newsTab-ALL"
+                class="news-tab-btn px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-semibold transition"
+              >
+                Semua
+              </button>
+              <button
+                type="button"
+                onclick="setNewsCategoryFilter('PICKS')"
+                id="newsTab-PICKS"
+                class="news-tab-btn px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition"
+              >
+                Saham Pilihan
+              </button>
+              <button
+                type="button"
+                onclick="setNewsCategoryFilter('POSITIVE')"
+                id="newsTab-POSITIVE"
+                class="news-tab-btn px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition"
+              >
+                Katalis Positif
+              </button>
+              <button
+                type="button"
+                onclick="setNewsCategoryFilter('NEGATIVE')"
+                id="newsTab-NEGATIVE"
+                class="news-tab-btn px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition"
+              >
+                Sentimen Negatif
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onclick="loadMarketNews(true)"
+              id="btnRefreshNews"
+              class="px-2.5 py-1 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 text-[11px] font-medium border border-white/10 transition flex items-center gap-1 cursor-pointer"
+              title="Perbarui Berita Pasar Terbaru"
+            >
+              <span id="refreshNewsLabel">Perbarui</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Feed List Kontainer Berita -->
+        <div id="marketNewsList" class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <div class="p-8 rounded-xl glass-subcard text-center text-slate-400 text-xs col-span-full">
+            Memuat berita dan sentimen pasar...
+          </div>
+        </div>
+
+        <!-- Panel Korelasi Sentimen Berita dengan Rencana Trading -->
+        <div id="newsCorrelationBox" class="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 space-y-2.5 hidden">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-mono font-bold text-emerald-400 uppercase tracking-wider">Korelasi Sentimen Berita &amp; Rencana Trading</span>
+            <span id="corrTickerBadge" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">#IHSG</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+            <div class="p-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06]">
+              <div class="text-[10px] text-slate-400">Status Teknikal / Smart Money</div>
+              <div id="corrTechText" class="font-bold text-white mt-0.5 truncate">-</div>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06]">
+              <div class="text-[10px] text-slate-400">Sentimen Berita Terkait</div>
+              <div id="corrNewsTitle" class="font-bold text-slate-200 mt-0.5 line-clamp-1">-</div>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06]">
+              <div class="text-[10px] text-slate-400">Rekomendasi Keputusan</div>
+              <div id="corrActionText" class="font-semibold text-emerald-300 mt-0.5 line-clamp-2">-</div>
+            </div>
+          </div>
+
+          <div id="corrActionBtnRow" class="flex justify-end pt-0.5 hidden">
+            <button
+              id="btnCorrExploreStock"
+              type="button"
+              class="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1 cursor-pointer"
+            >
+              <span>Buka Analisis Saham di Tab Jelajah</span>
+              <span>&rarr;</span>
+            </button>
+          </div>
+        </div>
+
       </div>
 
     </section>
@@ -1905,6 +2011,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=73.0"></script>
+  <script src="/static/app.js?v=74.0"></script>
 </body>
 </html>

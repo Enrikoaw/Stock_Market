@@ -62,6 +62,7 @@ from screener_engine import (
     read_multiple_uploaded_files,
     read_uploaded_file,
 )
+from news_fetcher import get_market_news
 
 DATA_DIR = BASE_DIR / "data"
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -656,6 +657,42 @@ def get_screener_data(
         "kpis": analysis["kpis"],
         "count": len(stocks),
         "stocks": stocks,
+    }
+
+
+@app.get("/api/news")
+def get_news_endpoint(
+    category: str = Query(default="ALL", description="Filter kategori berita: ALL, PICKS, POSITIVE, NEGATIVE"),
+    ticker: Optional[str] = Query(default=None, description="Filter kode saham tertentu"),
+    refresh: bool = Query(default=False, description="Paksa refresh RSS dari sumber berita"),
+    limit: int = Query(default=20, ge=1, le=50, description="Batas jumlah berita"),
+) -> dict:
+    """Endpoint Berita & Sentimen Pasar Saham BEI / IDX terintegrasi Smart Money."""
+    known_tickers = set()
+    analysis_stocks = []
+    if STATE.get("analysis") and STATE["analysis"].get("stocks"):
+        analysis_stocks = STATE["analysis"]["stocks"]
+        known_tickers = {str(s.get("ticker", "")).upper() for s in analysis_stocks if s.get("ticker")}
+
+    news_items = get_market_news(known_tickers=known_tickers, analysis_stocks=analysis_stocks, force_refresh=refresh)
+
+    cat_upper = category.upper().strip()
+    if ticker and ticker.strip():
+        t_clean = ticker.upper().strip()
+        news_items = [n for n in news_items if n.get("ticker") == t_clean or t_clean in n.get("other_tickers", [])]
+
+    if cat_upper == "PICKS":
+        news_items = [n for n in news_items if n.get("is_pick")]
+    elif cat_upper == "POSITIVE":
+        news_items = [n for n in news_items if n.get("sentiment") == "POSITIVE"]
+    elif cat_upper == "NEGATIVE":
+        news_items = [n for n in news_items if n.get("sentiment") == "NEGATIVE"]
+
+    return {
+        "status": "success",
+        "category": cat_upper,
+        "count": len(news_items[:limit]),
+        "items": news_items[:limit],
     }
 
 

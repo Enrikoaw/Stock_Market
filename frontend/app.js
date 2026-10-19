@@ -169,6 +169,7 @@ function switchMainTab(tabName) {
 
   if (tabName === 'today') {
     renderTodayCandidates(currentStocks);
+    loadMarketNews(false);
   } else if (tabName === 'watchlist') {
     renderFavorites();
     loadTracker();
@@ -650,6 +651,177 @@ function renderTodayCandidates(stocks) {
 function selectStockAndGoToInspector(ticker) {
   switchMainTab('explore');
   selectStock(ticker, true, true);
+}
+
+// =====================================================================
+// MODUL BERITA & SENTIMEN PASAR SAHAM (INTEGRASI SMART MONEY)
+// =====================================================================
+let cachedNewsItems = [];
+let activeNewsCategory = 'ALL';
+let isNewsLoading = false;
+
+async function loadMarketNews(forceRefresh = false) {
+  if (isNewsLoading) return;
+  const listEl = document.getElementById('marketNewsList');
+  const refreshLabel = document.getElementById('refreshNewsLabel');
+  const refreshBtn = document.getElementById('btnRefreshNews');
+
+  isNewsLoading = true;
+  if (refreshLabel) refreshLabel.textContent = 'Memuat...';
+  if (refreshBtn) refreshBtn.disabled = true;
+
+  try {
+    const res = await fetch(`/api/news?category=${encodeURIComponent(activeNewsCategory)}&refresh=${forceRefresh ? 'true' : 'false'}&limit=20`);
+    if (!res.ok) throw new Error('Gagal memuat berita pasar');
+    const data = await res.json();
+    cachedNewsItems = data.items || [];
+    renderMarketNewsFeed(cachedNewsItems);
+  } catch (err) {
+    if (listEl && (!cachedNewsItems || cachedNewsItems.length === 0)) {
+      listEl.innerHTML = `
+        <div class="p-6 rounded-xl glass-subcard text-center text-slate-400 text-xs col-span-full">
+          Tidak dapat memuat feed berita saat ini. Silakan klik tombol Perbarui.
+        </div>
+      `;
+    }
+  } finally {
+    isNewsLoading = false;
+    if (refreshLabel) refreshLabel.textContent = 'Perbarui';
+    if (refreshBtn) refreshBtn.disabled = false;
+  }
+}
+
+function setNewsCategoryFilter(cat) {
+  activeNewsCategory = cat;
+  const tabs = ['ALL', 'PICKS', 'POSITIVE', 'NEGATIVE'];
+  tabs.forEach((t) => {
+    const btn = document.getElementById(`newsTab-${t}`);
+    if (!btn) return;
+    if (t === cat) {
+      btn.className = 'news-tab-btn px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-semibold transition';
+    } else {
+      btn.className = 'news-tab-btn px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition';
+    }
+  });
+  loadMarketNews(false);
+}
+
+function renderMarketNewsFeed(items) {
+  const listEl = document.getElementById('marketNewsList');
+  if (!listEl) return;
+
+  if (!items || items.length === 0) {
+    listEl.innerHTML = `
+      <div class="p-6 rounded-xl glass-subcard text-center text-slate-400 text-xs col-span-full">
+        Tidak ada berita pada kategori ini saat ini.
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = items.map((n, idx) => {
+    const isPos = n.sentiment === 'POSITIVE';
+    const isNeg = n.sentiment === 'NEGATIVE';
+    const sentColor = isPos
+      ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/15'
+      : isNeg
+      ? 'border-rose-500/30 text-rose-300 bg-rose-500/15'
+      : 'border-slate-500/30 text-slate-300 bg-slate-500/15';
+
+    const safeTicker = escHtml(n.ticker || 'IHSG');
+    const safeTitle = escHtml(n.title || '');
+    const safeSummary = escHtml(n.summary || '');
+    const safeSource = escHtml(n.source || 'IDX');
+    const safeRelTime = escHtml(n.relative_time || '');
+    const safeSentLabel = escHtml(n.sentiment_label || 'Informasi');
+
+    return `
+      <div
+        onclick="inspectNewsCorrelation(${idx})"
+        class="p-4 rounded-xl bg-slate-900/60 hover:bg-slate-900/90 border border-white/[0.06] hover:border-emerald-400/35 transition cursor-pointer flex flex-col justify-between gap-3 group"
+      >
+        <div class="space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <span class="font-mono font-bold text-xs text-white group-hover:text-emerald-400 transition">
+                #${safeTicker}
+              </span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded border ${sentColor}">
+                ${safeSentLabel}
+              </span>
+            </div>
+            <span class="text-[11px] text-slate-400 font-mono">${safeRelTime}</span>
+          </div>
+
+          <h3 class="text-xs font-bold text-slate-100 group-hover:text-white leading-snug line-clamp-2">
+            ${safeTitle}
+          </h3>
+
+          ${safeSummary ? `<p class="text-[11px] text-slate-400 leading-relaxed line-clamp-2">${safeSummary}</p>` : ''}
+        </div>
+
+        <div class="flex items-center justify-between text-[11px] pt-2 border-t border-white/[0.05]">
+          <span class="text-slate-400 font-mono">${safeSource}</span>
+          <div class="flex items-center gap-3">
+            ${n.link ? `<a href="${escHtml(n.link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="text-slate-400 hover:text-white underline text-[10px]">Buka Sumber</a>` : ''}
+            <span class="text-emerald-400 font-semibold text-[10px] group-hover:translate-x-0.5 transition flex items-center gap-0.5">
+              <span>Korelasi</span>
+              <span>&rarr;</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function inspectNewsCorrelation(idx) {
+  const item = cachedNewsItems[idx];
+  if (!item) return;
+
+  const box = document.getElementById('newsCorrelationBox');
+  const badge = document.getElementById('corrTickerBadge');
+  const techEl = document.getElementById('corrTechText');
+  const newsEl = document.getElementById('corrNewsTitle');
+  const actionEl = document.getElementById('corrActionText');
+  const btnRow = document.getElementById('corrActionBtnRow');
+  const btnExplore = document.getElementById('btnCorrExploreStock');
+
+  if (!box) return;
+  box.classList.remove('hidden');
+
+  const corr = item.correlation || {};
+  const ticker = item.ticker || 'IHSG';
+
+  if (badge) badge.textContent = `#${ticker}`;
+  if (newsEl) newsEl.textContent = item.title || '-';
+
+  if (corr.score != null) {
+    if (techEl) {
+      techEl.textContent = `Skor ${corr.score}/100 (${corr.trigger_label || 'Aktif'})`;
+    }
+  } else {
+    if (techEl) {
+      techEl.textContent = ticker === 'IHSG' ? 'Indeks Harga Saham Gabungan (IHSG)' : 'Belum Masuk Pantauan Sinyal Aktif';
+    }
+  }
+
+  if (actionEl) {
+    actionEl.textContent = corr.action_eval || 'Pantau pergerakan volume dan aksi akumulasi Smart Money.';
+  }
+
+  if (btnRow && btnExplore) {
+    if (ticker && ticker !== 'IHSG') {
+      btnRow.classList.remove('hidden');
+      btnExplore.onclick = () => {
+        selectStockAndGoToInspector(ticker);
+      };
+    } else {
+      btnRow.classList.add('hidden');
+    }
+  }
+
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // =====================================================================
@@ -3531,4 +3703,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 6. Jalankan kalkulasi default di modal kalkulator lot
   runModalLotCalculation();
+
+  // 7. Muat berita pasar terkini untuk tab Pilihan Hari Ini
+  loadMarketNews(false);
 });
