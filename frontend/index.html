@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=70.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=72.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -201,7 +201,7 @@
           id="btnOpenSettingsModal"
           onclick="openSettingsModal()"
           class="hidden md:inline-flex p-2 rounded-xl bg-slate-900/60 hover:bg-white/[0.08] text-slate-200 hover:text-white border border-white/[0.08] text-xs font-semibold transition active:scale-95"
-          title="Pengaturan &amp; Alat Teknis (Sync Kilat, Full IDX, Telegram, Unggah File, Panduan Rumus)"
+          title="Pengaturan &amp; Alat Teknis (Sync Kilat, Full IDX, Unggah File, Panduan Rumus)"
           aria-label="Pengaturan dan Alat"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -719,54 +719,6 @@
               <span id="planRationale" class="text-slate-600 dark:text-slate-300 truncate max-w-[180px]">-</span>
             </div>
 
-            <!-- Smart Money Broker Summary Flow (Pembeli Institusi vs Penjual Ritel) -->
-            <div id="planBrokerFlowBox" class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/50 border border-slate-200 dark:border-white/[0.08] space-y-2 text-xs">
-              <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                  <span>🐋</span>
-                  <span>Smart Money Flow (Broker Summary)</span>
-                </span>
-                <div class="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    id="btnFetchBrokerSingle"
-                    onclick="fetchBrokerSummaryForSelectedStock()"
-                    class="px-2 py-0.5 rounded-md bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-700 dark:text-indigo-300 border border-indigo-400/30 text-[10px] font-semibold transition active:scale-95 flex items-center gap-1 cursor-pointer"
-                    title="Tarik data Broker Summary Stockbit untuk saham ini sekarang"
-                  >
-                    <span>🔄</span>
-                    <span id="btnFetchBrokerSingleText">Tarik Broksum</span>
-                  </button>
-                  <span id="planBdrBadge" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                    BDR +0.0%
-                  </span>
-                </div>
-              </div>
-              <div class="grid grid-cols-2 gap-2 text-[11px]">
-                <div class="p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-                  <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mb-1 flex items-center gap-1">
-                    <span>🏛️</span>
-                    <span>Top Pembeli (Smart Money):</span>
-                  </div>
-                  <div id="planBuyersList" class="flex flex-wrap gap-1 font-mono font-bold text-emerald-700 dark:text-emerald-300">
-                    -
-                  </div>
-                </div>
-                <div class="p-2 rounded-lg bg-rose-500/5 border border-rose-500/20">
-                  <div class="text-[10px] text-rose-600 dark:text-rose-400 font-semibold mb-1 flex items-center gap-1">
-                    <span>👥</span>
-                    <span>Top Penjual (Ritel/Distribusi):</span>
-                  </div>
-                  <div id="planSellersList" class="flex flex-wrap gap-1 font-mono font-bold text-rose-700 dark:text-rose-300">
-                    -
-                  </div>
-                </div>
-              </div>
-              <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200/60 dark:border-white/5">
-                <span>Modal Beli Bandar (Bandar Avg): <strong id="planBandarAvg" class="font-mono text-slate-800 dark:text-slate-200">Rp -</strong></span>
-                <span id="planBandarAvgDiff" class="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">-</span>
-              </div>
-            </div>
 
             <!-- Tombol Aksi: Masuk Watchlist Tracker & Hitung Lot -->
             <div class="grid grid-cols-2 gap-2 pt-1">
@@ -1263,46 +1215,7 @@
           </div>
         </div>
 
-        <!-- 1. Sinkronisasi Data Pasar -->
-        <div class="p-3 rounded-xl glass-subcard space-y-2">
-          <div class="font-bold text-white flex items-center gap-1.5">
-            <span>🔄</span>
-            <span>Sinkronisasi Data Bursa (BEI)</span>
-          </div>
-          <p class="text-slate-300 leading-relaxed">
-            Pembaruan seluruh 844 saham BEI secara menyeluruh &amp; evaluasi otomatis Watchlist Tracker sekali klik.
-          </p>
-          <div class="pt-1">
-            <button
-              id="btnModalUnifiedSync"
-              onclick="triggerUnifiedSync(); closeSettingsModal();"
-              class="w-full py-2 px-3 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 font-bold transition flex items-center justify-center gap-2"
-            >
-              <span>🔄</span>
-              <span>Sync Seluruh 844 Saham Sekarang</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 2. Kirim Rekomendasi Telegram -->
-        <div class="p-3 rounded-xl glass-subcard space-y-2">
-          <div class="font-bold text-white flex items-center gap-1.5">
-            <span>✈️</span>
-            <span>Notifikasi Telegram Bot</span>
-          </div>
-          <p class="text-slate-300 leading-relaxed">
-            Kirim daftar saham akumulasi terbaik yang belum terbang langsung ke akun Telegram Anda.
-          </p>
-          <button
-            id="btnTelegramSend"
-            onclick="closeSettingsModal(); handleTelegramClick();"
-            class="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-400/30 font-semibold transition"
-          >
-            Buka Pengaturan Telegram
-          </button>
-        </div>
-
-        <!-- 3. Unggah Berkas Excel -->
+        <!-- 1. Unggah Berkas Excel -->
         <div class="p-3 rounded-xl glass-subcard space-y-2">
           <div class="font-bold text-white flex items-center gap-1.5">
             <span>📄</span>
@@ -1320,7 +1233,7 @@
           </button>
         </div>
 
-        <!-- 4. Panduan Metodologi & Rumus -->
+        <!-- 2. Panduan Metodologi & Rumus -->
         <div class="p-3 rounded-xl glass-subcard space-y-2">
           <div class="font-bold text-white flex items-center gap-1.5">
             <span>📖</span>
@@ -1586,79 +1499,6 @@
     </div>
   </div>
 
-  <!-- =====================================================================
-       MODAL 6: TELEGRAM INTEGRATION
-       ===================================================================== -->
-  <div id="telegramModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="glass-panel rounded-2xl max-w-lg w-full p-6 border border-white/15 shadow-2xl space-y-4">
-      <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
-        <h3 class="text-base font-bold text-white flex items-center gap-2">
-          <span>✈️</span>
-          <span>Integrasi &amp; Notifikasi Telegram Bot</span>
-        </h3>
-        <button onclick="closeTelegramModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
-      </div>
-
-      <p class="text-xs text-slate-300 leading-relaxed">
-        Sistem mengirimkan rekomendasi saham akumulasi sore (16:15 WIB) serta notifikasi realtime (Target WIN, Entry Terjemput, &amp; Proteksi Anti Gap-Down) langsung ke bot Telegram Anda.
-      </p>
-
-      <div class="space-y-3 glass-subcard p-3.5 rounded-xl text-xs">
-        <div>
-          <label class="block text-[11px] font-semibold text-slate-300 mb-1">Telegram Bot Token</label>
-          <input
-            id="telegramBotToken"
-            type="password"
-            placeholder="Contoh: 1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ"
-            class="w-full px-3 py-1.5 rounded-lg bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-sky-400"
-          />
-        </div>
-
-        <div>
-          <label class="block text-[11px] font-semibold text-slate-300 mb-1">Telegram Chat ID</label>
-          <input
-            id="telegramChatId"
-            type="text"
-            placeholder="Contoh: 123456789"
-            class="w-full px-3 py-1.5 rounded-lg bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-sky-400"
-          />
-        </div>
-
-        <div class="pt-2 border-t border-white/5 flex items-center justify-between">
-          <label for="telegramAutoNotify" class="text-[11px] font-semibold text-white flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="telegramAutoNotify" checked class="w-4 h-4 rounded text-emerald-500 bg-slate-950/60 border-white/20 focus:ring-emerald-400 cursor-pointer" />
-            <span>Notifikasi Otomatis Realtime (Alert WIN, Entry &amp; 16:15 WIB)</span>
-          </label>
-        </div>
-      </div>
-
-      <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-        <div class="flex items-center gap-2">
-          <button
-            id="btnTestTelegram"
-            onclick="testTelegramConnection()"
-            class="px-3 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 font-semibold transition"
-          >
-            Tes Koneksi Bot
-          </button>
-          <button
-            id="btnSaveTelegramConfig"
-            onclick="saveTelegramConfig()"
-            class="px-3 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 font-semibold transition"
-          >
-            Simpan Pengaturan
-          </button>
-        </div>
-        <button
-          id="btnSaveAndSendTelegram"
-          onclick="saveAndSendTelegram()"
-          class="px-3.5 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-white font-bold shadow-[0_0_20px_rgba(14,165,233,0.4)] transition"
-        >
-          Kirim Sinyal Sekarang
-        </button>
-      </div>
-    </div>
-  </div>
 
   <!-- =====================================================================
        MODAL 8: REZIM PASAR IHSG & MARKET BREADTH
@@ -2065,6 +1905,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=70.0"></script>
+  <script src="/static/app.js?v=72.0"></script>
 </body>
 </html>

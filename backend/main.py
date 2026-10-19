@@ -501,17 +501,43 @@ async def add_no_cache_headers(request, call_next):
     return response
 
 
+LAST_CACHE_MTIME: float = 0.0
+
+
+def check_and_reload_cache_if_updated() -> None:
+    """Otomatis memuat ulang data terbaru jika file real_idx_market_latest.csv diperbarui di disk."""
+    global LAST_CACHE_MTIME
+    if not REAL_CACHE_CSV.exists():
+        return
+    try:
+        current_mtime = os.path.getmtime(REAL_CACHE_CSV)
+        if current_mtime > LAST_CACHE_MTIME or STATE["analysis"] is None:
+            real_df = pd.read_csv(REAL_CACHE_CSV)
+            real_df["Has_Broker_Summary"] = False
+            STATE["source_name"] = "Daftar Saham IDX - REAL Market Data (24/7 Active)"
+            STATE["analysis"] = analyze_smart_money_dataframe(real_df)
+            STATE["last_sync_time"] = datetime.fromtimestamp(current_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            STATE["is_real_market"] = True
+            LAST_CACHE_MTIME = current_mtime
+            _process_tracker(STATE["analysis"])
+            print(f"[CacheSync] Auto-reloaded {len(real_df)} emiten dari disk (mtime: {current_mtime})")
+    except Exception as e:
+        print(f"[CacheSync] Error auto-reloading cache: {e}")
+
+
 def init_default_state() -> None:
     """Memuat data pasar REAL terbaru dari cache hasil sinkronisasi seluruh saham IDX."""
+    global LAST_CACHE_MTIME
     ensure_default_excel_files(BASE_DIR)
     USER_EXCEL_DIR.mkdir(parents=True, exist_ok=True)
 
     if REAL_CACHE_CSV.exists():
+        LAST_CACHE_MTIME = os.path.getmtime(REAL_CACHE_CSV)
         real_df = pd.read_csv(REAL_CACHE_CSV)
         real_df["Has_Broker_Summary"] = False
         STATE["source_name"] = "Daftar Saham IDX - REAL Market Data (24/7 Active)"
         STATE["analysis"] = analyze_smart_money_dataframe(real_df)
-        STATE["last_sync_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        STATE["last_sync_time"] = datetime.fromtimestamp(LAST_CACHE_MTIME).strftime("%Y-%m-%d %H:%M:%S")
         STATE["is_real_market"] = True
         _process_tracker(STATE["analysis"])
         return
@@ -531,6 +557,7 @@ init_default_state()
 @app.get("/api/health")
 def health_check() -> dict:
     """Endpoint Health Check untuk pemantauan server Cloud & Keep-Alive anti-sleep."""
+    check_and_reload_cache_if_updated()
     return {
         "status": "online",
         "market_open": is_idx_market_open_now(),
@@ -550,6 +577,7 @@ def get_screener_data(
     search: Optional[str] = Query(default="", description="Cari kode Ticker atau Sektor"),
     sort_by: str = Query(default="score", description="Urutkan hasil: score, vol_ratio, top3_bsr, foreign, pct_change"),
 ) -> dict:
+    check_and_reload_cache_if_updated()
     if STATE["analysis"] is None:
         init_default_state()
 
@@ -1375,8 +1403,7 @@ class TelegramConfigSaveRequest(BaseModel):
 
 
 def _resolve_telegram_credentials(req_token: Optional[str], req_chat_id: Optional[str]) -> tuple[str, str]:
-    """Resolusi kredensial Telegram dengan aman: jika token kosong atau berupa nilai ter-masking ('...'/'***'),
-    gunakan token tersimpan dari konfigurasi disk atau environment variable."""
+    """Resolusi kredensial Telegram dengan aman dari file disk lokal data/telegram_config.json atau environment variable."""
     saved_cfg = load_telegram_config()
     raw_tok = (req_token or "").strip()
     if not raw_tok or "..." in raw_tok or "*" in raw_tok:
@@ -1598,7 +1625,14 @@ if FRONTEND_DIR.exists():
 
 @app.get("/")
 def serve_dashboard() -> FileResponse:
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
+    return FileResponse(
+        str(FRONTEND_DIR / "index.html"),
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 if __name__ == "__main__":

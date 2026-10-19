@@ -39,11 +39,7 @@ const escHtml = (str) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-// K1: Bersihkan sisa token Telegram plaintext dari localStorage bila ada
-try {
-  localStorage.removeItem('smartflow_telegram_token');
-  localStorage.removeItem('smartflow_tg_token');
-} catch (_) {}
+
 
 // =====================================================================
 // THEME ENGINE (Emerald · Obsidian Gold · Midnight Blue · Clean Slate · Clean Paper)
@@ -638,32 +634,6 @@ function renderTodayCandidates(stocks) {
           </div>
         </div>
 
-        <!-- Smart Money Flow (Broker Summary: Pembeli vs Penjual) -->
-        <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/40 border border-slate-200 dark:border-white/[0.06] space-y-1.5 text-xs">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-1 text-[11px] font-bold text-slate-800 dark:text-slate-200">
-              <span>🐋</span>
-              <span>Smart Money Flow:</span>
-            </div>
-            <div class="font-mono text-[10px] font-bold px-2 py-0.5 rounded ${bdrColorClass}">
-              BDR ${bdrSign}${bdrVal.toFixed(1)}% (${bdrStatusText})
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-2 text-[11px] pt-0.5">
-            <div class="p-1.5 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
-              <div class="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold mb-0.5">🏛️ Top Pembeli:</div>
-              <div class="flex flex-wrap gap-1 font-mono font-bold">${buyersPillsHtml}</div>
-            </div>
-            <div class="p-1.5 rounded-lg bg-rose-500/5 border border-rose-500/15">
-              <div class="text-[9px] text-rose-600 dark:text-rose-400 font-semibold mb-0.5">👥 Top Penjual:</div>
-              <div class="flex flex-wrap gap-1 font-mono font-bold">${sellersPillsHtml}</div>
-            </div>
-          </div>
-          <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200/60 dark:border-white/5">
-            <span>Modal Bandar: <strong class="font-mono text-slate-800 dark:text-slate-200">${fmtPrice(bandarAvg)}</strong></span>
-            <span class="font-mono ${bandarDiffColor}">${bandarDiffLabel}</span>
-          </div>
-        </div>
 
         <!-- Rencana Trading Terukur 2-Leg Swing (Entry, SL, TP1, TP2) -->
         <div class="p-3 rounded-xl bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.06] space-y-2 text-xs shadow-sm dark:shadow-none">
@@ -2973,120 +2943,15 @@ async function resetTracker() {
 }
 
 // =====================================================================
-// TELEGRAM NOTIFIER INTEGRATION (K1: Token Never Stored in localStorage)
+// TELEGRAM NOTIFIER INTEGRATION
 // =====================================================================
-let telegramServerConfigured = false;
-
-function openTelegramModal() {
-  const chatId = localStorage.getItem('smartflow_telegram_chat_id') || '';
-  const chatInput = document.getElementById('telegramChatId');
-  if (chatInput && !chatInput.value) chatInput.value = chatId;
-  loadTelegramConfig();
-  const modal = document.getElementById('telegramModal');
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeTelegramModal() {
-  const modal = document.getElementById('telegramModal');
-  if (modal) modal.classList.add('hidden');
-}
-
-function getTelegramCredentials() {
-  const tokenInput = document.getElementById('telegramBotToken');
-  const chatInput = document.getElementById('telegramChatId');
-  const token = tokenInput ? tokenInput.value.trim() : '';
-  const chatId = (chatInput ? chatInput.value.trim() : '') || localStorage.getItem('smartflow_telegram_chat_id') || '';
-  return { token, chatId };
-}
-
-async function testTelegramConnection() {
-  const { token, chatId } = getTelegramCredentials();
-  if ((!token && !telegramServerConfigured) || !chatId) {
-    showToast('Masukkan Bot Token dan Chat ID terlebih dahulu.', 'error');
-    return;
-  }
-  const btn = document.getElementById('btnTestTelegram');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = '⏳ Menguji...';
-  }
-  try {
-    const res = await fetch('/api/telegram/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bot_token: token, chat_id: chatId }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Gagal terhubung ke Telegram');
-    localStorage.setItem('smartflow_telegram_chat_id', chatId);
-    if (token) {
-      telegramServerConfigured = true;
-      const tokenInput = document.getElementById('telegramBotToken');
-      if (tokenInput) tokenInput.value = '';
-    }
-    showToast('🔔 ' + data.message, 'success');
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Tes Koneksi Bot';
-    }
-  }
-}
-
-async function handleTelegramClick() {
-  const { token, chatId } = getTelegramCredentials();
-  if (!token) {
-    try {
-      const cRes = await fetch('/api/telegram/config');
-      const cData = await cRes.json();
-      telegramServerConfigured = Boolean(cData.configured);
-      if (!cData.configured) {
-        openTelegramModal();
-        return;
-      }
-    } catch {
-      openTelegramModal();
-      return;
-    }
-  }
-  await sendTelegramRecommendations(token, chatId);
-}
-
-async function saveAndSendTelegram() {
-  const tokenInput = document.getElementById('telegramBotToken');
-  const chatInput = document.getElementById('telegramChatId');
-  const token = tokenInput ? tokenInput.value.trim() : '';
-  const chatId = chatInput ? chatInput.value.trim() : '';
-
-  if ((!token && !telegramServerConfigured) || !chatId) {
-    showToast('Bot Token dan Chat ID wajib diisi.', 'error');
-    return;
-  }
-
-  localStorage.setItem('smartflow_telegram_chat_id', chatId);
-  if (tokenInput) tokenInput.value = '';
-
-  closeTelegramModal();
-  await sendTelegramRecommendations(token, chatId);
-}
-
-async function sendTelegramRecommendations(token, chatId) {
-  const btn = document.getElementById('btnTelegramSend');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = '⏳ Menyaring & Mengirim...';
-  }
-
+async function sendTelegramRecommendations() {
   try {
     showToast('🔍 Menyaring saham akumulasi aman (< 2.5%) & mengirim ke Telegram...');
     const res = await fetch('/api/telegram/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        bot_token: token || undefined,
-        chat_id: chatId || undefined,
         max_picks: 3,
         max_pct_change: 2.5,
         min_score: 70,
@@ -3094,18 +2959,9 @@ async function sendTelegramRecommendations(token, chatId) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Gagal mengirim rekomendasi ke Telegram');
-
     showToast(data.message, 'success');
   } catch (err) {
     showToast(err.message, 'error');
-    if (err.message.includes('Token') || err.message.includes('Chat ID') || err.message.includes('belum disetel')) {
-      openTelegramModal();
-    }
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Buka Pengaturan Telegram';
-    }
   }
 }
 
@@ -3114,7 +2970,9 @@ async function sendTelegramRecommendations(token, chatId) {
 // =====================================================================
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      reg.update().catch(() => {});
+    }).catch((err) => {
       console.warn('[PWA] Service Worker registration failed:', err);
     });
   });
@@ -3155,7 +3013,7 @@ function renderMarketRegimeBadge(regime) {
 
 async function loadMarketRegime() {
   try {
-    const res = await fetch('/api/market-regime');
+    const res = await fetch(`/api/market-regime?_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
     renderMarketRegimeBadge(data);
@@ -3201,7 +3059,7 @@ async function loadIhsgTodayChart(period = '3mo') {
       }
     });
 
-    const res = await fetch(`/api/ihsg/candles?period=${encodeURIComponent(period)}`);
+    const res = await fetch(`/api/ihsg/candles?period=${encodeURIComponent(period)}&_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
     lastIhsgChartData = data;
@@ -3840,81 +3698,6 @@ async function deletePortfolioTrade(tradeId) {
 }
 
 // =====================================================================
-// TELEGRAM NOTIFIER CONFIGURATION (PERSISTENT & AUTO ALERTS)
-// =====================================================================
-async function loadTelegramConfig() {
-  try {
-    const res = await fetch('/api/telegram/config');
-    if (!res.ok) return;
-    const data = await res.json();
-
-    telegramServerConfigured = Boolean(data.configured);
-
-    const tokenInput = document.getElementById('telegramBotToken');
-    const chatInput = document.getElementById('telegramChatId');
-    const autoNotify = document.getElementById('telegramAutoNotify');
-
-    if (tokenInput) {
-      tokenInput.value = '';
-      if (data.configured && data.masked_token) {
-        tokenInput.placeholder = `Tersimpan di server (${data.masked_token}) — kosongkan jika tidak diubah`;
-      } else {
-        tokenInput.placeholder = 'Contoh: 1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ';
-      }
-    }
-    if (chatInput && data.chat_id) chatInput.value = data.chat_id;
-    if (autoNotify && data.auto_notify !== undefined) autoNotify.checked = data.auto_notify;
-  } catch (err) {
-    console.warn('[TelegramConfig] Error loading config:', err);
-  }
-}
-
-async function saveTelegramConfig() {
-  const tokenInput = document.getElementById('telegramBotToken');
-  const token = tokenInput?.value.trim() || '';
-  const chatId = document.getElementById('telegramChatId')?.value.trim() || '';
-  const autoNotify = document.getElementById('telegramAutoNotify')?.checked ?? true;
-
-  if ((!token && !telegramServerConfigured) || !chatId) {
-    showToast('Bot Token dan Chat ID wajib diisi.', 'error');
-    return;
-  }
-
-  const btn = document.getElementById('btnSaveTelegramConfig');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Menyimpan...';
-  }
-
-  try {
-    const res = await fetch('/api/telegram/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        bot_token: token,
-        chat_id: chatId,
-        auto_notify: autoNotify,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Gagal menyimpan konfigurasi.');
-
-    telegramServerConfigured = true;
-    if (tokenInput) tokenInput.value = '';
-    localStorage.setItem('smartflow_telegram_chat_id', chatId);
-    await loadTelegramConfig();
-    showToast('✅ ' + data.message, 'success');
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Simpan Pengaturan';
-    }
-  }
-}
-
-// =====================================================================
 // GLOBAL KEYBOARD & BACKDROP MODAL HANDLERS
 // =====================================================================
 function closeAllModals() {
@@ -3923,7 +3706,6 @@ function closeAllModals() {
   closeGlossaryModal();
   closeUploadModal();
   closeGuideModal();
-  closeTelegramModal();
   closeTradingViewModal();
   closeMarketRegimeModal();
   closePortfolioBuyModal();
@@ -3937,7 +3719,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Tutup modal jika user mengklik backdrop / area hitam di luar modal
-document.querySelectorAll('#settingsModal, #lotCalculatorModal, #glossaryModal, #uploadModal, #guideModal, #telegramModal, #tradingViewModal, #marketRegimeModal, #portfolioBuyModal, #portfolioSellModal').forEach(modalEl => {
+document.querySelectorAll('#settingsModal, #lotCalculatorModal, #glossaryModal, #uploadModal, #guideModal, #tradingViewModal, #marketRegimeModal, #portfolioBuyModal, #portfolioSellModal').forEach(modalEl => {
   modalEl.addEventListener('click', (e) => {
     if (e.target === modalEl) {
       modalEl.classList.add('hidden');

@@ -325,8 +325,8 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "telegram_config
 
 
 def load_telegram_config() -> dict[str, Any]:
-    """Memuat konfigurasi telegram dari file data/telegram_config.json atau environment variables."""
-    cfg = {
+    """Memuat konfigurasi telegram dari file lokal data/telegram_config.json atau environment variables (aman & tidak ter-expose publik)."""
+    cfg: dict[str, Any] = {
         "bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
         "chat_id": os.environ.get("TELEGRAM_CHAT_ID", "").strip(),
         "auto_notify": True,
@@ -339,7 +339,7 @@ def load_telegram_config() -> dict[str, Any]:
                     if saved.get("bot_token"):
                         cfg["bot_token"] = saved["bot_token"].strip()
                     if saved.get("chat_id"):
-                        cfg["chat_id"] = saved["chat_id"].strip()
+                        cfg["chat_id"] = str(saved["chat_id"]).strip()
                     if "auto_notify" in saved:
                         cfg["auto_notify"] = bool(saved["auto_notify"])
         except Exception:
