@@ -235,11 +235,11 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
 
     footer = (
         "━━━━━━━━━━━━━━━━━━━\n"
-        "💡 <b>PANDUAN EKSEKUSI ORANG SIBUK (SET & FORGET):</b>\n"
-        "• <b>Malam/Pagi Ini:</b> Pasang antrean Buy Limit GTC di Harga Antre pada aplikasi sekuritas.\n"
-        "• <b>Split Exit 50:50:</b> Pasang GTC Sell Limit 50% lot di TP1 (+6%) & kawal 50% lot sisa di TP2 (+10%).\n"
-        "• <b>Auto-BEP:</b> Begitu TP1 match di siang hari, geser Stop Loss sisa lot ke modal (BEP) agar bebas risiko rugi.\n"
-        "• <b>Closing Basis SL:</b> Kebal gocekan jarum jam 10 pagi; evaluasi cut loss hanya jika Close <= SL pada 15:45 WIB."
+        "💡 <b>PANDUAN EKSEKUSI SWING 1:2:</b>\n"
+        "• <b>Antrean Beli:</b> Pasang antrean Buy Limit di Harga Antre pada aplikasi sekuritas.\n"
+        "• <b>Split Exit 50:50:</b> Pasang Sell Limit 50% lot di TP1 (+6%) & kawal 50% lot sisa di TP2 (+10%).\n"
+        "• <b>Auto-BEP:</b> Begitu TP1 match, geser Stop Loss sisa lot ke modal (BEP) agar bebas risiko rugi.\n"
+        "• <b>Disiplin SL:</b> Evaluasi cut loss hanya jika harga penutupan (Close) <= SL pada 15:45 WIB."
     )
 
     # R1: Rakitan aman per blok agar pemotongan tidak pernah membelah tag HTML (<b, <i, <code)
@@ -270,17 +270,17 @@ def format_test_message() -> str:
 
 
 def format_tracker_event_message(event_type: str, ticker: str, price: float, pnl_pct: float | None = None, note: str = "") -> str:
-    """Format notifikasi instan event pergerakan sinyal ke Telegram dengan instruksi presisi untuk pekerja sibuk."""
+    """Format notifikasi instan event pergerakan sinyal ke Telegram."""
     pnl_str = f"+{pnl_pct:.2f}%" if pnl_pct is not None else ""
     if event_type == "MILESTONE_BEP":
         return (
-            f"⚡ <b>[ALERT ORANG SIBUK: AMANKAN CUAN!] #{html.escape(ticker)}</b>\n\n"
+            f"⚡ <b>[ALERT PROFIT: AMANKAN CUAN!] #{html.escape(ticker)}</b>\n\n"
             f"📈 <b>Floating High Hari Ini:</b> Rp {price:,.0f} (<b>{pnl_str}</b>)\n"
             f"Catatan: <i>{html.escape(note)}</i>\n\n"
-            f"🛡️ <b>Panduan Tindakan 10 Detik:</b>\n"
-            f"1. <b>Kunci Cuan:</b> Jika pasang Auto-Order TP1 (50% lot), separuh modal & profit sudah masuk kantong secara otomatis.\n"
+            f"🛡️ <b>Panduan Tindakan:</b>\n"
+            f"1. <b>Kunci Cuan:</b> Ambil untung di TP1 (50% lot) agar profit aman di kantong.\n"
             f"2. <b>Geser SL ke Modal (BEP):</b> Segera pindahkan Stop Loss sisa 50% lot ke harga beli modal.\n"
-            f"3. <b>Zero-Risk Trade:</b> Posisi Anda kini 100% bebas risiko rugi sore hari!"
+            f"3. <b>Posisi Aman:</b> Trade Anda kini bebas risiko rugi!"
         )
     elif event_type == "WIN":
         return (

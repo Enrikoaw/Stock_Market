@@ -828,7 +828,7 @@ class SignalTracker:
                     "ticker": r["ticker"],
                     "price": round(h, 2),
                     "pnl_pct": round((h - entry_p) / entry_p * 100.0, 2),
-                    "note": f"Floating High mencapai Rp {h:,.0f} (+{round((h - entry_p)/entry_p*100, 1)}%). Waktunya orang sibuk amankan profit TP1 & pasang SL BEP!",
+                    "note": f"Floating High mencapai Rp {h:,.0f} (+{round((h - entry_p)/entry_p*100, 1)}%). Waktunya amankan profit TP1 & pasang SL BEP!",
                 })
 
             # 3. Belum tersentuh SL maupun TP -> tetap RUNNING dengan floating P/L terupdate

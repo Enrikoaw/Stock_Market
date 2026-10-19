@@ -1641,12 +1641,12 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         tp2_loss = round(100.0 - tp2_win, 1)
 
         auto_order_text = (
-            f"[Trading Plan Orang Sibuk - #{ticker}]\n"
-            f"1. Antre Beli: Rp {entry_high:,} (GTC Buy Limit)\n"
-            f"2. Kunci Cuan TP1 (50% Lot): Rp {tp1:,} (+{tp1_pct:.1f}%) [Pasang GTC Sell Limit]\n"
-            f"3. Kawal Trend TP2 (50% Lot): Rp {tp2:,} (+{tp2_pct:.1f}%) [Trailing Stop / SL BEP]\n"
-            f"4. Batas Rugi (SL Closing): Rp {stop_loss:,} (-{risk_pct:.1f}%)\n"
-            f"Aturan Emas: Begitu TP1 match di siang hari, geser Stop Loss sisa lot ke Rp {entry_high:,} (BEP/Modal) agar posisi 100% bebas risiko."
+            f"[Trading Plan Swing - #{ticker}]\n"
+            f"1. Antre Beli: Rp {entry_high:,} (Buy Limit)\n"
+            f"2. Kunci Cuan TP1 (50% Lot): Rp {tp1:,} (+{tp1_pct:.1f}%)\n"
+            f"3. Kawal Trend TP2 (50% Lot): Rp {tp2:,} (+{tp2_pct:.1f}%)\n"
+            f"4. Batas Rugi (SL): Rp {stop_loss:,} (-{risk_pct:.1f}%)\n"
+            f"Strategi: Begitu TP1 tercapai, geser Stop Loss sisa lot ke Rp {entry_high:,} (BEP/Modal) untuk mengunci cuan bebas risiko."
         )
 
         trading_plan = {

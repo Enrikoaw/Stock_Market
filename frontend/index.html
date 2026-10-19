@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=69.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=70.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -684,15 +684,14 @@
             </div>
           </div>
 
-          <!-- 3. SKENARIO TERUKUR (BUKAN PERINTAH BELI) & KALKULATOR LOT -->
+          <!-- 3. SKENARIO TERUKUR & KALKULATOR LOT -->
           <div id="autoTradingPlanCard" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.08] space-y-3 shadow-sm dark:shadow-none">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5">
                 <span class="text-xs font-bold text-slate-900 dark:text-white">Rencana Eksekusi Swing 1:2</span>
                 <button type="button" class="tip-btn text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onclick="openGlossaryModal('scenario')" title="Arti Skenario">ⓘ</button>
               </div>
-              <div class="flex items-center gap-1.5">
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800/40" title="Model eksekusi terukur yang tidak memerlukan pantauan layar terus-menerus">👔 Set &amp; Forget</span>
+              <div>
                 <span id="planActionBias" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50">
                   -
                 </span>
@@ -704,17 +703,14 @@
               <div class="p-2 rounded-lg bg-white text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 shadow-xs">
                 <div id="planEntryLabel" class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Harga Antre Beli</div>
                 <div id="planEntryZone" class="font-mono font-bold text-slate-900 dark:text-white text-[11px] mt-0.5">-</div>
-                <div class="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5">Buy Limit GTC</div>
               </div>
               <div class="p-2 rounded-lg bg-rose-50 text-rose-700 border border-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/30">
                 <div class="text-[10px] text-rose-600 dark:text-rose-300 font-semibold">Batas Rugi (SL)</div>
                 <div id="planStopLoss" class="font-mono font-bold text-rose-700 dark:text-rose-300 text-[11px] mt-0.5">-</div>
-                <div class="text-[9px] text-rose-500/80 dark:text-rose-400/80 mt-0.5">Closing 15:45 WIB</div>
               </div>
               <div class="p-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30">
-                <div class="text-[10px] text-emerald-600 dark:text-emerald-300 font-semibold">TP1 (50% Lot)</div>
+                <div class="text-[10px] text-emerald-600 dark:text-emerald-300 font-semibold">Target 1 (TP1)</div>
                 <div id="planTargets" class="font-mono font-bold text-emerald-700 dark:text-emerald-300 text-[11px] mt-0.5">-</div>
-                <div class="text-[9px] text-emerald-600/80 dark:text-emerald-400/80 mt-0.5">Kunci Cuan Cepat</div>
               </div>
             </div>
 
@@ -770,33 +766,6 @@
                 <span>Modal Beli Bandar (Bandar Avg): <strong id="planBandarAvg" class="font-mono text-slate-800 dark:text-slate-200">Rp -</strong></span>
                 <span id="planBandarAvgDiff" class="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">-</span>
               </div>
-            </div>
-
-            <!-- Tombol Salin Auto-Order & Panduan Sekuritas Orang Sibuk -->
-            <div class="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-100 dark:bg-indigo-950/20 dark:border-indigo-500/20 space-y-2">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-900 dark:text-indigo-300">
-                  <span>⚡</span>
-                  <span>Otomasi Sekuritas untuk Orang Sibuk</span>
-                </div>
-                <button
-                  type="button"
-                  onclick="openAutoOrderGuideModal()"
-                  class="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 underline cursor-pointer"
-                >
-                  Panduan Sekuritas →
-                </button>
-              </div>
-              <button
-                type="button"
-                id="btnCopyAutoOrder"
-                onclick="copyAutoOrderPlan()"
-                class="w-full py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-                title="Salin parameter Auto-Order siap input di Stockbit, IPOT, Mirae, Ajaib, atau MOST"
-              >
-                <span>📋</span>
-                <span id="btnCopyAutoOrderText">Salin Format Auto-Order (GTC)</span>
-              </button>
             </div>
 
             <!-- Tombol Aksi: Masuk Watchlist Tracker & Hitung Lot -->
@@ -1333,62 +1302,7 @@
           </button>
         </div>
 
-        <!-- 3. Integrasi Broker Summary (Stockbit / GoAPI) -->
-        <div class="p-3 rounded-xl glass-subcard space-y-2">
-          <div class="flex items-center justify-between">
-            <div class="font-bold text-white flex items-center gap-1.5">
-              <span>📊</span>
-              <span>Integrasi Broker Summary (Bandarmologi)</span>
-            </div>
-            <span id="brokerConfigBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/10">
-              Belum Aktif
-            </span>
-          </div>
-          <p class="text-slate-300 leading-relaxed text-[11px]">
-            Tarik data Top 3 Broker Accumulation &amp; Bandar Avg Price asli bursa secara otomatis via Stockbit atau GoAPI.
-          </p>
-          <div class="space-y-2 pt-1">
-            <div>
-              <label class="block text-[11px] text-slate-400 mb-1">Pilih Provider:</label>
-              <select id="brokerProviderSelect" onchange="toggleBrokerProviderFields()" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950/60 border border-white/10 text-white text-xs">
-                <option value="stockbit">Stockbit (Bearer Token)</option>
-                <option value="goapi">GoAPI.io (API Key)</option>
-              </select>
-            </div>
-            <div id="fieldStockbitToken">
-              <label class="block text-[11px] text-slate-400 mb-1">Stockbit Bearer Token:</label>
-              <input type="password" id="inputStockbitToken" placeholder="Paste Bearer Token Stockbit di sini..." class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950/60 border border-white/10 font-mono text-white text-xs focus:border-indigo-400 focus:outline-none" />
-            </div>
-            <div id="fieldGoapiKey" class="hidden">
-              <label class="block text-[11px] text-slate-400 mb-1">GoAPI.io API Key:</label>
-              <input type="password" id="inputGoapiKey" placeholder="Paste API Key GoAPI di sini..." class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950/60 border border-white/10 font-mono text-white text-xs focus:border-indigo-400 focus:outline-none" />
-            </div>
-            <div class="grid grid-cols-2 gap-2 pt-1">
-              <button
-                type="button"
-                id="btnSaveBrokerConfig"
-                onclick="saveBrokerConfigFromModal()"
-                class="py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>💾</span>
-                <span id="btnSaveBrokerConfigText">Simpan</span>
-              </button>
-              <button
-                type="button"
-                id="btnTestBrokerConfig"
-                onclick="testBrokerConfigFromModal()"
-                class="py-1.5 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-bold text-xs transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-                title="Cek apakah Bearer Token Stockbit atau API Key aktif dan bisa mengambil data"
-              >
-                <span>🔌</span>
-                <span id="btnTestBrokerConfigText">Uji Koneksi Token</span>
-              </button>
-            </div>
-            <div id="brokerTestResultMsg" class="hidden text-[11px] p-2.5 rounded-lg bg-slate-950/80 border border-white/10 font-mono space-y-1"></div>
-          </div>
-        </div>
-
-        <!-- 4. Unggah Berkas Excel -->
+        <!-- 3. Unggah Berkas Excel -->
         <div class="p-3 rounded-xl glass-subcard space-y-2">
           <div class="font-bold text-white flex items-center gap-1.5">
             <span>📄</span>
@@ -2093,106 +2007,6 @@
     </div>
   </div>
 
-  <!-- =====================================================================
-       MODAL 8: PANDUAN OTOMASI SEKURITAS ORANG SIBUK (SET & FORGET)
-       ===================================================================== -->
-  <div
-    id="autoOrderGuideModal"
-    class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5"
-    role="dialog"
-    aria-labelledby="autoOrderGuideTitle"
-  >
-    <div class="glass-panel rounded-2xl max-w-2xl w-full p-5 sm:p-6 border border-white/15 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
-      <!-- Modal Header -->
-      <div class="flex items-center justify-between border-b border-white/[0.08] pb-3 shrink-0">
-        <div class="flex items-center gap-2.5">
-          <span class="text-xl">👔</span>
-          <div>
-            <h3 id="autoOrderGuideTitle" class="text-base font-bold text-white">
-              Panduan Trading Orang Sibuk (Set &amp; Forget)
-            </h3>
-            <p class="text-[11px] text-slate-400">Solusi cuan tanpa pantau layar kerja: Cukup pasang GTC (Good-Til-Cancelled)</p>
-          </div>
-        </div>
-        <button
-          onclick="closeAutoOrderGuideModal()"
-          class="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-rose-500/25 text-slate-400 hover:text-rose-300 border border-white/10 flex items-center justify-center font-bold text-base transition"
-          title="Tutup (Esc)"
-        >
-          &times;
-        </button>
-      </div>
-
-      <!-- Tab Selector Sekuritas -->
-      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 shrink-0 border-b border-white/[0.06]">
-        <button
-          type="button"
-          onclick="switchAutoOrderGuideTab('golden_rules')"
-          id="tabGuide_golden_rules"
-          class="guide-tab-btn active px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-indigo-600 text-white"
-        >
-          🌟 4 Aturan Emas
-        </button>
-        <button
-          type="button"
-          onclick="switchAutoOrderGuideTab('stockbit')"
-          id="tabGuide_stockbit"
-          class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-white/[0.05] text-slate-300 hover:text-white"
-        >
-          Stockbit
-        </button>
-        <button
-          type="button"
-          onclick="switchAutoOrderGuideTab('ipot')"
-          id="tabGuide_ipot"
-          class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-white/[0.05] text-slate-300 hover:text-white"
-        >
-          IPOT (Robo)
-        </button>
-        <button
-          type="button"
-          onclick="switchAutoOrderGuideTab('mirae')"
-          id="tabGuide_mirae"
-          class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-white/[0.05] text-slate-300 hover:text-white"
-        >
-          Mirae (HOTS)
-        </button>
-        <button
-          type="button"
-          onclick="switchAutoOrderGuideTab('ajaib')"
-          id="tabGuide_ajaib"
-          class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-white/[0.05] text-slate-300 hover:text-white"
-        >
-          Ajaib
-        </button>
-        <button
-          type="button"
-          onclick="switchAutoOrderGuideTab('most')"
-          id="tabGuide_most"
-          class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-white/[0.05] text-slate-300 hover:text-white"
-        >
-          Mandiri (MOST)
-        </button>
-      </div>
-
-      <!-- Tab Content Area (Scrollable) -->
-      <div id="autoOrderGuideContent" class="flex-1 overflow-y-auto space-y-3 text-xs text-slate-300 leading-relaxed pr-1">
-        <!-- Content will be injected or toggled via JS -->
-      </div>
-
-      <!-- Modal Footer -->
-      <div class="pt-2 border-t border-white/[0.08] flex items-center justify-between text-[11px] text-slate-400 shrink-0">
-        <span>💡 Fitur GTC tersedia gratis di seluruh aplikasi sekuritas modern.</span>
-        <button
-          type="button"
-          onclick="closeAutoOrderGuideModal()"
-          class="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold transition cursor-pointer"
-        >
-          Saya Paham
-        </button>
-      </div>
-    </div>
-  </div>
 
   <!-- STANDARD NATIVE MOBILE BOTTOM NAVIGATION BAR (md:hidden - FLAT RECTANGULAR APP STYLE) -->
   <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 inset-x-0 h-14 bg-slate-950/95 backdrop-blur-xl border-t border-white/10 grid grid-cols-4 z-40 shadow-2xl" aria-label="Navigasi Mobile">
@@ -2251,6 +2065,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=69.0"></script>
+  <script src="/static/app.js?v=70.0"></script>
 </body>
 </html>
