@@ -187,19 +187,16 @@ function applyExpertModeUI() {
   const modeIcon = document.getElementById('modeIcon');
   const modeLabel = document.getElementById('modeLabel');
   const kpiContainer = document.getElementById('kpiContainer');
-  const quickFilterNotice = document.getElementById('quickFilterNotice');
 
   if (isExpertMode) {
     if (modeIcon) modeIcon.textContent = '🚀';
     if (modeLabel) modeLabel.textContent = 'Mode Mahir';
     if (kpiContainer) kpiContainer.classList.remove('hidden');
-    if (quickFilterNotice) quickFilterNotice.classList.remove('hidden');
     document.querySelectorAll('.expert-only').forEach(el => el.classList.remove('hidden'));
   } else {
     if (modeIcon) modeIcon.textContent = '🌱';
     if (modeLabel) modeLabel.textContent = 'Mode Pemula';
     if (kpiContainer) kpiContainer.classList.add('hidden');
-    if (quickFilterNotice) quickFilterNotice.classList.add('hidden');
     document.querySelectorAll('.expert-only').forEach(el => el.classList.add('hidden'));
   }
 }
@@ -565,33 +562,6 @@ function renderTodayCandidates(stocks) {
       entryValue = fmtPrice(plan.entry_price || entryHigh);
     }
 
-    // Smart Money Broker Summary Badges & Pills
-    const bdrVal = Number(s.bdr_pct != null ? s.bdr_pct : (s.broker_analysis && s.broker_analysis.bdr != null ? s.broker_analysis.bdr : 0));
-    const bdrSign = bdrVal >= 0 ? '+' : '';
-    let bdrColorClass = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30';
-    let bdrStatusText = 'Akumulasi';
-    if (bdrVal >= 25) {
-      bdrStatusText = 'Big Acc';
-      bdrColorClass = 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-400/40 drop-shadow-[0_0_8px_rgba(16,185,129,0.3)]';
-    } else if (bdrVal <= -15 || s.trigger_type === 'DISTRIBUTION_WARNING' || s.retail_trap) {
-      bdrStatusText = 'Distribusi';
-      bdrColorClass = 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30';
-    } else if (bdrVal < 5) {
-      bdrStatusText = 'Netral';
-      bdrColorClass = 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30';
-    }
-
-    const buyersPillsHtml = formatBrokerPills(s.top_buyers_list || s.top_buyers, true);
-    const sellersPillsHtml = formatBrokerPills(s.top_sellers_list || s.top_sellers, false);
-
-    const bandarAvg = s.bandar_avg_buy || (s.trading_plan && s.trading_plan.bandar_avg_buy) || Math.round(s.close * 0.99);
-    const bandarDiff = s.diff_bandar_avg_pct != null
-      ? s.diff_bandar_avg_pct
-      : (((s.close - bandarAvg) / bandarAvg) * 100).toFixed(1);
-    const bandarDiffSign = bandarDiff >= 0 ? '+' : '';
-    const bandarDiffColor = bandarDiff <= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500 dark:text-slate-400';
-    const bandarDiffLabel = bandarDiff <= 0 ? `(Diskon ${Math.abs(bandarDiff)}% dr Modal Bandar)` : `(Jarak ${bandarDiffSign}${bandarDiff}%)`;
-
     return `
       <div class="p-5 rounded-2xl glass-panel border border-white/[0.08] hover:border-emerald-400/40 transition shadow-lg flex flex-col justify-between gap-4">
         
@@ -793,6 +763,11 @@ function runModalLotCalculation() {
 // KAMUS ISTILAH SAHAM INTERAKTIF (GLOSSARY)
 // =====================================================================
 const GLOSSARY_TERMS = {
+  scenario: {
+    title: 'Skenario Rencana Trading (2-Leg Swing Plan)',
+    badge: 'Rencana Trading',
+    desc: 'Panduan objektif titik Harga Beli (Entry Pullback dekat support MA20 / VWAP), Batas Rugi (Stop Loss di bawah struktur Low + ATR), serta 2 target keuntungan bertahap (TP1 untuk amankan modal & geser SL ke titik impas, TP2 untuk mengawal tren).'
+  },
   smart_money: {
     title: 'Smart Money (Bandar / Investor Institusi)',
     badge: 'Konsep Dasar',
@@ -850,9 +825,13 @@ function openGlossaryModal(termKey = 'all') {
   const body = document.getElementById('glossaryBody');
   if (!modal || !body) return;
 
-  const entries = termKey === 'all'
+  let entries = termKey === 'all'
     ? Object.entries(GLOSSARY_TERMS)
     : Object.entries(GLOSSARY_TERMS).filter(([k]) => k === termKey);
+
+  if (entries.length === 0) {
+    entries = Object.entries(GLOSSARY_TERMS);
+  }
 
   body.innerHTML = entries.map(([key, item]) => `
     <div class="p-3.5 rounded-xl glass-subcard border border-white/[0.08] space-y-1.5" id="glossary-${key}">
@@ -887,172 +866,6 @@ function openSettingsModal() {
 function closeSettingsModal() {
   const modal = document.getElementById('settingsModal');
   if (modal) modal.classList.add('hidden');
-}
-
-async function loadBrokerConfig() {
-  try {
-    const res = await fetch('/api/broker/config');
-    if (!res.ok) return;
-    const data = await res.json();
-    const badge = document.getElementById('brokerConfigBadge');
-    const provSelect = document.getElementById('brokerProviderSelect');
-    if (provSelect && data.provider) {
-      provSelect.value = data.provider;
-      toggleBrokerProviderFields();
-    }
-    if (badge) {
-      if (data.has_stockbit_token || data.has_goapi_key) {
-        badge.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
-        badge.textContent = data.has_stockbit_token ? 'Stockbit Aktif' : 'GoAPI Aktif';
-      } else {
-        badge.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/10';
-        badge.textContent = 'Belum Aktif';
-      }
-    }
-  } catch (e) {
-    console.warn('Gagal memuat config broker:', e);
-  }
-}
-
-function toggleBrokerProviderFields() {
-  const prov = document.getElementById('brokerProviderSelect')?.value || 'stockbit';
-  const sbField = document.getElementById('fieldStockbitToken');
-  const goField = document.getElementById('fieldGoapiKey');
-  if (prov === 'stockbit') {
-    if (sbField) sbField.classList.remove('hidden');
-    if (goField) goField.classList.add('hidden');
-  } else {
-    if (sbField) sbField.classList.add('hidden');
-    if (goField) goField.classList.remove('hidden');
-  }
-}
-
-async function saveBrokerConfigFromModal() {
-  const prov = document.getElementById('brokerProviderSelect')?.value || 'stockbit';
-  const sbToken = document.getElementById('inputStockbitToken')?.value?.trim();
-  const goKey = document.getElementById('inputGoapiKey')?.value?.trim();
-  const btn = document.getElementById('btnSaveBrokerConfig');
-  const btnText = document.getElementById('btnSaveBrokerConfigText');
-
-  const payload = { provider: prov };
-  if (prov === 'stockbit' && sbToken) payload.stockbit_token = sbToken;
-  if (prov === 'goapi' && goKey) payload.goapi_key = goKey;
-
-  try {
-    if (btnText) btnText.textContent = 'Menyimpan...';
-    if (btn) btn.disabled = true;
-    const res = await fetch('/api/broker/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error('Gagal menyimpan.');
-    showToast('Konfigurasi Broker Summary berhasil disimpan!', 'success');
-    if (btnText) btnText.textContent = '✓ Tersimpan';
-    setTimeout(() => { if (btnText) btnText.textContent = 'Simpan Pengaturan Broker'; }, 2000);
-    await loadBrokerConfig();
-  } catch (err) {
-    showToast('Gagal menyimpan konfigurasi broker: ' + err.message, 'error');
-    if (btnText) btnText.textContent = 'Simpan Pengaturan Broker';
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function testBrokerConfigFromModal() {
-  const prov = document.getElementById('brokerProviderSelect')?.value || 'stockbit';
-  const sbToken = document.getElementById('inputStockbitToken')?.value?.trim();
-  const goKey = document.getElementById('inputGoapiKey')?.value?.trim();
-  const token = prov === 'stockbit' ? sbToken : goKey;
-
-  const btn = document.getElementById('btnTestBrokerConfig');
-  const btnText = document.getElementById('btnTestBrokerConfigText');
-  const resBox = document.getElementById('brokerTestResultMsg');
-
-  if (btnText) btnText.textContent = 'Menguji...';
-  if (btn) btn.disabled = true;
-  if (resBox) {
-    resBox.classList.remove('hidden');
-    resBox.innerHTML = '<span class="text-slate-400">Sedang menghubungi endpoint broker untuk saham BBCA...</span>';
-  }
-
-  try {
-    const res = await fetch('/api/broker/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: prov, token_or_key: token, ticker: 'BBCA' }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || data.error || 'Gagal terhubung ke Broker API');
-    }
-
-    const bdr = data.metrics?.bdr != null ? data.metrics.bdr : 0;
-    const bdrSign = bdr >= 0 ? '+' : '';
-    const buyers = (data.top_buyers || []).join(', ') || '-';
-    const sellers = (data.top_sellers || []).join(', ') || '-';
-    const bandarAvg = data.metrics?.bandar_avg ? `Rp ${data.metrics.bandar_avg.toLocaleString('id-ID')}` : '-';
-
-    if (resBox) {
-      resBox.innerHTML = `
-        <div class="text-emerald-400 font-bold flex items-center gap-1">
-          <span>✅</span>
-          <span>Koneksi ${escHtml(data.provider.toUpperCase())} Berhasil Aktif!</span>
-        </div>
-        <div class="text-slate-300 text-[10px] space-y-0.5 pt-1">
-          <div>• <strong>Ticker Tes:</strong> #${escHtml(data.ticker)} (${escHtml(data.date || 'Hari Ini')})</div>
-          <div>• <strong>BDR Top 3:</strong> <span class="${bdr >= 0 ? 'text-emerald-300' : 'text-rose-300'} font-bold">${bdrSign}${bdr}%</span> (${escHtml(data.metrics?.status || 'OK')})</div>
-          <div>• <strong>Top Pembeli:</strong> <code class="text-emerald-300">${escHtml(buyers)}</code></div>
-          <div>• <strong>Top Penjual:</strong> <code class="text-rose-300">${escHtml(sellers)}</code></div>
-          <div>• <strong>Modal Beli Bandar:</strong> <code>${escHtml(bandarAvg)}</code></div>
-        </div>
-      `;
-    }
-    showToast(`Koneksi Broker API (${prov.toUpperCase()}) aktif dan valid!`, 'success');
-  } catch (err) {
-    if (resBox) {
-      resBox.innerHTML = `
-        <div class="text-rose-400 font-bold flex items-center gap-1">
-          <span>❌</span>
-          <span>Koneksi Gagal:</span>
-        </div>
-        <div class="text-slate-300 text-[10px] pt-0.5">${escHtml(err.message)}</div>
-      `;
-    }
-    showToast(`Uji Broker Gagal: ${err.message}`, 'error');
-  } finally {
-    if (btnText) btnText.textContent = 'Uji Koneksi Token';
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function fetchBrokerSummaryForSelectedStock() {
-  if (!selectedTicker) return;
-  const btn = document.getElementById('btnFetchBrokerSingle');
-  const btnText = document.getElementById('btnFetchBrokerSingleText');
-
-  if (btnText) btnText.textContent = 'Menarik...';
-  if (btn) btn.disabled = true;
-
-  try {
-    const res = await fetch(`/api/stock/${encodeURIComponent(selectedTicker)}/fetch-broker`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || 'Gagal menarik data broker summary');
-    }
-
-    selectedStockDetail = data;
-    renderInspectorPanel(data);
-    showToast(`✓ Broksum #${selectedTicker} berhasil ditarik: ${data.top_buyers || '-'} vs ${data.top_sellers || '-'}`, 'success');
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    if (btnText) btnText.textContent = 'Perbarui Broksum';
-    if (btn) btn.disabled = false;
-  }
 }
 
 function toggleExpertPillarsView() {
@@ -1659,70 +1472,6 @@ function renderInspectorPanel(d) {
     if (pr) {
       const rr = plan.risk_reward ? ` (R:R = ${plan.risk_reward})` : '';
       pr.textContent = `${plan.rationale || ''}${rr}`;
-    }
-
-    // Smart Money Broker Summary di Inspector / Trading Plan
-    const planBdrBadge = document.getElementById('planBdrBadge');
-    const planBuyersList = document.getElementById('planBuyersList');
-    const planSellersList = document.getElementById('planSellersList');
-    const planBandarAvg = document.getElementById('planBandarAvg');
-    const planBandarAvgDiff = document.getElementById('planBandarAvgDiff');
-
-    const bdrVal = Number(d.bdr_pct != null ? d.bdr_pct : (d.broker_analysis && d.broker_analysis.bdr != null ? d.broker_analysis.bdr : 0));
-    const bdrSign = bdrVal >= 0 ? '+' : '';
-    if (planBdrBadge) {
-      let bdrColorClass = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30';
-      let bdrStatusText = 'Akumulasi';
-      if (bdrVal >= 25) {
-        bdrStatusText = 'Big Acc';
-        bdrColorClass = 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-400/40';
-      } else if (bdrVal <= -15 || d.trigger_type === 'DISTRIBUTION_WARNING' || d.retail_trap) {
-        bdrStatusText = 'Distribusi';
-        bdrColorClass = 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30';
-      } else if (bdrVal < 5) {
-        bdrStatusText = 'Netral';
-        bdrColorClass = 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30';
-      }
-      planBdrBadge.textContent = `BDR ${bdrSign}${bdrVal.toFixed(1)}% (${bdrStatusText})`;
-      planBdrBadge.className = `text-[10px] font-mono font-bold px-2 py-0.5 rounded ${bdrColorClass}`;
-    }
-
-    if (planBuyersList) {
-      planBuyersList.innerHTML = formatBrokerPills(d.top_buyers_list || d.top_buyers, true);
-    }
-    if (planSellersList) {
-      planSellersList.innerHTML = formatBrokerPills(d.top_sellers_list || d.top_sellers, false);
-    }
-
-    const bandarAvg = d.bandar_avg_buy || (d.trading_plan && d.trading_plan.bandar_avg_buy) || Math.round(d.close * 0.99);
-    if (planBandarAvg) {
-      planBandarAvg.textContent = fmtPrice(bandarAvg);
-    }
-    if (planBandarAvgDiff) {
-      const bandarDiff = d.diff_bandar_avg_pct != null
-        ? d.diff_bandar_avg_pct
-        : (((d.close - bandarAvg) / bandarAvg) * 100).toFixed(1);
-      const bandarDiffSign = bandarDiff >= 0 ? '+' : '';
-      planBandarAvgDiff.textContent = bandarDiff <= 0
-        ? `Diskon ${Math.abs(bandarDiff)}% dr Modal Bandar`
-        : `Jarak ${bandarDiffSign}${bandarDiff}%`;
-      planBandarAvgDiff.className = `font-mono ${bandarDiff <= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`;
-    }
-
-    const hasRealBuyers = Array.isArray(d.top_buyers_list) && d.top_buyers_list.some(c => /^[A-Z]{2}$/.test(c));
-    const hasRealSellers = Array.isArray(d.top_sellers_list) && d.top_sellers_list.some(c => /^[A-Z]{2}$/.test(c));
-    const hasRealBrokerData = hasRealBuyers || hasRealSellers;
-
-    const btnFetchSingle = document.getElementById('btnFetchBrokerSingle');
-    const btnFetchSingleText = document.getElementById('btnFetchBrokerSingleText');
-    if (btnFetchSingle && btnFetchSingleText) {
-      if (hasRealBrokerData) {
-        btnFetchSingleText.textContent = 'Perbarui Broksum';
-        btnFetchSingle.className = 'px-2 py-0.5 rounded-md bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold transition active:scale-95 flex items-center gap-1 cursor-pointer';
-      } else {
-        btnFetchSingleText.textContent = 'Tarik Broksum';
-        btnFetchSingle.className = 'px-2 py-0.5 rounded-md bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-700 dark:text-indigo-300 border border-indigo-400/30 text-[10px] font-semibold transition active:scale-95 flex items-center gap-1 cursor-pointer';
-      }
     }
 
     if (btnWatch) {
@@ -2414,22 +2163,17 @@ async function triggerUnifiedSync() {
   const navBtn = document.getElementById('btnUnifiedSync');
   const navIcon = document.getElementById('unifiedSyncIcon');
   const navLabel = document.getElementById('unifiedSyncLabel');
-  const modalBtn = document.getElementById('btnModalUnifiedSync') || document.getElementById('btnSyncLiveModal');
 
   if (navBtn) navBtn.disabled = true;
   if (navIcon) navIcon.classList.add('animate-spin');
   if (navLabel) navLabel.textContent = 'Syncing...';
-  if (modalBtn) {
-    modalBtn.disabled = true;
-    modalBtn.textContent = '⏳ Memperbarui 844 Saham...';
-  }
 
   showToast('🔄 Memulai pembaruan data bursa seluruh 844 saham IDX...', 'info');
 
   try {
     const res = await fetch('/api/sync', { method: 'POST', cache: 'no-store' });
     if (!res.ok) throw new Error('Gagal menghubungi server untuk sinkronisasi');
-    const data = await res.json();
+    await res.json();
 
     // Polling status background sync secara berkala hingga server selesai mengolah data
     showToast('⏳ Server sedang mengunduh & menganalisis 844 saham di background...', 'info');
@@ -2458,10 +2202,6 @@ async function triggerUnifiedSync() {
     if (navBtn) navBtn.disabled = false;
     if (navIcon) navIcon.classList.remove('animate-spin');
     if (navLabel) navLabel.textContent = 'Sync';
-    if (modalBtn) {
-      modalBtn.disabled = false;
-      modalBtn.innerHTML = '<span>🔄</span><span>Sinkronisasi Menyeluruh Seluruh Saham IDX</span>';
-    }
   }
 }
 

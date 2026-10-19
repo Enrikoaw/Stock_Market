@@ -1176,21 +1176,28 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     tr1 = df["High"] - df["Low"]
     tr2 = (df["High"] - df["Prev_Close"]).abs()
     tr3 = (df["Low"] - df["Prev_Close"]).abs()
-    df["TR"] = np.maximum(tr1, np.maximum(tr2, tr3))
+    df["TR"] = np.maximum(tr1, np.maximum(tr2, tr3)).fillna(1.0)
     if is_multi_day:
-        df["ATR14"] = df.groupby("Ticker")["TR"].transform(lambda s: s.rolling(14, min_periods=1).mean()).fillna(tr1).round().astype(np.int64)
+        df["ATR14"] = (
+            df.groupby("Ticker")["TR"]
+            .transform(lambda s: s.rolling(14, min_periods=1).mean())
+            .fillna(tr1)
+            .fillna(1.0)
+            .round()
+            .astype(np.int64)
+        )
     else:
-        df["ATR14"] = np.maximum(1, np.round(df["TR"] * 0.9)).astype(np.int64)
+        df["ATR14"] = np.maximum(1, np.round(np.nan_to_num(df["TR"] * 0.9, nan=1.0))).astype(np.int64)
     df["ATR_Pct"] = ((df["ATR14"] / np.maximum(df["Close"], 1.0)) * 100.0).round(2)
 
     # 3. 5-Day VWAP
-    typ_p = (df["High"] + df["Low"] + df["Close"]) / 3.0
+    typ_p = ((df["High"] + df["Low"] + df["Close"]) / 3.0).fillna(df["Close"]).fillna(1.0)
     pv_tmp = typ_p * np.maximum(df["Volume_Lot"], 1)
     v_tmp = np.maximum(df["Volume_Lot"], 1)
     if is_multi_day:
         pv_5d = df.assign(_pv=pv_tmp).groupby("Ticker")["_pv"].transform(lambda s: s.rolling(5, min_periods=1).sum())
         v_5d = df.assign(_v=v_tmp).groupby("Ticker")["_v"].transform(lambda s: s.rolling(5, min_periods=1).sum())
-        df["VWAP_5D"] = (pv_5d / np.maximum(v_5d, 1.0)).round().astype(np.int64)
+        df["VWAP_5D"] = (pv_5d / np.maximum(v_5d, 1.0)).fillna(typ_p).round().astype(np.int64)
     else:
         df["VWAP_5D"] = typ_p.round().astype(np.int64)
     df["Bandar_Avg_Buy"] = df["VWAP_5D"]
@@ -1240,7 +1247,7 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
         df["UpDown_Vol_Ratio_5D"] = np.where(df["Pct_Change"] >= 0, 1.5, 0.8)
 
     # =========================================================================
-    # SINGLE SOURCE OF TRUTH: 5 PILAR KUANTITATIF (MAKSIMUM 100 POIN)
+    # SINGLE SOURCE OF TRUTH: 5 PILAR KUANTITATITATIF (MAKSIMUM 100 POIN)
     # =========================================================================
 
     # Pilar 1: Volume Spike, VSA & Akumulasi Murni OHLCV (25 Poin)
@@ -1316,18 +1323,16 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # Total Skor Kuantitatif (Single Unified Value)
-    df["Smart_Money_Score"] = np.clip(
-        np.round(
-            df["Pilar1_VSA_Score"]
-            + df["Pilar2_Trend_Score"]
-            + df["Pilar3_Squeeze_Score"]
-            + df["Pilar4_Liquidity_Score"]
-            + df["Pilar5_VWAP_Score"]
-            + broker_accum_bonus
-        ),
-        5,
-        100,
-    ).astype(int)
+    raw_score = np.nan_to_num(
+        df["Pilar1_VSA_Score"]
+        + df["Pilar2_Trend_Score"]
+        + df["Pilar3_Squeeze_Score"]
+        + df["Pilar4_Liquidity_Score"]
+        + df["Pilar5_VWAP_Score"]
+        + broker_accum_bonus,
+        nan=5.0,
+    )
+    df["Smart_Money_Score"] = np.clip(np.round(raw_score), 5, 100).astype(int)
     df["Daily_SM_Score"] = df["Smart_Money_Score"]
 
     # Filter Keamanan Swing: Bukan Saham FCA/Akselerasi, Harga >= Rp 70, Turnover >= 1M,

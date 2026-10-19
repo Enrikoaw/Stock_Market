@@ -1,8 +1,8 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'smartflow-idx-v72';
+const CACHE_NAME = 'smartflow-idx-v73';
 const ASSETS_TO_CACHE = [
-  '/static/styles.css?v=72.0',
-  '/static/app.js?v=72.0',
+  '/static/styles.css?v=73.0',
+  '/static/app.js?v=73.0',
   '/manifest.json',
   '/static/icons/icon.svg',
   '/static/icons/icon-192.svg',
@@ -59,7 +59,17 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match(event.request))
+        .catch(async () => {
+          return (
+            (await caches.match(event.request)) ||
+            (await caches.match('/')) ||
+            new Response('Offline - Koneksi terputus', {
+              status: 503,
+              statusText: 'Offline',
+              headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            })
+          );
+        })
     );
     return;
   }
@@ -75,7 +85,13 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match(event.request))
+        .catch(async () => {
+          return (
+            (await caches.match(event.request)) ||
+            (await caches.match(url.pathname)) ||
+            new Response('Offline', { status: 503, statusText: 'Offline' })
+          );
+        })
     );
   }
 });

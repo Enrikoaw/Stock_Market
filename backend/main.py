@@ -234,12 +234,18 @@ def _run_sync_job_blocking() -> dict:
     """SATU jalur sinkronisasi: tarik pembaruan SELURUH saham BEI secara paralel
     (mode incremental 5 hari bila cache tersedia), hitung ulang indikator semua saham,
     evaluasi status Watchlist/Running, lalu kembalikan data terbaru untuk tampilan."""
+    global LAST_CACHE_MTIME
     if MASTER_UPLOADED_CSV.exists():
         tickers_df = pd.read_csv(MASTER_UPLOADED_CSV)
     else:
         tickers_df = generate_900_idx_master_tickers_df()
 
     real_df = fetch_real_idx_market_data(tickers_df, output_csv_path=REAL_CACHE_CSV, period="auto", max_workers=2)
+    if REAL_CACHE_CSV.exists():
+        try:
+            LAST_CACHE_MTIME = os.path.getmtime(REAL_CACHE_CSV)
+        except Exception:
+            pass
     if "Has_Broker_Summary" not in real_df.columns:
         real_df["Has_Broker_Summary"] = False
     analysis = analyze_smart_money_dataframe(real_df)
@@ -472,6 +478,11 @@ async def lifespan(app_instance: FastAPI):
     market_task = asyncio.create_task(_background_market_session_worker())
     yield
     market_task.cancel()
+    try:
+        TRACKER.engine.dispose()
+        PORTFOLIO.engine.dispose()
+    except Exception:
+        pass
 
 
 app = FastAPI(
@@ -513,7 +524,8 @@ def check_and_reload_cache_if_updated() -> None:
         current_mtime = os.path.getmtime(REAL_CACHE_CSV)
         if current_mtime > LAST_CACHE_MTIME or STATE["analysis"] is None:
             real_df = pd.read_csv(REAL_CACHE_CSV)
-            real_df["Has_Broker_Summary"] = False
+            if "Has_Broker_Summary" not in real_df.columns:
+                real_df["Has_Broker_Summary"] = False
             STATE["source_name"] = "Daftar Saham IDX - REAL Market Data (24/7 Active)"
             STATE["analysis"] = analyze_smart_money_dataframe(real_df)
             STATE["last_sync_time"] = datetime.fromtimestamp(current_mtime).strftime("%Y-%m-%d %H:%M:%S")
@@ -534,7 +546,8 @@ def init_default_state() -> None:
     if REAL_CACHE_CSV.exists():
         LAST_CACHE_MTIME = os.path.getmtime(REAL_CACHE_CSV)
         real_df = pd.read_csv(REAL_CACHE_CSV)
-        real_df["Has_Broker_Summary"] = False
+        if "Has_Broker_Summary" not in real_df.columns:
+            real_df["Has_Broker_Summary"] = False
         STATE["source_name"] = "Daftar Saham IDX - REAL Market Data (24/7 Active)"
         STATE["analysis"] = analyze_smart_money_dataframe(real_df)
         STATE["last_sync_time"] = datetime.fromtimestamp(LAST_CACHE_MTIME).strftime("%Y-%m-%d %H:%M:%S")
@@ -675,6 +688,17 @@ def get_stock_detail(ticker: str) -> dict:
             try:
                 latest_dt = str(item.get("date") or STATE["analysis"]["kpis"].get("latest_date") or "")
                 enrich_single_stock_broker(item, latest_dt, cfg)
+                for s in STATE["analysis"].get("stocks", []):
+                    if s.get("ticker", "").upper() == key:
+                        for field in (
+                            "broker_analysis", "has_broker_summary", "has_real_broker_summary", "bdr_pct",
+                            "top_buyers_list", "top_sellers_list", "top_buyers", "top_sellers",
+                            "bandar_avg_buy", "diff_bandar_avg_pct", "smart_money_score", "retail_trap",
+                            "trigger_type", "trigger_label"
+                        ):
+                            if field in item:
+                                s[field] = item[field]
+                        break
             except Exception as ex:
                 print(f"[BrokerOnDemand] Error auto-enrich {key}: {ex}")
 

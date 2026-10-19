@@ -50,7 +50,8 @@ def main() -> None:
         period="auto",
         max_workers=4,
     )
-    real_df["Has_Broker_Summary"] = False
+    if "Has_Broker_Summary" not in real_df.columns:
+        real_df["Has_Broker_Summary"] = False
 
     print("[AutoMarketSync] Menganalisis 5-Pilar Smart Money & Auto Trading Plan...")
     analysis = analyze_smart_money_dataframe(real_df)
@@ -60,6 +61,7 @@ def main() -> None:
     tracker = SignalTracker(TRACKER_DB_PATH)
     eval_res = tracker.evaluate(analysis["details"])
     added_count = tracker.auto_track(analysis)
+    tracker.engine.dispose()
 
     print(f"[AutoMarketSync] Evaluasi Tracker Selesai: {eval_res} | Sinyal Baru Ditambahkan: {added_count}")
 
