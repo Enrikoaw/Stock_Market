@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=74.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=75.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -278,7 +278,6 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex flex-wrap items-center gap-2.5 sm:gap-4">
             <div class="flex items-center gap-2">
-              <span class="text-base">📈</span>
               <div>
                 <div class="flex items-center gap-2">
                   <h3 class="text-xs sm:text-sm font-extrabold text-white tracking-tight">Grafik Indeks IHSG (COMPOSITE)</h3>
@@ -310,7 +309,7 @@
               class="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 text-xs font-medium border border-white/10 transition"
               title="Sembunyikan / Tampilkan Grafik IHSG"
             >
-              <span id="ihsgCollapseIcon">🔼</span>
+              <span id="ihsgCollapseIcon">▲</span>
             </button>
           </div>
         </div>
@@ -334,7 +333,6 @@
       <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
         <div>
           <h2 class="text-base sm:text-lg font-extrabold text-white flex items-center gap-2">
-            <span>🎯</span>
             <span>Kandidat Saham Pilihan Hari Ini</span>
           </h2>
         </div>
@@ -343,14 +341,13 @@
             onclick="openLotCalculatorModal()"
             class="px-3 py-1.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-400/30 text-xs font-semibold transition flex items-center gap-1.5"
           >
-            <span>🧮</span>
             <span>Kalkulator Lot</span>
           </button>
           <button
             onclick="openGlossaryModal('all')"
-            class="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 text-xs font-medium border border-white/10 transition flex items-center gap-1"
+            class="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 text-xs font-medium border border-white/10 transition flex items-center gap-1.5"
           >
-            <span>ⓘ</span>
+            <span class="w-3.5 h-3.5 rounded-full border border-slate-400/70 inline-flex items-center justify-center font-mono text-[10px] font-bold text-slate-300">i</span>
             <span>Arti Istilah</span>
           </button>
         </div>
@@ -2011,6 +2008,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=74.0"></script>
+  <script src="/static/app.js?v=75.0"></script>
 </body>
 </html>

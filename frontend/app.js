@@ -379,16 +379,16 @@ function formatBrokerPills(brokerCodes, isBuyer = true) {
   return realCodes.map(code => {
     if (isBuyer) {
       if (INST_FOREIGN_BROKERS.has(code)) {
-        return `<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[10px] border border-emerald-500/40 inline-flex items-center gap-0.5" title="Broker Institusi / Smart Money: ${code}"><span>🏛️</span>${code}</span>`;
+        return `<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[10px] border border-emerald-500/40 inline-flex items-center" title="Broker Institusi / Smart Money: ${code}">${code}</span>`;
       } else if (RETAIL_BROKERS.has(code)) {
-        return `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-mono text-[10px] border border-amber-500/30 inline-flex items-center gap-0.5" title="Broker Ritel: ${code}"><span>👥</span>${code}</span>`;
+        return `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-mono text-[10px] border border-amber-500/30 inline-flex items-center" title="Broker Ritel: ${code}">${code}</span>`;
       }
       return `<span class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono font-bold text-[10px] border border-emerald-500/20" title="${code}">${code}</span>`;
     } else {
       if (RETAIL_BROKERS.has(code)) {
-        return `<span class="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 font-mono font-bold text-[10px] border border-rose-500/30 inline-flex items-center gap-0.5" title="Broker Ritel Jual (Bagus): ${code}"><span>👥</span>${code}</span>`;
+        return `<span class="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 font-mono font-bold text-[10px] border border-rose-500/30 inline-flex items-center" title="Broker Ritel Jual (Bagus): ${code}">${code}</span>`;
       } else if (INST_FOREIGN_BROKERS.has(code)) {
-        return `<span class="px-1.5 py-0.5 rounded bg-rose-900/40 text-rose-400 font-mono text-[10px] border border-rose-500/30 inline-flex items-center gap-0.5" title="Institusi Keluar: ${code}"><span>⚠️</span>${code}</span>`;
+        return `<span class="px-1.5 py-0.5 rounded bg-rose-900/40 text-rose-400 font-mono text-[10px] border border-rose-500/30 inline-flex items-center" title="Institusi Keluar: ${code}">${code}</span>`;
       }
       return `<span class="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono text-[10px] border border-rose-500/20" title="${code}">${code}</span>`;
     }
@@ -400,22 +400,21 @@ function renderTodayCandidates(stocks) {
   if (!container) return;
 
   const regime = currentMarketRegime || {};
+  let defensiveNoticeHtml = '';
   if (regime.allow_watchlist === false) {
-    container.innerHTML = `
-      <div class="col-span-full p-8 rounded-2xl bg-white dark:bg-[#0b1329]/80 border border-rose-200 dark:border-rose-500/30 shadow-sm text-center space-y-3">
-        <span class="text-4xl block">🛡️</span>
-        <div class="text-base font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider">
-          ${escHtml(regime.label || 'MODE DEFENSIF AKTIF — AKSES DIBEKUKAN')}
+    defensiveNoticeHtml = `
+      <div class="col-span-full p-3.5 rounded-xl bg-slate-900/80 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+        <div>
+          <div class="font-mono font-bold text-amber-400 text-xs uppercase tracking-wider">Akses Pantauan Aktif — Mode Pasar Defensif</div>
+          <p class="text-slate-300 text-[11px] mt-0.5 leading-relaxed">
+            IHSG sedang mengalami tekanan jual. Saham pilihan di bawah ini adalah emiten terbaik yang tetap terakumulasi dan lolos filter fundamental (Hanya ditampilkan untuk referensi pantauan, tidak dimasukkan otomatis ke Watchlist).
+          </p>
         </div>
-        <p class="max-w-xl mx-auto text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-          ${escHtml(regime.regime_note || 'IHSG sedang mengalami tekanan jual ekstrem / downtrend. Sistem menahan seluruh sinyal beli sampai terbentuk konfirmasi rebound yang sah.')}
-        </p>
-        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-400/30 text-rose-700 dark:text-rose-300 text-xs font-mono font-bold">
-          Rekomendasi Alokasi: ${escHtml(regime.allocation || '100% Cash')}
-        </div>
+        <span class="px-2.5 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-400/30 font-mono text-[10px] font-semibold whitespace-nowrap self-start sm:self-auto">
+          Hanya Pantauan
+        </span>
       </div>
     `;
-    return;
   }
 
   if (!stocks || stocks.length === 0) {
@@ -471,7 +470,7 @@ function renderTodayCandidates(stocks) {
     if (candidates.length >= 6) break;
   }
 
-  // Fallback jika kriteria pullback terlalu ketat: ambil saham skor tertinggi yang lolos fundamental & bukan distribusi
+  // Fallback 1: Jika kriteria pullback terlalu ketat atau pasar crash: ambil saham skor & akumulasi broker tertinggi yang aman
   if (candidates.length < 3) {
     const fallbackList = stocks
       .filter(s =>
@@ -484,8 +483,7 @@ function renderTodayCandidates(stocks) {
         s.trigger_type !== 'DISTRIBUTION_WARNING' &&
         !s.retail_trap &&
         s.tracker_status !== 'WIN' &&
-        s.tracker_status !== 'LOSS' &&
-        s.pct_change <= 3.5
+        s.tracker_status !== 'LOSS'
       )
       .sort((a, b) => {
         const bdrA = a.bdr_pct != null ? a.bdr_pct : 0;
@@ -503,20 +501,15 @@ function renderTodayCandidates(stocks) {
     }
   }
 
+  // Fallback 2: Jaminan minimal menampilkan 3 saham terbaik yang aman
   if (candidates.length === 0) {
-    container.innerHTML = `
-      <div class="col-span-full p-8 rounded-2xl glass-panel text-center text-slate-300 text-xs space-y-2">
-        <span class="text-3xl block">🛡️</span>
-        <div class="text-sm font-bold text-white">Pasar Sedang Defensif / Belum Ada Setup Baru Ideal</div>
-        <p class="max-w-md mx-auto text-slate-400">
-          Semua saham yang terakumulasi kuat telah mencapai target (Take Profit) atau sedang berjalan di tab Pantauan.
-        </p>
-      </div>
-    `;
-    return;
+    candidates = stocks
+      .filter(s => (s.close || 0) >= 70 && !String(s.sector || '').toLowerCase().includes('pemantauan khusus'))
+      .sort((a, b) => (b.smart_money_score || 0) - (a.smart_money_score || 0))
+      .slice(0, 3);
   }
 
-  container.innerHTML = candidates.map(s => {
+  container.innerHTML = defensiveNoticeHtml + candidates.map(s => {
     const safeTicker = escHtml(s.ticker);
     const safeSector = escHtml(s.sector);
     const safeSecCat = escHtml(s.sector_category || 'Sektor');
@@ -538,20 +531,21 @@ function renderTodayCandidates(stocks) {
 
     // Kualitas Pita (Tape Quality) Badge
     const tapePill = (s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW')
-      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400" title="${escHtml(s.tape_quality.reason)}">⚠️ ${escHtml(s.tape_quality.label)}</span>`
+      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400" title="${escHtml(s.tape_quality.reason)}">${escHtml(s.tape_quality.label)}</span>`
       : '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400">Arus Organik</span>';
 
     // Tingkat Risiko / Status Pantauan
-    let statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50">Risiko Rendah</span>';
-    if (s.tracker_status === 'RUNNING') {
+    let statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50">Risiko Terukur</span>';
+    if (regime.allow_watchlist === false && s.tracker_status !== 'RUNNING') {
+      statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-400/30">Pantauan Referensi</span>';
+    } else if (s.tracker_status === 'RUNNING') {
       const isLoss = (s.tracker_pnl_pct || 0) < 0;
       const pnlColor = isLoss
         ? 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50'
         : 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50';
-      const icon = isLoss ? '🔻' : '🚀';
-      statusPill = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md ${pnlColor} border">${icon} Posisi Aktif (${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%)</span>`;
+      statusPill = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md ${pnlColor} border">Posisi Aktif (${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%)</span>`;
     } else if (s.tracker_status === 'WATCHLIST') {
-      statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50">⏳ Menunggu Entry</span>';
+      statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50">Menunggu Entry</span>';
     } else if (s.vol_ratio > 2.5 || s.pct_change > 4.5) {
       statusPill = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/30">Risiko Sedang</span>';
     }
@@ -631,7 +625,6 @@ function renderTodayCandidates(stocks) {
             onclick="openLotCalculatorForStockDetails('${safeTicker}', ${Number(s.close || 0)}, ${Number(stopLoss || 0)})"
             class="flex-1 py-2 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-400/30 text-xs font-semibold transition flex items-center justify-center gap-1"
           >
-            <span>🧮</span>
             <span>Hitung Lot</span>
           </button>
           <button
@@ -639,7 +632,7 @@ function renderTodayCandidates(stocks) {
             class="flex-1 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition flex items-center justify-center gap-1"
           >
             <span>Lihat Detail</span>
-            <span>→</span>
+            <span>&rarr;</span>
           </button>
         </div>
 
@@ -2954,7 +2947,7 @@ function toggleIhsgChartCollapse() {
     wrapper.classList.toggle('hidden', ihsgChartCollapsed);
   }
   if (icon) {
-    icon.textContent = ihsgChartCollapsed ? '🔽' : '🔼';
+    icon.textContent = ihsgChartCollapsed ? '▼' : '▲';
   }
 }
 
