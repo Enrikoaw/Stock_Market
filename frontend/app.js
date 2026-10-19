@@ -361,6 +361,39 @@ function getHumanExplanation(s) {
   return `${volTxt} ${vwapTxt}`;
 }
 
+// Broker Bursa Efek Indonesia (IDX) Sets & Formatting
+const RETAIL_BROKERS = new Set(['YP', 'PD', 'XC', 'XL', 'KK', 'NI', 'SQ', 'BQ', 'AZ', 'MG']);
+const INST_FOREIGN_BROKERS = new Set(['AK', 'BK', 'ZP', 'KZ', 'RX', 'YU', 'CC', 'CS', 'DX', 'LG', 'OD', 'BB', 'CP']);
+
+function formatBrokerPills(brokerCodes, isBuyer = true) {
+  if (!brokerCodes || !brokerCodes.length) {
+    return `<span class="text-[10px] text-slate-400 font-mono">-</span>`;
+  }
+  const codes = Array.isArray(brokerCodes)
+    ? brokerCodes
+    : String(brokerCodes).split(',').map(s => s.trim()).filter(Boolean);
+  if (!codes.length) return `<span class="text-[10px] text-slate-400 font-mono">-</span>`;
+
+  return codes.map(code => {
+    const clean = code.toUpperCase();
+    if (isBuyer) {
+      if (INST_FOREIGN_BROKERS.has(clean)) {
+        return `<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[10px] border border-emerald-500/40 inline-flex items-center gap-0.5" title="Broker Institusi / Smart Money: ${clean}"><span>🏛️</span>${clean}</span>`;
+      } else if (RETAIL_BROKERS.has(clean)) {
+        return `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-mono text-[10px] border border-amber-500/30 inline-flex items-center gap-0.5" title="Broker Ritel: ${clean}"><span>👥</span>${clean}</span>`;
+      }
+      return `<span class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono font-bold text-[10px] border border-emerald-500/20" title="${clean}">${clean}</span>`;
+    } else {
+      if (RETAIL_BROKERS.has(clean)) {
+        return `<span class="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 font-mono font-bold text-[10px] border border-rose-500/30 inline-flex items-center gap-0.5" title="Broker Ritel Jual (Bagus): ${clean}"><span>👥</span>${clean}</span>`;
+      } else if (INST_FOREIGN_BROKERS.has(clean)) {
+        return `<span class="px-1.5 py-0.5 rounded bg-rose-900/40 text-rose-400 font-mono text-[10px] border border-rose-500/30 inline-flex items-center gap-0.5" title="Institusi Keluar: ${clean}"><span>⚠️</span>${clean}</span>`;
+      }
+      return `<span class="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono text-[10px] border border-rose-500/20" title="${clean}">${clean}</span>`;
+    }
+  }).join(' ');
+}
+
 function renderTodayCandidates(stocks) {
   const container = document.getElementById('todayCandidatesGrid');
   if (!container) return;
@@ -393,34 +426,37 @@ function renderTodayCandidates(stocks) {
     return;
   }
 
-  // Filter kandidat terbaik untuk pemula (Safe Short-Term Swing):
-  // 1. Skor Smart Money >= 70
-  // 2. Turnover likuid (value_b_idr >= 1.0 Miliar)
-  // 3. Harga saham >= Rp 70 & Bukan Papan Pemantauan Khusus / Akselerasi
-  // 4. Kenaikan belum di pucuk (-1.5% <= pct_change <= 5.5%)
-  // 5. Jarak ke modal bandar aman (-1.0% <= diff_bandar_avg_pct <= +3.5%)
-  // 6. Penutupan candle kuat (closing_range_pct >= 65%)
-  // 7. TIDAK boleh yang sudah WIN atau LOSS di tracker!
-  // 8. Filter Fundamental & Papan Safety (Item 4)
-  // 9. Filter Kualitas Pita Tape Flow (Item 5)
+  // Saring saham untuk strategi Swing Trading "Buy on Pullback / Koreksi Sehat + Akumulasi Broker":
+  // Sesuai prinsip swing: cari saham saat koreksi sehat / harga diskon di area support/modal bandar,
+  // BUKAN saat hijau terbang tinggi (breakout chase).
   const rawCandidates = stocks.filter(s =>
-    s.smart_money_score >= 70 &&
-    (s.value_b_idr || 0) >= 1.0 &&
+    // 1. Fundamental & Likuiditas & Keamanan Dasar
     (s.close || 0) >= 70 &&
+    (s.value_b_idr || 0) >= 1.0 &&
     !String(s.sector || '').toLowerCase().includes('pemantauan khusus') &&
     !String(s.sector || '').toLowerCase().includes('akselerasi') &&
     (s.fundamental_safety == null || s.fundamental_safety.is_safe !== false) &&
     (s.tape_quality == null || s.tape_quality.is_organic !== false) &&
-    s.pct_change >= -1.5 &&
-    s.pct_change <= 5.5 &&
-    (s.diff_bandar_avg_pct == null || (s.diff_bandar_avg_pct >= -1.0 && s.diff_bandar_avg_pct <= 3.5)) &&
-    (s.closing_range_pct == null || s.closing_range_pct >= 65) &&
     s.trigger_type !== 'DISTRIBUTION_WARNING' &&
+    !s.retail_trap &&
     s.tracker_status !== 'WIN' &&
-    s.tracker_status !== 'LOSS'
+    s.tracker_status !== 'LOSS' &&
+    // 2. Koreksi Sehat / Diskon (Harga merah atau konsolidasi santai, -3.5% s/d +1.5%)
+    s.pct_change >= -3.5 &&
+    s.pct_change <= 1.5 &&
+    // 3. Volume Kering (No Supply Test saat pullback, vol_ratio <= 1.35x MA20)
+    (s.vol_ratio == null || s.vol_ratio <= 1.35) &&
+    // 4. Jarak ke Modal Bandar Sangat Dekat / Diskon (-2.5% s/d +2.5%)
+    (s.diff_bandar_avg_pct == null || (s.diff_bandar_avg_pct >= -2.5 && s.diff_bandar_avg_pct <= 2.5)) &&
+    // 5. Akumulasi Broker Nyata (BDR >= 5.0% atau Top 3 BSR >= 1.15)
+    (s.bdr_pct >= 5.0 || s.top3_bsr >= 1.15 || (s.broker_analysis && s.broker_analysis.bdr >= 5.0))
   );
 
-  rawCandidates.sort((a, b) => (b.smart_money_score - a.smart_money_score) || ((b.vol_ratio || 0) - (a.vol_ratio || 0)));
+  rawCandidates.sort((a, b) => {
+    const bdrA = a.bdr_pct != null ? a.bdr_pct : 0;
+    const bdrB = b.bdr_pct != null ? b.bdr_pct : 0;
+    return (bdrB - bdrA) || (b.smart_money_score - a.smart_money_score) || ((a.diff_bandar_avg_pct || 0) - (b.diff_bandar_avg_pct || 0));
+  });
 
   // ITEM 2: Batasan Korelasi Sektor (Maksimal 1 saham per sektor)
   let candidates = [];
@@ -434,20 +470,27 @@ function renderTodayCandidates(stocks) {
     if (candidates.length >= 6) break;
   }
 
-  // Fallback jika kriteria terlalu ketat: ambil top berdasarkan skor tertinggi yang lolos fundamental & bukan distribusi
+  // Fallback jika kriteria pullback terlalu ketat: ambil saham skor tertinggi yang lolos fundamental & bukan distribusi
   if (candidates.length < 3) {
     const fallbackList = stocks
       .filter(s =>
         (s.close || 0) >= 70 &&
+        (s.value_b_idr || 0) >= 1.0 &&
         !String(s.sector || '').toLowerCase().includes('pemantauan khusus') &&
         !String(s.sector || '').toLowerCase().includes('akselerasi') &&
         (s.fundamental_safety == null || s.fundamental_safety.is_safe !== false) &&
         (s.tape_quality == null || s.tape_quality.is_organic !== false) &&
         s.trigger_type !== 'DISTRIBUTION_WARNING' &&
+        !s.retail_trap &&
         s.tracker_status !== 'WIN' &&
-        s.tracker_status !== 'LOSS'
+        s.tracker_status !== 'LOSS' &&
+        s.pct_change <= 3.5
       )
-      .sort((a, b) => (b.smart_money_score - a.smart_money_score) || ((b.vol_ratio || 0) - (a.vol_ratio || 0)));
+      .sort((a, b) => {
+        const bdrA = a.bdr_pct != null ? a.bdr_pct : 0;
+        const bdrB = b.bdr_pct != null ? b.bdr_pct : 0;
+        return (bdrB - bdrA) || (b.smart_money_score - a.smart_money_score);
+      });
 
     for (const s of fallbackList) {
       const secCat = s.sector_category || s.sector || 'General';
@@ -455,7 +498,7 @@ function renderTodayCandidates(stocks) {
         seenSectors.add(secCat);
         candidates.push(s);
       }
-      if (candidates.length >= 5) break;
+      if (candidates.length >= 6) break;
     }
   }
 
@@ -519,6 +562,33 @@ function renderTodayCandidates(stocks) {
       entryValue = fmtPrice(plan.entry_price || entryHigh);
     }
 
+    // Smart Money Broker Summary Badges & Pills
+    const bdrVal = Number(s.bdr_pct != null ? s.bdr_pct : (s.broker_analysis && s.broker_analysis.bdr != null ? s.broker_analysis.bdr : 0));
+    const bdrSign = bdrVal >= 0 ? '+' : '';
+    let bdrColorClass = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30';
+    let bdrStatusText = 'Akumulasi';
+    if (bdrVal >= 25) {
+      bdrStatusText = 'Big Acc';
+      bdrColorClass = 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-400/40 drop-shadow-[0_0_8px_rgba(16,185,129,0.3)]';
+    } else if (bdrVal <= -15 || s.trigger_type === 'DISTRIBUTION_WARNING' || s.retail_trap) {
+      bdrStatusText = 'Distribusi';
+      bdrColorClass = 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30';
+    } else if (bdrVal < 5) {
+      bdrStatusText = 'Netral';
+      bdrColorClass = 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30';
+    }
+
+    const buyersPillsHtml = formatBrokerPills(s.top_buyers_list || s.top_buyers, true);
+    const sellersPillsHtml = formatBrokerPills(s.top_sellers_list || s.top_sellers, false);
+
+    const bandarAvg = s.bandar_avg_buy || (s.trading_plan && s.trading_plan.bandar_avg_buy) || Math.round(s.close * 0.99);
+    const bandarDiff = s.diff_bandar_avg_pct != null
+      ? s.diff_bandar_avg_pct
+      : (((s.close - bandarAvg) / bandarAvg) * 100).toFixed(1);
+    const bandarDiffSign = bandarDiff >= 0 ? '+' : '';
+    const bandarDiffColor = bandarDiff <= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500 dark:text-slate-400';
+    const bandarDiffLabel = bandarDiff <= 0 ? `(Diskon ${Math.abs(bandarDiff)}% dr Modal Bandar)` : `(Jarak ${bandarDiffSign}${bandarDiff}%)`;
+
     return `
       <div class="p-5 rounded-2xl glass-panel border border-white/[0.08] hover:border-emerald-400/40 transition shadow-lg flex flex-col justify-between gap-4">
         
@@ -558,6 +628,33 @@ function renderTodayCandidates(stocks) {
           <div class="flex items-center gap-1.5 flex-wrap justify-end">
             ${tapePill}
             ${statusPill}
+          </div>
+        </div>
+
+        <!-- Smart Money Flow (Broker Summary: Pembeli vs Penjual) -->
+        <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/40 border border-slate-200 dark:border-white/[0.06] space-y-1.5 text-xs">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1 text-[11px] font-bold text-slate-800 dark:text-slate-200">
+              <span>🐋</span>
+              <span>Smart Money Flow:</span>
+            </div>
+            <div class="font-mono text-[10px] font-bold px-2 py-0.5 rounded ${bdrColorClass}">
+              BDR ${bdrSign}${bdrVal.toFixed(1)}% (${bdrStatusText})
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-[11px] pt-0.5">
+            <div class="p-1.5 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
+              <div class="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold mb-0.5">🏛️ Top Pembeli:</div>
+              <div class="flex flex-wrap gap-1 font-mono font-bold">${buyersPillsHtml}</div>
+            </div>
+            <div class="p-1.5 rounded-lg bg-rose-500/5 border border-rose-500/15">
+              <div class="text-[9px] text-rose-600 dark:text-rose-400 font-semibold mb-0.5">👥 Top Penjual:</div>
+              <div class="flex flex-wrap gap-1 font-mono font-bold">${sellersPillsHtml}</div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200/60 dark:border-white/5">
+            <span>Modal Bandar: <strong class="font-mono text-slate-800 dark:text-slate-200">${fmtPrice(bandarAvg)}</strong></span>
+            <span class="font-mono ${bandarDiffColor}">${bandarDiffLabel}</span>
           </div>
         </div>
 
@@ -896,6 +993,73 @@ async function saveBrokerConfigFromModal() {
     showToast('Gagal menyimpan konfigurasi broker: ' + err.message, 'error');
     if (btnText) btnText.textContent = 'Simpan Pengaturan Broker';
   } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function testBrokerConfigFromModal() {
+  const prov = document.getElementById('brokerProviderSelect')?.value || 'stockbit';
+  const sbToken = document.getElementById('inputStockbitToken')?.value?.trim();
+  const goKey = document.getElementById('inputGoapiKey')?.value?.trim();
+  const token = prov === 'stockbit' ? sbToken : goKey;
+
+  const btn = document.getElementById('btnTestBrokerConfig');
+  const btnText = document.getElementById('btnTestBrokerConfigText');
+  const resBox = document.getElementById('brokerTestResultMsg');
+
+  if (btnText) btnText.textContent = 'Menguji...';
+  if (btn) btn.disabled = true;
+  if (resBox) {
+    resBox.classList.remove('hidden');
+    resBox.innerHTML = '<span class="text-slate-400">Sedang menghubungi endpoint broker untuk saham BBCA...</span>';
+  }
+
+  try {
+    const res = await fetch('/api/broker/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: prov, token_or_key: token, ticker: 'BBCA' }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || data.error || 'Gagal terhubung ke Broker API');
+    }
+
+    const bdr = data.metrics?.bdr != null ? data.metrics.bdr : 0;
+    const bdrSign = bdr >= 0 ? '+' : '';
+    const buyers = (data.top_buyers || []).join(', ') || '-';
+    const sellers = (data.top_sellers || []).join(', ') || '-';
+    const bandarAvg = data.metrics?.bandar_avg ? `Rp ${data.metrics.bandar_avg.toLocaleString('id-ID')}` : '-';
+
+    if (resBox) {
+      resBox.innerHTML = `
+        <div class="text-emerald-400 font-bold flex items-center gap-1">
+          <span>✅</span>
+          <span>Koneksi ${escHtml(data.provider.toUpperCase())} Berhasil Aktif!</span>
+        </div>
+        <div class="text-slate-300 text-[10px] space-y-0.5 pt-1">
+          <div>• <strong>Ticker Tes:</strong> #${escHtml(data.ticker)} (${escHtml(data.date || 'Hari Ini')})</div>
+          <div>• <strong>BDR Top 3:</strong> <span class="${bdr >= 0 ? 'text-emerald-300' : 'text-rose-300'} font-bold">${bdrSign}${bdr}%</span> (${escHtml(data.metrics?.status || 'OK')})</div>
+          <div>• <strong>Top Pembeli:</strong> <code class="text-emerald-300">${escHtml(buyers)}</code></div>
+          <div>• <strong>Top Penjual:</strong> <code class="text-rose-300">${escHtml(sellers)}</code></div>
+          <div>• <strong>Modal Beli Bandar:</strong> <code>${escHtml(bandarAvg)}</code></div>
+        </div>
+      `;
+    }
+    showToast(`Koneksi Broker API (${prov.toUpperCase()}) aktif dan valid!`, 'success');
+  } catch (err) {
+    if (resBox) {
+      resBox.innerHTML = `
+        <div class="text-rose-400 font-bold flex items-center gap-1">
+          <span>❌</span>
+          <span>Koneksi Gagal:</span>
+        </div>
+        <div class="text-slate-300 text-[10px] pt-0.5">${escHtml(err.message)}</div>
+      `;
+    }
+    showToast(`Uji Broker Gagal: ${err.message}`, 'error');
+  } finally {
+    if (btnText) btnText.textContent = 'Uji Koneksi Token';
     if (btn) btn.disabled = false;
   }
 }
@@ -1504,6 +1668,54 @@ function renderInspectorPanel(d) {
     if (pr) {
       const rr = plan.risk_reward ? ` (R:R = ${plan.risk_reward})` : '';
       pr.textContent = `${plan.rationale || ''}${rr}`;
+    }
+
+    // Smart Money Broker Summary di Inspector / Trading Plan
+    const planBdrBadge = document.getElementById('planBdrBadge');
+    const planBuyersList = document.getElementById('planBuyersList');
+    const planSellersList = document.getElementById('planSellersList');
+    const planBandarAvg = document.getElementById('planBandarAvg');
+    const planBandarAvgDiff = document.getElementById('planBandarAvgDiff');
+
+    const bdrVal = Number(d.bdr_pct != null ? d.bdr_pct : (d.broker_analysis && d.broker_analysis.bdr != null ? d.broker_analysis.bdr : 0));
+    const bdrSign = bdrVal >= 0 ? '+' : '';
+    if (planBdrBadge) {
+      let bdrColorClass = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30';
+      let bdrStatusText = 'Akumulasi';
+      if (bdrVal >= 25) {
+        bdrStatusText = 'Big Acc';
+        bdrColorClass = 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-400/40';
+      } else if (bdrVal <= -15 || d.trigger_type === 'DISTRIBUTION_WARNING' || d.retail_trap) {
+        bdrStatusText = 'Distribusi';
+        bdrColorClass = 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30';
+      } else if (bdrVal < 5) {
+        bdrStatusText = 'Netral';
+        bdrColorClass = 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30';
+      }
+      planBdrBadge.textContent = `BDR ${bdrSign}${bdrVal.toFixed(1)}% (${bdrStatusText})`;
+      planBdrBadge.className = `text-[10px] font-mono font-bold px-2 py-0.5 rounded ${bdrColorClass}`;
+    }
+
+    if (planBuyersList) {
+      planBuyersList.innerHTML = formatBrokerPills(d.top_buyers_list || d.top_buyers, true);
+    }
+    if (planSellersList) {
+      planSellersList.innerHTML = formatBrokerPills(d.top_sellers_list || d.top_sellers, false);
+    }
+
+    const bandarAvg = d.bandar_avg_buy || (d.trading_plan && d.trading_plan.bandar_avg_buy) || Math.round(d.close * 0.99);
+    if (planBandarAvg) {
+      planBandarAvg.textContent = fmtPrice(bandarAvg);
+    }
+    if (planBandarAvgDiff) {
+      const bandarDiff = d.diff_bandar_avg_pct != null
+        ? d.diff_bandar_avg_pct
+        : (((d.close - bandarAvg) / bandarAvg) * 100).toFixed(1);
+      const bandarDiffSign = bandarDiff >= 0 ? '+' : '';
+      planBandarAvgDiff.textContent = bandarDiff <= 0
+        ? `Diskon ${Math.abs(bandarDiff)}% dr Modal Bandar`
+        : `Jarak ${bandarDiffSign}${bandarDiff}%`;
+      planBandarAvgDiff.className = `font-mono ${bandarDiff <= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`;
     }
 
     if (btnWatch) {

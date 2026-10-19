@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=66.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=68.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -723,6 +723,43 @@
               <span id="planRationale" class="text-slate-600 dark:text-slate-300 truncate max-w-[180px]">-</span>
             </div>
 
+            <!-- Smart Money Broker Summary Flow (Pembeli Institusi vs Penjual Ritel) -->
+            <div id="planBrokerFlowBox" class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/50 border border-slate-200 dark:border-white/[0.08] space-y-2 text-xs">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <span>🐋</span>
+                  <span>Smart Money Flow (Broker Summary)</span>
+                </span>
+                <span id="planBdrBadge" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                  BDR +0.0%
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-[11px]">
+                <div class="p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+                  <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mb-1 flex items-center gap-1">
+                    <span>🏛️</span>
+                    <span>Top Pembeli (Smart Money):</span>
+                  </div>
+                  <div id="planBuyersList" class="flex flex-wrap gap-1 font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                    -
+                  </div>
+                </div>
+                <div class="p-2 rounded-lg bg-rose-500/5 border border-rose-500/20">
+                  <div class="text-[10px] text-rose-600 dark:text-rose-400 font-semibold mb-1 flex items-center gap-1">
+                    <span>👥</span>
+                    <span>Top Penjual (Ritel/Distribusi):</span>
+                  </div>
+                  <div id="planSellersList" class="flex flex-wrap gap-1 font-mono font-bold text-rose-700 dark:text-rose-300">
+                    -
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200/60 dark:border-white/5">
+                <span>Modal Beli Bandar (Bandar Avg): <strong id="planBandarAvg" class="font-mono text-slate-800 dark:text-slate-200">Rp -</strong></span>
+                <span id="planBandarAvgDiff" class="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">-</span>
+              </div>
+            </div>
+
             <!-- Tombol Salin Auto-Order & Panduan Sekuritas Orang Sibuk -->
             <div class="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-100 dark:bg-indigo-950/20 dark:border-indigo-500/20 space-y-2">
               <div class="flex items-center justify-between">
@@ -1314,15 +1351,28 @@
               <label class="block text-[11px] text-slate-400 mb-1">GoAPI.io API Key:</label>
               <input type="password" id="inputGoapiKey" placeholder="Paste API Key GoAPI di sini..." class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950/60 border border-white/10 font-mono text-white text-xs focus:border-indigo-400 focus:outline-none" />
             </div>
-            <button
-              type="button"
-              id="btnSaveBrokerConfig"
-              onclick="saveBrokerConfigFromModal()"
-              class="w-full py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <span>💾</span>
-              <span id="btnSaveBrokerConfigText">Simpan Pengaturan Broker</span>
-            </button>
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                id="btnSaveBrokerConfig"
+                onclick="saveBrokerConfigFromModal()"
+                class="py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>💾</span>
+                <span id="btnSaveBrokerConfigText">Simpan</span>
+              </button>
+              <button
+                type="button"
+                id="btnTestBrokerConfig"
+                onclick="testBrokerConfigFromModal()"
+                class="py-1.5 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-bold text-xs transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                title="Cek apakah Bearer Token Stockbit atau API Key aktif dan bisa mengambil data"
+              >
+                <span>🔌</span>
+                <span id="btnTestBrokerConfigText">Uji Koneksi Token</span>
+              </button>
+            </div>
+            <div id="brokerTestResultMsg" class="hidden text-[11px] p-2.5 rounded-lg bg-slate-950/80 border border-white/10 font-mono space-y-1"></div>
           </div>
         </div>
 
@@ -2189,6 +2239,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=67.0"></script>
+  <script src="/static/app.js?v=68.0"></script>
 </body>
 </html>

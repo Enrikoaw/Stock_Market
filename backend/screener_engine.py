@@ -1723,6 +1723,8 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             "cum_5d_bdr_pct": cum_5d_bdr_pct,
             "top_buyers": str(latest["Top_Buyer_Brokers"]),
             "top_sellers": str(latest["Top_Seller_Brokers"]),
+            "top_buyers_list": [b.strip() for b in str(latest.get("Top_Buyer_Brokers", "")).split(",") if b.strip()],
+            "top_sellers_list": [s.strip() for s in str(latest.get("Top_Seller_Brokers", "")).split(",") if s.strip()],
             "bandar_avg_buy": vwap_5d,
             "diff_bandar_avg_pct": diff_vwap_pct,
             "ticket_size": ticket_size,

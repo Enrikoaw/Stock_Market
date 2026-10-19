@@ -42,6 +42,7 @@ from broker_summary_fetcher import (
     load_broker_api_config,
     save_broker_api_config,
     run_stage2_broker_enrichment,
+    test_broker_connection,
 )
 from portfolio_tracker import PortfolioTracker
 from signal_tracker import SignalTracker
@@ -255,7 +256,7 @@ def _run_sync_job_blocking() -> dict:
             if float(s.get("value_b_idr", 0)) >= 1.0 and int(s.get("smart_money_score", 0)) >= 50
         ]
         if stage1_candidates:
-            run_stage2_broker_enrichment(stage1_candidates, str(latest_dt), broker_cfg)
+            run_stage2_broker_enrichment(stage1_candidates, str(latest_dt), broker_cfg, details_map=analysis.get("details"))
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["source_name"] = f"Live IDX ({latest_dt})"
@@ -1404,6 +1405,33 @@ def save_broker_api_config_endpoint(req: BrokerApiConfigRequest) -> dict:
     if not ok:
         raise HTTPException(status_code=500, detail="Gagal menyimpan konfigurasi Broker API.")
     return {"status": "success", "message": "Konfigurasi Broker API berhasil disimpan!", "config": cfg}
+
+
+class BrokerTestRequest(BaseModel):
+    provider: Optional[str] = None
+    token_or_key: Optional[str] = None
+    ticker: Optional[str] = "BBCA"
+
+
+@app.post("/api/broker/test")
+def test_broker_api_endpoint(req: BrokerTestRequest) -> dict:
+    cfg = load_broker_api_config()
+    provider = (req.provider or cfg.get("provider", "stockbit")).strip().lower()
+    token_or_key = (req.token_or_key or "").strip()
+    if not token_or_key:
+        if provider == "stockbit":
+            token_or_key = cfg.get("stockbit_token", "")
+        else:
+            token_or_key = cfg.get("goapi_key", "")
+
+    if not token_or_key:
+        raise HTTPException(status_code=400, detail=f"Token {provider.upper()} belum diisi. Silakan masukkan token terlebih dahulu.")
+
+    ticker = (req.ticker or "BBCA").strip().upper()
+    res = test_broker_connection(provider=provider, token_or_key=token_or_key, ticker=ticker)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Koneksi ke Broker API gagal."))
+    return res
 
 
 @app.post("/api/telegram/test")

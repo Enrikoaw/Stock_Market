@@ -211,18 +211,25 @@ def format_telegram_broadcast(picks: list[dict], market_date: str) -> str:
         tp1_loss = int(round(plan.get("tp1_loss_prob", 25)))
         tp2_win = int(round(plan.get("tp2_win_prob", 58)))
 
+        top_buyers_str = html.escape(str(s.get("top_buyers", "-")))
+        top_sellers_str = html.escape(str(s.get("top_sellers", "-")))
+        bdr_val = float(s.get("bdr_pct", s.get("broker_analysis", {}).get("bdr", 0)) if isinstance(s.get("broker_analysis"), dict) else s.get("bdr_pct", 0))
+        bdr_sign = "+" if bdr_val >= 0 else ""
+
         card = (
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"<b>{idx}. #{ticker}</b> ({sec_display})\n"
             f"💰 <b>Harga:</b> Rp {close:,} (<b>{pct_sign}{pct:.2f}%</b>) | <b>VSA Score:</b> {score}/100\n"
             f"⚡ <b>Sinyal:</b> {trigger_lbl} | <b>Pita:</b> {tape_lbl}\n"
-            f"📊 <b>Vol Spike:</b> {vol_ratio:.1f}x MA20 | <b>Nilai Transaksi:</b> Rp {val_b:.2f}M\n\n"
-            f"🎯 <b>TRADING PLAN (RRR 1:2 · Retest VWAP):</b>\n"
+            f"🐋 <b>Smart Money Join:</b> <code>{top_buyers_str}</code> (BDR <b>{bdr_sign}{bdr_val:.1f}%</b>)\n"
+            f"🔻 <b>Penjual (Ritel):</b> <code>{top_sellers_str}</code>\n"
+            f"📊 <b>Vol Flow:</b> {vol_ratio:.1f}x MA20 | <b>Nilai Transaksi:</b> Rp {val_b:.2f}M\n\n"
+            f"🎯 <b>TRADING PLAN SWING (Diskon Support / VWAP):</b>\n"
             f"• <b>Harga Antre Beli:</b> <code>Rp {e_high:,}</code>\n"
             f"• <b>Stop Loss (Closing Basis):</b> <code>Rp {sl:,} ({sl_pct:.1f}%)</code>\n"
             f"• <b>Target TP1 (+6%):</b> <code>Rp {tp1:,} (+{tp1_pct:.1f}%)</code> ➜ <b>Est. Skor Setup: {tp1_win}%</b>\n"
             f"• <b>Target TP2 (+10%):</b> <code>Rp {tp2:,} (+{tp2_pct:.1f}%)</code> ➜ <b>Est. Skor Lanjut: {tp2_win}%</b>\n"
-            f"• <b>VWAP 5 Hari:</b> Rp {vwap_5d:,} (Jarak: {diff_vwap:+.1f}%)\n"
+            f"• <b>Modal Beli Bandar:</b> Rp {vwap_5d:,} (Jarak: {diff_vwap:+.1f}%)\n"
         )
         lines.append(card)
 
