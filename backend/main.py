@@ -688,6 +688,9 @@ def get_news_endpoint(
     elif cat_upper == "NEGATIVE":
         news_items = [n for n in news_items if n.get("sentiment") == "NEGATIVE"]
 
+    # Pastikan data terurut mutlak dari yang paling baru (published_ts terbesar di atas)
+    news_items.sort(key=lambda n: n.get("published_ts", 0), reverse=True)
+
     return {
         "status": "success",
         "category": cat_upper,

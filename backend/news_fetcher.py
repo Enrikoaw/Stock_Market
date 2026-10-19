@@ -7,6 +7,7 @@ dan menyelaraskannya dengan data teknikal 5-Pilar Smart Money & Trading Plan.
 
 from __future__ import annotations
 
+import email.utils
 import re
 import time
 import urllib.request
@@ -49,42 +50,61 @@ def _clean_text(raw: str) -> str:
     return cleaned
 
 
-def _parse_pub_date(raw_date: str) -> tuple[str, str]:
-    """Mengonversi string pubDate RSS menjadi format tanggal lokal dan waktu relatif."""
+def _parse_pub_date(raw_date: str) -> tuple[str, str, float]:
+    """Mengonversi string pubDate RSS menjadi format tanggal lokal (WIB), waktu relatif, dan epoch timestamp."""
+    wib_tz = timezone(timedelta(hours=7))
     if not raw_date:
-        return datetime.now().strftime("%Y-%m-%d %H:%M"), "Baru saja"
+        now_wib = datetime.now(wib_tz)
+        return now_wib.strftime("%Y-%m-%d %H:%M"), "Baru saja", now_wib.timestamp()
 
     dt = None
-    formats = [
-        "%a, %d %b %Y %H:%M:%S %Z",
-        "%a, %d %b %Y %H:%M:%S %z",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%dT%H:%M:%SZ",
-    ]
-    for fmt in formats:
+    # 1. Coba parser RFC 2822 standar untuk RSS (paling presisi untuk pubDate)
+    try:
+        dt = email.utils.parsedate_to_datetime(raw_date.strip())
+    except Exception:
+        pass
+
+    # 2. Coba ISO format
+    if dt is None:
         try:
-            dt = datetime.strptime(raw_date.strip(), fmt)
-            break
+            clean_s = raw_date.strip().replace("Z", "+00:00")
+            dt = datetime.fromisoformat(clean_s)
         except Exception:
             pass
 
+    # 3. Fallback format manual
     if dt is None:
-        return datetime.now().strftime("%Y-%m-%d %H:%M"), "Hari ini"
+        formats = [
+            "%a, %d %b %Y %H:%M:%S %Z",
+            "%a, %d %b %Y %H:%M:%S %z",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%SZ",
+        ]
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(raw_date.strip(), fmt)
+                break
+            except Exception:
+                pass
+
+    if dt is None:
+        now_wib = datetime.now(wib_tz)
+        return now_wib.strftime("%Y-%m-%d %H:%M"), "Hari ini", now_wib.timestamp()
 
     # Jika timezone-naive, asumsikan UTC
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
 
     # Konversi ke WIB (UTC+7)
-    wib_tz = timezone(timedelta(hours=7))
     dt_wib = dt.astimezone(wib_tz)
+    ts = dt_wib.timestamp()
     formatted_date = dt_wib.strftime("%Y-%m-%d %H:%M")
 
     # Hitung waktu relatif
     now_wib = datetime.now(wib_tz)
     diff = (now_wib - dt_wib).total_seconds()
 
-    if diff < 120:
+    if diff <= 90:
         rel = "Baru saja"
     elif diff < 3600:
         mins = max(1, int(diff / 60))
@@ -96,7 +116,7 @@ def _parse_pub_date(raw_date: str) -> tuple[str, str]:
         days = max(1, int(diff / 86400))
         rel = f"{days} hari lalu"
 
-    return formatted_date, rel
+    return formatted_date, rel, ts
 
 
 def _analyze_sentiment(text: str) -> tuple[str, str]:
@@ -137,7 +157,7 @@ def _extract_tickers(title: str, summary: str, known_tickers: set[str]) -> list[
     return matched
 
 
-def _fetch_rss_feed(url: str, timeout: int = 5) -> list[dict[str, Any]]:
+def _fetch_rss_feed(url: str, default_source: str = "", timeout: int = 5) -> list[dict[str, Any]]:
     """Tarik dan parse dokumen RSS XML."""
     req = urllib.request.Request(
         url,
@@ -147,6 +167,20 @@ def _fetch_rss_feed(url: str, timeout: int = 5) -> list[dict[str, Any]]:
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         content = resp.read()
         root = ET.fromstring(content)
+
+        ch_title = _clean_text(root.findtext(".//channel/title") or "")
+        feed_source = default_source
+        if not feed_source:
+            lower_ch = ch_title.lower()
+            if "kontan" in lower_ch:
+                feed_source = "Kontan"
+            elif "cnbc" in lower_ch:
+                feed_source = "CNBC Indonesia"
+            elif "bisnis" in lower_ch:
+                feed_source = "Bisnis.com"
+            else:
+                feed_source = "IDX Market News"
+
         for item_node in root.findall(".//item"):
             title = _clean_text(item_node.findtext("title") or "")
             link = (item_node.findtext("link") or "").strip()
@@ -162,7 +196,7 @@ def _fetch_rss_feed(url: str, timeout: int = 5) -> list[dict[str, Any]]:
                     source = parts[1].strip()
 
             if not source:
-                source = "IDX Market News"
+                source = feed_source
 
             raw_items.append({
                 "title": title,
@@ -188,17 +222,16 @@ def get_market_news(
         return NEWS_CACHE["items"]
 
     urls = [
-        "https://news.google.com/rss/search?q=saham+IHSG+BEI+OR+emiten&hl=id&gl=ID&ceid=ID:id",
+        "https://investasi.kontan.co.id/rss",
         "https://www.cnbcindonesia.com/market/rss",
+        "https://news.google.com/rss/search?q=saham+IHSG+BEI+OR+emiten+when:2d&hl=id&gl=ID&ceid=ID:id",
     ]
 
     raw_news = []
     for u in urls:
         try:
             feed_items = _fetch_rss_feed(u, timeout=5)
-            raw_news.extend(feed_items)
-            if len(raw_news) >= 30:
-                break
+            raw_news.extend(feed_items[:30])
         except Exception as ex:
             print(f"[NewsFetcher] Gagal menarik RSS dari {u}: {ex}")
 
@@ -222,7 +255,7 @@ def get_market_news(
             continue
         seen_titles.add(title.lower())
 
-        dt_formatted, rel_time = _parse_pub_date(item["pub_date"])
+        dt_formatted, rel_time, pub_ts = _parse_pub_date(item["pub_date"])
         sentiment, sentiment_label = _analyze_sentiment(f"{title} {item['description']}")
         detected_tickers = _extract_tickers(title, item["description"], known_tickers or set())
 
@@ -276,11 +309,12 @@ def get_market_news(
             }
 
         enriched_news.append({
-            "id": f"news_{idx}_{int(time.time())}",
+            "id": f"news_{idx}_{int(pub_ts)}",
             "title": title,
             "link": item["link"],
             "source": item["source"],
             "published_at": dt_formatted,
+            "published_ts": pub_ts,
             "relative_time": rel_time,
             "ticker": primary_ticker,
             "other_tickers": detected_tickers[1:],
@@ -290,6 +324,9 @@ def get_market_news(
             "is_pick": bool(correlated_stock),
             "correlation": correlation_info,
         })
+
+    # Urutkan secara absolut dari yang paling baru (published_ts terbesar / terbaru di atas)
+    enriched_news.sort(key=lambda x: x.get("published_ts", 0), reverse=True)
 
     NEWS_CACHE["timestamp"] = now
     NEWS_CACHE["items"] = enriched_news

@@ -664,10 +664,10 @@ async function loadMarketNews(forceRefresh = false) {
   if (refreshBtn) refreshBtn.disabled = true;
 
   try {
-    const res = await fetch(`/api/news?category=${encodeURIComponent(activeNewsCategory)}&refresh=${forceRefresh ? 'true' : 'false'}&limit=20`);
+    const res = await fetch(`/api/news?category=${encodeURIComponent(activeNewsCategory)}&refresh=${forceRefresh ? 'true' : 'false'}&limit=25`);
     if (!res.ok) throw new Error('Gagal memuat berita pasar');
     const data = await res.json();
-    cachedNewsItems = data.items || [];
+    cachedNewsItems = (data.items || []).sort((a, b) => (b.published_ts || 0) - (a.published_ts || 0));
     renderMarketNewsFeed(cachedNewsItems);
   } catch (err) {
     if (listEl && (!cachedNewsItems || cachedNewsItems.length === 0)) {
@@ -712,7 +712,11 @@ function renderMarketNewsFeed(items) {
     return;
   }
 
-  listEl.innerHTML = items.map((n, idx) => {
+  // Jaminan mutlak data terurut dari yang paling baru ke yang paling lama
+  const sortedItems = [...items].sort((a, b) => (b.published_ts || 0) - (a.published_ts || 0));
+  cachedNewsItems = sortedItems;
+
+  listEl.innerHTML = sortedItems.map((n, idx) => {
     const isPos = n.sentiment === 'POSITIVE';
     const isNeg = n.sentiment === 'NEGATIVE';
     const sentColor = isPos
@@ -726,6 +730,7 @@ function renderMarketNewsFeed(items) {
     const safeSummary = escHtml(n.summary || '');
     const safeSource = escHtml(n.source || 'IDX');
     const safeRelTime = escHtml(n.relative_time || '');
+    const safePubAt = escHtml(n.published_at || '');
     const safeSentLabel = escHtml(n.sentiment_label || 'Informasi');
 
     return `
@@ -743,7 +748,7 @@ function renderMarketNewsFeed(items) {
                 ${safeSentLabel}
               </span>
             </div>
-            <span class="text-[11px] text-slate-400 font-mono">${safeRelTime}</span>
+            <span class="text-[11px] text-emerald-400/90 font-mono font-semibold" title="${safePubAt}">${safeRelTime}</span>
           </div>
 
           <h3 class="text-xs font-bold text-slate-100 group-hover:text-white leading-snug line-clamp-2">
@@ -754,7 +759,7 @@ function renderMarketNewsFeed(items) {
         </div>
 
         <div class="flex items-center justify-between text-[11px] pt-2 border-t border-white/[0.05]">
-          <span class="text-slate-400 font-mono">${safeSource}</span>
+          <span class="text-slate-400 font-mono text-[10px]">${safeSource} · ${safePubAt}</span>
           <div class="flex items-center gap-3">
             ${n.link ? `<a href="${escHtml(n.link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="text-slate-400 hover:text-white underline text-[10px]">Buka Sumber</a>` : ''}
             <span class="text-emerald-400 font-semibold text-[10px] group-hover:translate-x-0.5 transition flex items-center gap-0.5">
