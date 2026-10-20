@@ -97,11 +97,11 @@
             <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-white flex items-center gap-1.5">
               SmartFlow <span class="text-emerald-400">IDX</span>
             </h1>
-            <p class="text-[11px] text-slate-300 hidden sm:flex items-center gap-1">
-              <span>Dataset:</span>
-              <span id="activeSourceBadge" class="font-mono text-white font-medium">Memuat data...</span>
+            <p class="text-[11px] text-slate-300 hidden sm:flex items-center gap-1.5">
+              <span id="marketStatusDot" class="w-2 h-2 rounded-full bg-slate-500 shrink-0"></span>
+              <span id="marketStatusText" class="font-mono text-slate-300 font-medium">Bursa Tutup • Data Akhir Sesi</span>
               <span class="text-slate-500">•</span>
-              <span id="lastSyncBadge" class="font-mono text-emerald-400">Sync: -</span>
+              <span id="activeSourceBadge" class="font-mono text-slate-400">Memuat data...</span>
             </p>
           </div>
         </div>
@@ -148,79 +148,119 @@
         </nav>
       </div>
 
-      <!-- Right Header Actions: Status Bursa, Saklar Mode, Alat/Pengaturan, Tema -->
-      <div class="flex items-center gap-1.5 sm:gap-2">
+      <!-- 3. Right Header Actions: Sakelar Mode Pemula/Mahir & Dropdown Pengaturan (⚙️) -->
+      <div class="flex items-center gap-2">
         <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" multiple class="hidden" />
-
-        <!-- Indikator Rezim Pasar IHSG (Market Breadth) -->
-        <button
-          id="btnMarketRegime"
-          onclick="openMarketRegimeModal()"
-          class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-900/60 hover:bg-slate-800/80 border border-white/[0.08] text-xs shadow-inner transition active:scale-95 cursor-pointer"
-          title="Klik untuk melihat Analisis Rezim Pasar IHSG & Panduan Alokasi Modal"
-        >
-          <span id="regimeDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="regimeLabel" class="font-bold text-emerald-300 text-[11px] sm:text-xs">Bullish Expansion (58%)</span>
-        </button>
-
-        <!-- Status Bursa Jelas & Sadar Jeda/Libur -->
-        <div id="marketLivePill" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-900/60 border border-white/[0.08] text-xs shadow-inner">
-          <span id="marketStatusDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="marketStatusText" class="font-bold text-emerald-300 text-[11px] sm:text-xs">BURSA LIVE</span>
-          <span id="marketAutoTimer" class="font-mono text-[10px] sm:text-[11px] text-slate-300 border-l border-white/10 pl-2 hidden xs:inline sm:inline">Auto-Sync</span>
-        </div>
-
-        <!-- Tombol Sync Menyeluruh Sekali Klik (844 Saham BEI) -->
-        <button
-          id="btnUnifiedSync"
-          onclick="triggerUnifiedSync()"
-          class="liquid-glass-btn neon-purple active:scale-95"
-          title="Sinkronisasi seluruh 844 saham IDX secara menyeluruh & update Watchlist sekali klik"
-        >
-          <span id="unifiedSyncIcon" class="neon-icon-badge">
-            <svg id="unifiedSyncSvg" viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-            </svg>
-          </span>
-          <span id="unifiedSyncLabel" class="hidden sm:inline">Sync</span>
-        </button>
 
         <!-- Saklar Mode Pemula / Mode Mahir -->
         <button
           id="btnToggleMode"
           onclick="toggleExpertMode()"
-          class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900/60 hover:bg-white/[0.08] border border-white/[0.08] text-xs font-semibold text-slate-200 transition flex items-center gap-1.5"
-          title="Beralih antara Mode Pemula (ramah & sederhana) dan Mode Mahir (indikator teknis lengkap)"
+          class="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-slate-900/60 hover:bg-white/[0.08] border border-white/[0.08] text-xs font-semibold text-slate-200 transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+          title="Beralih antara Mode Pemula (ramah &amp; sederhana) dan Mode Mahir (indikator teknis lengkap)"
         >
           <span id="modeIcon">🌱</span>
-          <span id="modeLabel" class="hidden sm:inline">Mode Pemula</span>
+          <span id="modeLabel" class="text-xs">Mode Pemula</span>
         </button>
 
-        <!-- Menu Pengaturan & Alat Teknis (Gear Icon - Desktop Only) -->
-        <button
-          id="btnOpenSettingsModal"
-          onclick="openSettingsModal()"
-          class="hidden md:inline-flex p-2 rounded-xl bg-slate-900/60 hover:bg-white/[0.08] text-slate-200 hover:text-white border border-white/[0.08] text-xs font-semibold transition active:scale-95"
-          title="Pengaturan &amp; Alat Teknis (Sync Kilat, Full IDX, Unggah File, Panduan Rumus)"
-          aria-label="Pengaturan dan Alat"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </button>
+        <!-- Dropdown Menu Pengaturan (⚙️) Memuat Sync, Gelap/Terang, Notifikasi, Alat -->
+        <div class="relative" id="settingsDropdownContainer">
+          <button
+            id="btnSettingsDropdownToggle"
+            onclick="toggleSettingsDropdown()"
+            class="p-2 rounded-xl bg-slate-900/60 hover:bg-white/[0.08] text-slate-200 hover:text-white border border-white/[0.08] text-xs font-semibold transition active:scale-95 cursor-pointer flex items-center justify-center shadow-sm"
+            title="Pengaturan &amp; Alat (Sync, Tema, Notifikasi, Unggah, Panduan)"
+            aria-label="Pengaturan dan Alat"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
 
-        <!-- Toggle Tema Gelap / Terang -->
-        <button
-          id="btnThemeToggle"
-          onclick="toggleTheme()"
-          class="p-2 rounded-xl bg-slate-900/60 hover:bg-white/[0.08] text-amber-300 border border-white/[0.08] text-xs font-semibold shadow-sm transition active:scale-95"
-          title="Ganti Tema (Gelap / Terang)"
-          aria-label="Ganti Tema"
-        >
-          <span id="themeIcon">🌙</span>
-          <span id="themeLabel" class="hidden">Gelap</span>
-        </button>
+          <!-- Dropdown Popover Menu -->
+          <div
+            id="settingsDropdownMenu"
+            class="hidden absolute right-0 mt-2 w-64 rounded-2xl glass-panel bg-slate-900/95 border border-white/15 shadow-2xl p-2 z-50 space-y-1 text-xs"
+          >
+            <!-- Status Data Info -->
+            <div class="px-3 py-2 border-b border-white/10 text-[11px] text-slate-300">
+              <div class="font-bold text-white flex items-center justify-between">
+                <span>Status Data BEI</span>
+                <span id="dropdownMarketDot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+              </div>
+              <p id="dropdownMarketText" class="text-slate-400 mt-0.5 text-[10px]">Memuat status bursa...</p>
+            </div>
+
+            <!-- Tombol Sync -->
+            <button
+              id="btnUnifiedSync"
+              onclick="triggerUnifiedSync(); closeSettingsDropdown();"
+              class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.08] text-slate-200 hover:text-white transition text-left cursor-pointer"
+            >
+              <span class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0">
+                <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                </svg>
+              </span>
+              <div class="flex-1">
+                <div class="font-semibold text-white">Sinkronisasi Data (Sync)</div>
+                <div class="text-[10px] text-slate-400">Tarik harga terkini 844 emiten</div>
+              </div>
+            </button>
+
+            <!-- Toggle Tema Gelap / Terang -->
+            <button
+              id="btnThemeToggle"
+              onclick="toggleTheme();"
+              class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.08] text-slate-200 hover:text-white transition text-left cursor-pointer"
+            >
+              <span id="themeIcon" class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 text-xs">🌙</span>
+              <div class="flex-1">
+                <div class="font-semibold text-white">Tema Tampilan</div>
+                <div id="themeDropdownLabel" class="text-[10px] text-slate-400">Beralih Gelap / Terang</div>
+              </div>
+            </button>
+
+            <!-- Pengaturan Notifikasi / Lonceng -->
+            <button
+              onclick="openSettingsModal(); closeSettingsDropdown();"
+              class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.08] text-slate-200 hover:text-white transition text-left cursor-pointer"
+            >
+              <span class="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-300 flex items-center justify-center shrink-0 text-xs">🔔</span>
+              <div class="flex-1">
+                <div class="font-semibold text-white">Notifikasi &amp; Alert</div>
+                <div class="text-[10px] text-slate-400">Pengaturan suara &amp; peringatan</div>
+              </div>
+            </button>
+
+            <div class="border-t border-white/10 my-1"></div>
+
+            <!-- Unggah Ringkasan Saham BEI -->
+            <button
+              onclick="openUploadModal(); closeSettingsDropdown();"
+              class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.08] text-slate-200 hover:text-white transition text-left cursor-pointer"
+            >
+              <span class="w-6 h-6 rounded-lg bg-purple-500/20 text-purple-300 flex items-center justify-center shrink-0 text-xs">📂</span>
+              <div class="flex-1">
+                <div class="font-semibold text-white">Unggah File BEI</div>
+                <div class="text-[10px] text-slate-400">Import ringkasan Excel resmi</div>
+              </div>
+            </button>
+
+            <!-- Panduan Metodologi & Rumus -->
+            <button
+              onclick="openGuideModal(); closeSettingsDropdown();"
+              class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.08] text-slate-200 hover:text-white transition text-left cursor-pointer"
+            >
+              <span class="w-6 h-6 rounded-lg bg-teal-500/20 text-teal-300 flex items-center justify-center shrink-0 text-xs">📖</span>
+              <div class="flex-1">
+                <div class="font-semibold text-white">Panduan &amp; Metodologi</div>
+                <div class="text-[10px] text-slate-400">Formula 5 Pilar &amp; Backtest</div>
+              </div>
+            </button>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -246,7 +286,7 @@
         <span id="toastIcon">🔔</span>
         <span id="toastMessage"></span>
       </div>
-      <button onclick="document.getElementById('toastBanner').classList.add('hidden')" class="text-slate-400 hover:text-white ml-4 text-base leading-none" aria-label="Tutup notifikasi">&times;</button>
+      <button onclick="document.getElementById('toastBanner').classList.add('hidden')" class="text-slate-400 hover:text-white ml-4 text-xs font-semibold px-2 py-0.5 rounded bg-white/10" aria-label="Tutup notifikasi">Tutup</button>
     </div>
 
     <!-- =====================================================================
@@ -261,9 +301,20 @@
             📊
           </div>
           <div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <span class="text-xs font-bold text-white uppercase tracking-wider">Kondisi Pasar Hari Ini</span>
               <span id="todayRegimeBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">Memuat...</span>
+              <!-- Indikator Rezim Pasar IHSG (Market Breadth) Dipindah ke sini -->
+              <button
+                id="btnMarketRegime"
+                onclick="openMarketRegimeModal()"
+                class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900/60 hover:bg-slate-800/80 border border-white/[0.08] text-xs shadow-inner transition active:scale-95 cursor-pointer"
+                title="Klik untuk melihat Analisis Rezim Pasar IHSG &amp; Panduan Alokasi Modal"
+              >
+                <span id="regimeDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span id="regimeLabel" class="font-bold text-emerald-300 text-[11px] sm:text-xs">Bullish Expansion (58%)</span>
+                <span class="term-tip text-slate-400 hover:text-emerald-300 ml-0.5 text-[10px]" onclick="event.stopPropagation(); openGlossaryModal('market_breadth')" title="Market Breadth: Persentase saham di bursa yang berada di atas MA20.">ⓘ</span>
+              </button>
             </div>
             <p id="todayMarketSentence" class="text-xs text-slate-200 mt-0.5 leading-relaxed">
               Memeriksa struktur tren dan aliran dana dari seluruh emiten bursa...
@@ -665,6 +716,17 @@
               <option value="vwap" class="bg-slate-900 text-white">Urutkan: Jarak VWAP Terdekat</option>
               <option value="pct_change" class="bg-slate-900 text-white">Urutkan: % Kenaikan</option>
             </select>
+
+            <!-- Tombol Arti Istilah di Atas Tabel Screener (Temuan K3) -->
+            <button
+              type="button"
+              onclick="openGlossaryModal('all')"
+              class="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold flex items-center gap-1.5 transition whitespace-nowrap active:scale-95 cursor-pointer shadow-sm"
+              title="Kamus &amp; Penjelasan Lengkap Istilah Teknis (VSA, VWAP, Squeeze, Turnover)"
+            >
+              <span class="w-3.5 h-3.5 rounded-full border border-emerald-400/70 inline-flex items-center justify-center font-mono text-[10px] font-bold text-emerald-300">?</span>
+              <span>Arti Istilah</span>
+            </button>
           </div>
 
           <!-- Table Container -->
@@ -675,9 +737,18 @@
                   <th class="py-3 pl-4 pr-2">Saham</th>
                   <th class="py-3 px-2 text-right">Harga</th>
                   <th class="py-3 px-2 text-right">Perubahan</th>
-                  <th class="py-3 px-2 text-center">Volume / Sinyal</th>
-                  <th class="py-3 px-2 text-right">Skor VSA</th>
-                  <th class="py-3 pl-2 pr-4 text-left">Profil VSA &amp; VWAP 5H</th>
+                  <th class="py-3 px-2 text-center">
+                    <span id="colHeaderVolume">Volume / Sinyal</span>
+                    <button type="button" class="term-tip ml-1 text-slate-400 hover:text-emerald-300 font-normal inline-flex items-center" onclick="openGlossaryModal('vsa')" title="VSA: Volume Spread Analysis.">ⓘ</button>
+                  </th>
+                  <th class="py-3 px-2 text-right">
+                    <span id="colHeaderScore">Skor VSA</span>
+                    <button type="button" class="term-tip ml-1 text-slate-400 hover:text-emerald-300 font-normal inline-flex items-center" onclick="openGlossaryModal('smart_money')" title="Skor gabungan 5 pilar kuantitatif aliran dana besar.">ⓘ</button>
+                  </th>
+                  <th class="py-3 pl-2 pr-4 text-left">
+                    <span id="colHeaderProfile">Profil VSA &amp; VWAP 5H</span>
+                    <button type="button" class="term-tip ml-1 text-slate-400 hover:text-emerald-300 font-normal inline-flex items-center" onclick="openGlossaryModal('vwap')" title="VWAP 5H: Volume-Weighted Average Price 5 hari sebagai jangkar support.">ⓘ</button>
+                  </th>
                 </tr>
               </thead>
               <tbody id="screenerTableBody" class="divide-y divide-white/[0.05]">
@@ -898,7 +969,10 @@
             <div id="expertPillarsContent" class="hidden space-y-2">
               <div class="space-y-1.5 text-xs" id="pScoresList">
                 <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px]">
-                  <span>P1: Volume Spike &amp; VSA</span>
+                  <div class="flex items-center gap-1">
+                    <span id="p1Label">P1: Volume Spike &amp; VSA</span>
+                    <button type="button" class="term-tip text-slate-400 hover:text-emerald-300" onclick="openGlossaryModal('vsa')" title="VSA: Volume Spread Analysis &amp; lonjakan volume beli.">ⓘ</button>
+                  </div>
                   <span id="p1Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
                 </div>
                 <div class="w-full bg-slate-200 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
@@ -906,7 +980,10 @@
                 </div>
 
                 <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
-                  <span>P2: Tren &amp; Struktur MA20/MA50</span>
+                  <div class="flex items-center gap-1">
+                    <span id="p2Label">P2: Tren &amp; Struktur MA20/MA50</span>
+                    <button type="button" class="term-tip text-slate-400 hover:text-emerald-300" onclick="openGlossaryModal('ma')" title="Moving Average: Garis tren rata-rata 20 dan 50 hari.">ⓘ</button>
+                  </div>
                   <span id="p2Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
                 </div>
                 <div class="w-full bg-slate-200 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
@@ -914,7 +991,10 @@
                 </div>
 
                 <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
-                  <span>P3: Kompresi Volatilitas (Squeeze)</span>
+                  <div class="flex items-center gap-1">
+                    <span id="p3Label">P3: Kompresi Volatilitas (Squeeze)</span>
+                    <button type="button" class="term-tip text-slate-400 hover:text-emerald-300" onclick="openGlossaryModal('squeeze')" title="Squeeze: Bollinger Bands masuk Keltner Channel (harga istirahat sebelum ledakan).">ⓘ</button>
+                  </div>
                   <span id="p3Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
                 </div>
                 <div class="w-full bg-slate-200 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
@@ -922,7 +1002,10 @@
                 </div>
 
                 <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
-                  <span>P4: Likuiditas &amp; Turnover Riil</span>
+                  <div class="flex items-center gap-1">
+                    <span id="p4Label">P4: Likuiditas &amp; Turnover Riil</span>
+                    <button type="button" class="term-tip text-slate-400 hover:text-emerald-300" onclick="openGlossaryModal('turnover')" title="Turnover: Total nilai transaksi Rupiah harian emiten.">ⓘ</button>
+                  </div>
                   <span id="p4Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
                 </div>
                 <div class="w-full bg-slate-200 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
@@ -930,7 +1013,10 @@
                 </div>
 
                 <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
-                  <span>P5: Posisi Harga vs 5-Day VWAP</span>
+                  <div class="flex items-center gap-1">
+                    <span id="p5Label">P5: Posisi Harga vs 5-Day VWAP</span>
+                    <button type="button" class="term-tip text-slate-400 hover:text-emerald-300" onclick="openGlossaryModal('vwap')" title="VWAP 5H: Rata-rata modal tertimbang volume 5 hari.">ⓘ</button>
+                  </div>
                   <span id="p5Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
                 </div>
                 <div class="w-full bg-slate-200 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden">
@@ -2056,6 +2142,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=81.0"></script>
+  <script src="/static/app.js?v=82.0"></script>
 </body>
 </html>

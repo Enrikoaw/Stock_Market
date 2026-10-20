@@ -190,16 +190,72 @@ function applyExpertModeUI() {
   const kpiContainer = document.getElementById('kpiContainer');
 
   if (isExpertMode) {
-    if (modeIcon) modeIcon.textContent = '🚀';
+    if (modeIcon) modeIcon.textContent = '⚡';
     if (modeLabel) modeLabel.textContent = 'Mode Mahir';
     if (kpiContainer) kpiContainer.classList.remove('hidden');
     document.querySelectorAll('.expert-only').forEach(el => el.classList.remove('hidden'));
+
+    // 1. Kolom Tabel Screener (Mode Mahir: Istilah Teknis Asli)
+    const colVol = document.getElementById('colHeaderVolume');
+    if (colVol) colVol.textContent = 'Volume / Sinyal';
+    const colScore = document.getElementById('colHeaderScore');
+    if (colScore) colScore.textContent = 'Skor VSA';
+    const colProf = document.getElementById('colHeaderProfile');
+    if (colProf) colProf.textContent = 'Profil VSA & VWAP 5H';
+
+    // 2. Rincian 5 Pilar Kuantitatif (Mode Mahir)
+    const p1 = document.getElementById('p1Label');
+    if (p1) p1.textContent = 'P1: Volume Spike & VSA';
+    const p2 = document.getElementById('p2Label');
+    if (p2) p2.textContent = 'P2: Tren & Struktur MA20/MA50';
+    const p3 = document.getElementById('p3Label');
+    if (p3) p3.textContent = 'P3: Kompresi Volatilitas (Squeeze)';
+    const p4 = document.getElementById('p4Label');
+    if (p4) p4.textContent = 'P4: Likuiditas & Turnover Riil';
+    const p5 = document.getElementById('p5Label');
+    if (p5) p5.textContent = 'P5: Posisi Harga vs 5-Day VWAP';
+
+    // 3. Opsi Dropdown Pengurutan
+    const optVwap = document.querySelector('#filterSortBy option[value="vwap"]');
+    if (optVwap) optVwap.textContent = 'Urutkan: Jarak VWAP Terdekat';
   } else {
     if (modeIcon) modeIcon.textContent = '🌱';
     if (modeLabel) modeLabel.textContent = 'Mode Pemula';
     if (kpiContainer) kpiContainer.classList.add('hidden');
     document.querySelectorAll('.expert-only').forEach(el => el.classList.add('hidden'));
+
+    // 1. Kolom Tabel Screener (Mode Pemula: Bahasa Sehari-hari Ramah)
+    const colVol = document.getElementById('colHeaderVolume');
+    if (colVol) colVol.textContent = 'Lonjakan Volume / Sinyal';
+    const colScore = document.getElementById('colHeaderScore');
+    if (colScore) colScore.textContent = 'Skor Aliran Dana (0-100)';
+    const colProf = document.getElementById('colHeaderProfile');
+    if (colProf) colProf.textContent = 'Rata-Rata Harga 5H & Transaksi';
+
+    // 2. Rincian 5 Pilar Kuantitatif (Mode Pemula: Ramah & Jelas)
+    const p1 = document.getElementById('p1Label');
+    if (p1) p1.textContent = 'P1: Lonjakan Volume & Respon Harga';
+    const p2 = document.getElementById('p2Label');
+    if (p2) p2.textContent = 'P2: Tren Rata-Rata 20/50 Hari (MA)';
+    const p3 = document.getElementById('p3Label');
+    if (p3) p3.textContent = 'P3: Rentang Harga Menyempit (Squeeze)';
+    const p4 = document.getElementById('p4Label');
+    if (p4) p4.textContent = 'P4: Nilai Transaksi Harian (Turnover)';
+    const p5 = document.getElementById('p5Label');
+    if (p5) p5.textContent = 'P5: Posisi vs Harga Rata-Rata 5 Hari';
+
+    // 3. Opsi Dropdown Pengurutan
+    const optVwap = document.querySelector('#filterSortBy option[value="vwap"]');
+    if (optVwap) optVwap.textContent = 'Urutkan: Dekat Harga Rata-Rata 5H';
   }
+
+  // Update teks dinamis baris tabel jika sudah ter-render
+  document.querySelectorAll('.lbl-vwap-text').forEach(el => {
+    el.textContent = isExpertMode ? 'VWAP 5H' : 'Rata2 5H';
+  });
+  document.querySelectorAll('.lbl-val-text').forEach(el => {
+    el.textContent = isExpertMode ? 'Turnover' : 'Transaksi';
+  });
 }
 
 function toggleExpertMode() {
@@ -1040,6 +1096,26 @@ const GLOSSARY_TERMS = {
     title: 'Peringatan Distribusi (Waspada)',
     badge: 'Peringatan Risiko',
     desc: 'Fase di mana Smart Money mulai menjual saham mereka kepada investor ritel di harga tinggi sebelum harga mengalami penurunan signifikan.'
+  },
+  squeeze: {
+    title: 'Squeeze & Kompresi Volatilitas (Rentang Harga Menyempit)',
+    badge: 'Volatilitas',
+    desc: 'Kondisi di mana Bollinger Bands masuk ke dalam Keltner Channel. Ini menandakan fluktuasi harga sedang menyusut tajam (fase istirahat/konsolidasi) sebelum terjadinya ledakan arah tren baru yang signifikan.'
+  },
+  turnover: {
+    title: 'Turnover (Nilai Transaksi Harian)',
+    badge: 'Likuiditas',
+    desc: 'Total perputaran uang Rupiah riil dalam satu hari perdagangan saham. Saham dengan Turnover tinggi (≥ Rp 1 Miliar - Rp 5 Miliar) menjamin likuiditas yang cukup agar posisi Anda mudah dibeli dan dijual kembali tanpa tertahan.'
+  },
+  ma: {
+    title: 'MA20 & MA50 (Moving Average 20 & 50 Hari)',
+    badge: 'Tren Harga',
+    desc: 'Garis rata-rata pergerakan harga 20 hari (tren jangka pendek) dan 50 hari (tren jangka menengah). Harga di atas MA20 menandakan tren naik yang sehat dan bertindak sebagai area support dinamis saat terjadi pullback.'
+  },
+  market_breadth: {
+    title: 'Market Breadth (Keluasan Tren Pasar)',
+    badge: 'Kondisi Bursa',
+    desc: 'Persentase jumlah saham di seluruh bursa IDX yang posisinya berada di atas rata-rata MA20. Jika persentasenya di atas 55%, bursa berada dalam fase Bullish Expansion yang kondusif untuk swing trading. Jika di bawah 40%, bursa cenderung defensif/bearish.'
   }
 };
 
@@ -1505,10 +1581,10 @@ function renderScreenerTable(stocks) {
           <!-- Profil VSA & VWAP 5H -->
           <td class="py-3 pl-2 pr-4 text-xs font-mono">
             <div class="text-[11px] text-slate-600 dark:text-slate-300">
-              VWAP 5H: <span class="text-slate-900 dark:text-white font-bold">${fmtPrice(s.bandar_avg_buy)}</span> <span class="${s.diff_bandar_avg_pct >= 0 ? 'text-amber-500 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-400'} font-semibold">(${s.diff_bandar_avg_pct >= 0 ? '+' : ''}${s.diff_bandar_avg_pct.toFixed(1)}%)</span>
+              <span class="lbl-vwap-text">${isExpertMode ? 'VWAP 5H' : 'Rata2 5H'}</span>: <span class="text-slate-900 dark:text-white font-bold">${fmtPrice(s.bandar_avg_buy)}</span> <span class="${s.diff_bandar_avg_pct >= 0 ? 'text-amber-500 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-400'} font-semibold">(${s.diff_bandar_avg_pct >= 0 ? '+' : ''}${s.diff_bandar_avg_pct.toFixed(1)}%)</span>
             </div>
             <div class="text-[10px] text-slate-500 dark:text-slate-400">
-              CR: <span class="text-slate-800 dark:text-slate-200 font-semibold">${escHtml(s.closing_range_pct)}%</span> · Val: <span class="text-slate-800 dark:text-slate-200">Rp ${escHtml(s.value_b_idr)} M</span>
+              CR: <span class="text-slate-800 dark:text-slate-200 font-semibold">${escHtml(s.closing_range_pct)}%</span> · <span class="lbl-val-text">${isExpertMode ? 'Turnover' : 'Transaksi'}</span>: <span class="text-slate-800 dark:text-slate-200">Rp ${escHtml(s.value_b_idr)} M</span>
             </div>
           </td>
         </tr>
@@ -2549,28 +2625,65 @@ function isIDXMarketOpenNow() {
 
 function updateMarketLiveStatusUI() {
   const isLive = isIDXMarketOpenNow();
-  const pill = document.getElementById('marketLivePill');
-  const dot = document.getElementById('marketStatusDot');
-  const text = document.getElementById('marketStatusText');
+  const dots = document.querySelectorAll('#marketStatusDot, #dropdownMarketDot');
+  const textEls = document.querySelectorAll('#marketStatusText, #dropdownMarketText');
   const timer = document.getElementById('marketAutoTimer');
 
-  if (!pill) return;
+  // Format Jam WIB saat ini
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const wibDate = new Date(utc + (3600000 * 7));
+  const hh = String(wibDate.getHours()).padStart(2, '0');
+  const mm = String(wibDate.getMinutes()).padStart(2, '0');
+  const wibTime = `${hh}:${mm} WIB`;
+
+  // Dapatkan tanggal sesi EOD (dari badge IHSG atau tanggal hari ini)
+  let dateStr = '';
+  const dateBadge = document.getElementById('ihsgDateBadge');
+  if (dateBadge && dateBadge.textContent && dateBadge.textContent !== '—' && dateBadge.textContent !== '-') {
+    dateStr = dateBadge.textContent.trim();
+  } else {
+    const d = wibDate.getDate();
+    const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    const m = months[wibDate.getMonth()];
+    const y = wibDate.getFullYear();
+    dateStr = `${d} ${m} ${y}`;
+  }
 
   if (isLive) {
-    if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
-    if (text) {
-      text.textContent = 'BURSA LIVE';
-      text.className = 'font-bold text-emerald-300 text-[11px] sm:text-xs';
-    }
+    dots.forEach(d => {
+      d.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0';
+    });
+    textEls.forEach(t => {
+      t.textContent = `Harga Delayed 15 Menit • ${wibTime}`;
+      t.className = 'font-bold text-emerald-400 text-[11px]';
+    });
     if (timer) timer.textContent = 'Auto-Sync 60s';
   } else {
-    if (dot) dot.className = 'w-2 h-2 rounded-full bg-slate-500';
-    if (text) {
-      text.textContent = 'BURSA TUTUP';
-      text.className = 'font-bold text-slate-400 text-[11px] sm:text-xs';
-    }
-    if (timer) timer.textContent = 'Data Terakhir 16:00';
+    dots.forEach(d => {
+      d.className = 'w-2 h-2 rounded-full bg-slate-500 shrink-0';
+    });
+    textEls.forEach(t => {
+      t.textContent = `Bursa Tutup • Data Akhir Sesi (${dateStr})`;
+      t.className = 'font-medium text-slate-300 text-[11px]';
+    });
+    if (timer) timer.textContent = 'Bursa Buka 09:00 WIB';
   }
+}
+
+// Handler Dropdown Menu Pengaturan (Header Streamlined)
+function toggleSettingsDropdown() {
+  const menu = document.getElementById('settingsDropdownMenu');
+  if (menu) {
+    menu.classList.toggle('hidden');
+    // Sinkronkan teks status bursa di dropdown saat dibuka
+    updateMarketLiveStatusUI();
+  }
+}
+
+function closeSettingsDropdown() {
+  const menu = document.getElementById('settingsDropdownMenu');
+  if (menu) menu.classList.add('hidden');
 }
 
 function initLiveMarketAutoSync() {
@@ -3738,11 +3851,20 @@ function closeAllModals() {
   closeMarketRegimeModal();
   closePortfolioBuyModal();
   closePortfolioSellModal();
+  closeSettingsDropdown();
 }
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeAllModals();
+  }
+});
+
+// Tutup dropdown menu pengaturan jika klik di luar
+document.addEventListener('click', (e) => {
+  const container = document.getElementById('settingsDropdownContainer');
+  if (container && !container.contains(e.target)) {
+    closeSettingsDropdown();
   }
 });
 
