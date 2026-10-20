@@ -526,6 +526,9 @@ function renderTodayCandidates(stocks) {
   const container = document.getElementById('todayCandidatesGrid');
   if (!container) return;
 
+  // Generate live alerts & trigger sound/notification
+  try { generateAlertsFromMarketData(stocks); } catch (_) {}
+
   const regime = currentMarketRegime || {};
   let defensiveNoticeHtml = '';
   if (regime.status === 'DEFENSIVE_PULLBACK' || regime.color === 'rose' || regime.color === 'amber') {
@@ -1304,21 +1307,343 @@ function closeGlossaryModal() {
 }
 
 // =====================================================================
-// PENGATURAN & ALAT TEKNIS MODAL (GEAR ICON)
+// NOTIFIKASI & PERINGATAN PINTAR (LIVE TRADING ALERTS & AUDIO SYSTEM)
 // =====================================================================
-function openSettingsModal() {
-  const modal = document.getElementById('settingsModal');
-  if (modal) {
-    modal.classList.remove('hidden');
-    const current = localStorage.getItem('smartflow_theme') || 'emerald';
-    selectTheme(current, false);
+let activeAlertList = [];
+let hasUnreadAlerts = false;
+
+// Audio Chime Synthesizer via Web Audio API (jernih, tanpa file external)
+function playAlertChime() {
+  const soundEnabled = localStorage.getItem('smartflow_alert_sound') !== 'false';
+  if (!soundEnabled) return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+
+    // Tone 1: High crisp chime (D5 - 587.33 Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, now);
+    gain1.gain.setValueAtTime(0.18, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.25);
+
+    // Tone 2: Harmonious resonance (A5 - 880.00 Hz)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880.00, now + 0.10);
+    gain2.gain.setValueAtTime(0.22, now + 0.10);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.60);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.10);
+    osc2.stop(now + 0.60);
+  } catch (e) {
+    console.warn('AudioContext alert chime warning:', e);
   }
 }
 
-function closeSettingsModal() {
-  const modal = document.getElementById('settingsModal');
+function testAlertSound() {
+  playAlertChime();
+  showToast('🔊 Nada lonceng alert berhasil diuji!', 'success');
+}
+
+function toggleAlertSound() {
+  const current = localStorage.getItem('smartflow_alert_sound') !== 'false';
+  const next = !current;
+  localStorage.setItem('smartflow_alert_sound', next ? 'true' : 'false');
+  updateAlertSoundUI(next);
+  if (next) playAlertChime();
+}
+
+function updateAlertSoundUI(enabled) {
+  const btn = document.getElementById('btnToggleAlertSound');
+  const badge = document.getElementById('alertSoundStatusBadge');
+  if (btn) {
+    btn.textContent = enabled ? 'ON' : 'OFF';
+    btn.className = enabled
+      ? 'px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold transition active:scale-95 cursor-pointer min-w-[42px] text-center'
+      : 'px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-white/10 text-[10px] font-bold transition active:scale-95 cursor-pointer min-w-[42px] text-center';
+  }
+  if (badge) {
+    badge.textContent = enabled ? 'Suara Aktif' : 'Suara Senyap';
+    badge.className = enabled
+      ? 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+      : 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/10';
+  }
+}
+
+function updateBrowserNotificationUI() {
+  const statusText = document.getElementById('browserNotificationStatusText');
+  const btn = document.getElementById('btnRequestNotification');
+  if (!('Notification' in window)) {
+    if (statusText) statusText.textContent = 'Browser ini tidak mendukung notifikasi push desktop';
+    if (btn) {
+      btn.textContent = 'Tidak Didukung';
+      btn.disabled = true;
+      btn.className = 'px-2.5 py-1 rounded-lg bg-slate-800 text-slate-500 text-[10px] font-bold cursor-not-allowed';
+    }
+    return;
+  }
+
+  if (Notification.permission === 'granted') {
+    if (statusText) statusText.textContent = '🟢 Izin notifikasi browser aktif di perangkat ini';
+    if (btn) {
+      btn.textContent = 'Aktif ✓';
+      btn.disabled = true;
+      btn.className = 'px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold cursor-default';
+    }
+  } else if (Notification.permission === 'denied') {
+    if (statusText) statusText.textContent = '⚠️ Notifikasi diblokir di izin peramban Anda';
+    if (btn) {
+      btn.textContent = 'Diblokir';
+      btn.disabled = true;
+      btn.className = 'px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-400/30 text-[10px] font-bold cursor-not-allowed';
+    }
+  } else {
+    if (statusText) statusText.textContent = 'Peringatan muncul di layar saat browser di latar belakang';
+    if (btn) {
+      btn.textContent = 'Aktifkan';
+      btn.disabled = false;
+      btn.className = 'px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-400/30 text-[10px] font-bold transition active:scale-95 cursor-pointer';
+    }
+  }
+}
+
+async function requestBrowserNotification() {
+  if (!('Notification' in window)) {
+    showToast('Peramban Anda tidak mendukung API Notifikasi.', 'error');
+    return;
+  }
+  try {
+    const perm = await Notification.requestPermission();
+    updateBrowserNotificationUI();
+    if (perm === 'granted') {
+      playAlertChime();
+      showToast('🔔 Notifikasi browser berhasil diaktifkan!', 'success');
+      try {
+        new Notification('SmartFlow IDX Alert Aktif', {
+          body: 'Anda akan menerima notifikasi otomatis saat saham pilihan terdeteksi!',
+          icon: '/static/icons/icon-192.svg'
+        });
+      } catch (_) {}
+    } else if (perm === 'denied') {
+      showToast('Izin notifikasi tidak diberikan oleh pengguna.', 'error');
+    }
+  } catch (err) {
+    console.error('Request notification error:', err);
+  }
+}
+
+function saveAlertPreferences() {
+  const prefs = {
+    support: document.getElementById('prefAlertSupport')?.checked ?? true,
+    tpSl: document.getElementById('prefAlertTpSl')?.checked ?? true,
+    volSpike: document.getElementById('prefAlertVolSpike')?.checked ?? true,
+    news: document.getElementById('prefAlertNews')?.checked ?? true,
+  };
+  localStorage.setItem('smartflow_alert_prefs', JSON.stringify(prefs));
+  showToast('Preferensi kategori alert disimpan.', 'success');
+}
+
+function loadAlertPreferences() {
+  try {
+    const raw = localStorage.getItem('smartflow_alert_prefs');
+    if (raw) {
+      const prefs = JSON.parse(raw);
+      if (document.getElementById('prefAlertSupport')) document.getElementById('prefAlertSupport').checked = prefs.support ?? true;
+      if (document.getElementById('prefAlertTpSl')) document.getElementById('prefAlertTpSl').checked = prefs.tpSl ?? true;
+      if (document.getElementById('prefAlertVolSpike')) document.getElementById('prefAlertVolSpike').checked = prefs.volSpike ?? true;
+      if (document.getElementById('prefAlertNews')) document.getElementById('prefAlertNews').checked = prefs.news ?? true;
+    }
+  } catch (_) {}
+}
+
+function generateAlertsFromMarketData(stocks) {
+  if (!stocks || !Array.isArray(stocks)) return;
+
+  const alerts = [];
+  const regime = currentMarketRegime || {};
+
+  // 1. Alert Market Regime
+  if (regime.status === 'DEFENSIVE_PULLBACK' || regime.color === 'rose' || regime.color === 'amber') {
+    alerts.push({
+      id: 'regime-defensive',
+      type: 'REGIME',
+      badge: 'PASAR DEFENSIF',
+      badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-400/30',
+      title: 'IHSG Tertekan (Mode Defensif)',
+      desc: 'Disiplin antre entry di Support Terdekat (menunggu pullback terkonfirmasi).',
+      time: 'Hari Ini'
+    });
+  }
+
+  // 2. Alert Kandidat Saham Pilihan
+  const topCandidates = stocks.filter(s =>
+    (s.close || 0) >= 70 &&
+    (s.value_b_idr || 0) >= 1.0 &&
+    (s.tape_quality == null || s.tape_quality.is_organic !== false) &&
+    !s.retail_trap &&
+    (s.bdr_pct >= 5.0 || s.top3_bsr >= 1.15 || (s.smart_money_score || 0) >= 70)
+  ).slice(0, 5);
+
+  topCandidates.forEach(s => {
+    const plan = s.trading_plan || {};
+    const entryPrice = plan.entry_price || plan.entry_low || s.close;
+    const supportLabel = plan.support_label || 'Support Terdekat';
+    alerts.push({
+      id: 'support-' + s.ticker,
+      ticker: s.ticker,
+      type: 'SUPPORT_ENTRY',
+      badge: 'BUY ON SUPPORT',
+      badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
+      title: `${s.ticker} • Antre Support Rp ${fmtPrice(entryPrice)}`,
+      desc: `Area ${supportLabel} • Skor SM ${s.smart_money_score || '-'} • Target TP1 Rp ${fmtPrice(plan.target_1 || Math.round(s.close * 1.07))}`,
+      time: 'Sesi Ini'
+    });
+  });
+
+  // 3. Alert Volume Spike Ekstrem (> 1.5x)
+  const volSpikes = stocks
+    .filter(s => (s.vol_ratio || 0) >= 1.5 && (s.value_b_idr || 0) >= 1.0 && (s.close || 0) >= 70)
+    .sort((a, b) => (b.vol_ratio || 0) - (a.vol_ratio || 0))
+    .slice(0, 3);
+
+  volSpikes.forEach(s => {
+    if (!alerts.some(a => a.ticker === s.ticker)) {
+      alerts.push({
+        id: 'vol-' + s.ticker,
+        ticker: s.ticker,
+        type: 'VOL_SPIKE',
+        badge: 'VOL SPIKE',
+        badgeColor: 'bg-teal-500/15 text-teal-300 border-teal-400/30',
+        title: `${s.ticker} • Lonjakan Volume ${s.vol_ratio}x`,
+        desc: `Transaksi Rp ${(s.value_b_idr || 0).toFixed(1)} Miliar • Terdeteksi lonjakan volume di atas rata-rata.`,
+        time: 'Terdeteksi'
+      });
+    }
+  });
+
+  activeAlertList = alerts;
+  renderAlertFeed();
+
+  // Tampilkan indikator badge jika ada sinyal
+  if (alerts.length > 0) {
+    hasUnreadAlerts = true;
+    updateAlertBadgeUI(true, alerts.length);
+  }
+}
+
+function renderAlertFeed() {
+  const container = document.getElementById('alertLiveFeedContainer');
+  const countBadge = document.getElementById('alertFeedCountBadge');
+  if (countBadge) countBadge.textContent = activeAlertList.length;
+
+  if (!container) return;
+
+  if (activeAlertList.length === 0) {
+    container.innerHTML = `
+      <div class="p-4 rounded-xl bg-slate-900/30 border border-white/[0.04] text-center text-slate-400 text-xs">
+        Belum ada sinyal baru. Sinkronisasi data pasar untuk memperbarui feed peringatan.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = activeAlertList.map(a => {
+    const clickAttr = a.ticker
+      ? `onclick="closeAlertModal(); selectStockAndGoToInspector('${escHtml(a.ticker)}')"`
+      : '';
+    const cursorClass = a.ticker ? 'cursor-pointer hover:border-emerald-500/40 hover:bg-white/[0.06]' : '';
+
+    return `
+      <div ${clickAttr} class="p-2.5 rounded-xl bg-slate-900/60 border border-white/[0.06] flex items-start justify-between gap-2.5 transition ${cursorClass}">
+        <div class="space-y-1">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${a.badgeColor}">
+              ${a.badge}
+            </span>
+            <span class="font-bold text-white text-xs">${escHtml(a.title)}</span>
+          </div>
+          <p class="text-[10px] text-slate-300 leading-relaxed">${escHtml(a.desc)}</p>
+        </div>
+        <div class="text-right shrink-0">
+          <span class="text-[9px] font-mono text-slate-400">${a.time}</span>
+          ${a.ticker ? '<div class="text-[9px] text-emerald-400 font-semibold mt-1">Detail &rarr;</div>' : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateAlertBadgeUI(hasUnread, count = 0) {
+  const headerDot = document.getElementById('headerAlertDot');
+  const menuDot = document.getElementById('alertMenuBadgeDot');
+  const countBadge = document.getElementById('dropdownAlertCount');
+
+  if (headerDot) {
+    if (hasUnread) headerDot.classList.remove('hidden');
+    else headerDot.classList.add('hidden');
+  }
+  if (menuDot) {
+    if (hasUnread) menuDot.classList.remove('hidden');
+    else menuDot.classList.add('hidden');
+  }
+  if (countBadge) {
+    if (hasUnread && count > 0) {
+      countBadge.textContent = `${count} Baru`;
+      countBadge.className = 'text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+    } else {
+      countBadge.textContent = 'Live';
+      countBadge.className = 'text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30';
+    }
+  }
+}
+
+function markAllAlertsRead() {
+  hasUnreadAlerts = false;
+  updateAlertBadgeUI(false, 0);
+  showToast('Seluruh notifikasi ditandai sudah dibaca.', 'success');
+}
+
+function openAlertModal() {
+  const modal = document.getElementById('alertModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    const soundEnabled = localStorage.getItem('smartflow_alert_sound') !== 'false';
+    updateAlertSoundUI(soundEnabled);
+    updateBrowserNotificationUI();
+    loadAlertPreferences();
+    renderAlertFeed();
+  }
+}
+
+function closeAlertModal() {
+  const modal = document.getElementById('alertModal');
   if (modal) modal.classList.add('hidden');
 }
+
+// Kompatibilitas jika dipanggil dari tempat lama
+function openSettingsModal() {
+  // Arahkan langsung ke menu pengaturan utama Gambar 1
+  toggleSettingsDropdown();
+}
+
+function closeSettingsModal() {
+  closeAlertModal();
+  closeSettingsDropdown();
+}
+
 
 function toggleExpertPillarsView() {
   const content = document.getElementById('expertPillarsContent');
@@ -4116,7 +4441,7 @@ async function deletePortfolioTrade(tradeId) {
 // GLOBAL KEYBOARD & BACKDROP MODAL HANDLERS
 // =====================================================================
 function closeAllModals() {
-  closeSettingsModal();
+  closeAlertModal();
   closeLotCalculatorModal();
   closeGlossaryModal();
   closeUploadModal();
@@ -4143,7 +4468,7 @@ document.addEventListener('click', (e) => {
 });
 
 // Tutup modal jika user mengklik backdrop / area hitam di luar modal
-document.querySelectorAll('#settingsModal, #lotCalculatorModal, #glossaryModal, #uploadModal, #guideModal, #tradingViewModal, #marketRegimeModal, #portfolioBuyModal, #portfolioSellModal').forEach(modalEl => {
+document.querySelectorAll('#alertModal, #lotCalculatorModal, #glossaryModal, #uploadModal, #guideModal, #tradingViewModal, #marketRegimeModal, #portfolioBuyModal, #portfolioSellModal').forEach(modalEl => {
   modalEl.addEventListener('click', (e) => {
     if (e.target === modalEl) {
       modalEl.classList.add('hidden');
