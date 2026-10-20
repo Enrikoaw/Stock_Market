@@ -9,7 +9,6 @@ venv/
 *.tmp
 data/real_idx_market_5y.csv
 data/real_idx_market_5y.parquet
-data/telegram_config.json
 data/broker_api_config.json
 *.db-shm
 *.db-wal

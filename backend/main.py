@@ -47,15 +47,6 @@ from broker_summary_fetcher import (
 )
 from portfolio_tracker import PortfolioTracker
 from signal_tracker import SignalTracker
-from telegram_notifier import (
-    filter_smart_telegram_picks,
-    format_telegram_broadcast,
-    format_test_message,
-    format_tracker_event_message,
-    load_telegram_config,
-    save_telegram_config,
-    send_telegram_message,
-)
 from screener_engine import (
     analyze_smart_money_dataframe,
     enrich_master_ticker_list,
@@ -86,7 +77,6 @@ STATE: dict = {
 
 TRACKER = SignalTracker(BASE_DIR / "data" / "tracker.db")
 PORTFOLIO = PortfolioTracker(BASE_DIR / "data" / "tracker.db")
-LAST_DAILY_BROADCAST_DATE: str | None = None
 LAST_CLOSE_SYNC_DATE: str | None = None
 
 
@@ -202,23 +192,6 @@ def _process_tracker(analysis: dict, sync_live_network: bool = False, force_auto
             if force_auto_track or not is_idx_market_open_now():
                 result["added"] = TRACKER.auto_track(analysis)
             sync_tracker_to_analysis(analysis)
-
-            # Kirim realtime Telegram Alert jika bot sudah terkonfigurasi
-            tg_cfg = load_telegram_config()
-            if tg_cfg.get("bot_token") and tg_cfg.get("chat_id") and tg_cfg.get("auto_notify", True):
-                for ev in main_res.get("events", []):
-                    if ev.get("event") in ("WIN", "EXPIRED_GAP_DOWN", "RUNNING", "MILESTONE_BEP"):
-                        alert_text = format_tracker_event_message(
-                            event_type=ev["event"],
-                            ticker=ev["ticker"],
-                            price=ev.get("price", 0.0),
-                            pnl_pct=ev.get("pnl_pct"),
-                            note=ev.get("note", ""),
-                        )
-                        try:
-                            send_telegram_message(tg_cfg["bot_token"], tg_cfg["chat_id"], alert_text)
-                        except Exception as tg_err:
-                            print(f"[TelegramAutoAlert] Gagal kirim notifikasi {ev['ticker']}: {tg_err}")
 
         STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[Tracker] {result}")
@@ -402,7 +375,7 @@ async def _background_market_session_worker() -> None:
       candle penutupan hari ini tersimpan dan dievaluasi oleh SignalTracker.
     """
     print("[MarketWorker] Background Market Session Worker aktif.")
-    global LAST_DAILY_BROADCAST_DATE, LAST_CLOSE_SYNC_DATE
+    global LAST_CLOSE_SYNC_DATE
     loop_count = 0
     last_sync_attempt_ts = 0.0
     import time
@@ -442,30 +415,6 @@ async def _background_market_session_worker() -> None:
                 synced_ok = await trigger_safe_sync()
                 if synced_ok and needs_post_close_sync:
                     LAST_CLOSE_SYNC_DATE = today_str
-
-            # Auto-Broadcast Penutupan Pasar (16:15 WIB) ke Telegram
-            now_wib = _get_now_wib()
-            today_str = now_wib.strftime("%Y-%m-%d")
-            if is_trading_day:
-                if dtime(16, 15) <= now_wib.time() <= dtime(16, 45) and LAST_DAILY_BROADCAST_DATE != today_str:
-                    tg_cfg = load_telegram_config()
-                    if tg_cfg.get("bot_token") and tg_cfg.get("chat_id") and tg_cfg.get("auto_notify", True):
-                        try:
-                            market_regime = STATE["analysis"]["kpis"].get("market_regime", {}) if STATE.get("analysis") else {}
-                            if not market_regime.get("allow_watchlist", True):
-                                print(f"[MarketWorker] Auto-broadcast Top Picks dilewati: {market_regime.get('label', 'Pasar terkunci')}.")
-                                LAST_DAILY_BROADCAST_DATE = today_str
-                            else:
-                                print(f"[MarketWorker] Auto-broadcasting Top Picks Penutupan Bursa ({today_str}) ke Telegram...")
-                                stocks = STATE["analysis"]["stocks"] if STATE.get("analysis") else []
-                                market_date = STATE["analysis"]["kpis"]["latest_date"] if STATE.get("analysis") else today_str
-                                picks = filter_smart_telegram_picks(stocks=stocks, max_picks=3, max_pct_change=2.5, min_score=70)
-                                bcast_text = format_telegram_broadcast(picks, market_date)
-                                await asyncio.to_thread(send_telegram_message, tg_cfg["bot_token"], tg_cfg["chat_id"], bcast_text)
-                                LAST_DAILY_BROADCAST_DATE = today_str
-                                print("[MarketWorker] Broadcast Telegram penutupan pasar berhasil dikirim.")
-                        except Exception as tg_err:
-                            print(f"[MarketWorker] Error broadcast Telegram: {tg_err}")
         except Exception as exc:
             print(f"[MarketWorker] Error: {exc}")
 
@@ -1444,85 +1393,6 @@ def portfolio_delete(trade_id: int) -> dict:
     return {"status": "success", "message": "Catatan transaksi berhasil dihapus."}
 
 
-# ===================== TELEGRAM NOTIFIER =====================
-
-
-class TelegramConfigRequest(BaseModel):
-    bot_token: Optional[str] = None
-    chat_id: Optional[str] = None
-
-
-class TelegramSendRequest(BaseModel):
-    bot_token: Optional[str] = None
-    chat_id: Optional[str] = None
-    max_picks: int = 3
-    max_pct_change: float = 2.5
-    min_score: int = 70
-
-
-class TelegramConfigSaveRequest(BaseModel):
-    bot_token: Optional[str] = None
-    chat_id: Optional[str] = None
-    auto_notify: Optional[bool] = True
-
-
-def _resolve_telegram_credentials(req_token: Optional[str], req_chat_id: Optional[str]) -> tuple[str, str]:
-    """Resolusi kredensial Telegram dengan aman dari file disk lokal data/telegram_config.json atau environment variable."""
-    saved_cfg = load_telegram_config()
-    raw_tok = (req_token or "").strip()
-    if not raw_tok or "..." in raw_tok or "*" in raw_tok:
-        token = (saved_cfg.get("bot_token") or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
-    else:
-        token = raw_tok
-
-    raw_cid = (req_chat_id or "").strip()
-    chat_id = raw_cid or (saved_cfg.get("chat_id") or os.environ.get("TELEGRAM_CHAT_ID", "")).strip()
-    return token, chat_id
-
-
-@app.get("/api/telegram/config")
-def get_telegram_config() -> dict:
-    cfg = load_telegram_config()
-    token = cfg.get("bot_token", "")
-    masked_token = f"{token[:5]}...{token[-4:]}" if len(token) > 10 else ("***" if token else "")
-    return {
-        "configured": bool(token and cfg.get("chat_id")),
-        "bot_token": "",
-        "masked_token": masked_token,
-        "chat_id": cfg.get("chat_id", ""),
-        "auto_notify": cfg.get("auto_notify", True),
-    }
-
-
-@app.post("/api/telegram/config")
-def save_telegram_config_endpoint(req: TelegramConfigSaveRequest) -> dict:
-    token, chat_id = _resolve_telegram_credentials(req.bot_token, req.chat_id)
-    cfg = {
-        "bot_token": token,
-        "chat_id": chat_id,
-        "auto_notify": bool(req.auto_notify),
-    }
-    if cfg["bot_token"]:
-        os.environ["TELEGRAM_BOT_TOKEN"] = cfg["bot_token"]
-    if cfg["chat_id"]:
-        os.environ["TELEGRAM_CHAT_ID"] = cfg["chat_id"]
-    ok = save_telegram_config(cfg)
-    if not ok:
-        raise HTTPException(status_code=500, detail="Gagal menyimpan konfigurasi Telegram ke file disk.")
-    masked_token = f"{token[:5]}...{token[-4:]}" if len(token) > 10 else ("***" if token else "")
-    return {
-        "status": "success",
-        "message": "Konfigurasi Telegram berhasil disimpan permanen!",
-        "config": {
-            "configured": bool(token and chat_id),
-            "bot_token": "",
-            "masked_token": masked_token,
-            "chat_id": chat_id,
-            "auto_notify": cfg["auto_notify"],
-        },
-    }
-
-
 class BrokerApiConfigRequest(BaseModel):
     provider: Optional[str] = "goapi"
     goapi_key: Optional[str] = None
@@ -1590,73 +1460,6 @@ def test_broker_api_endpoint(req: BrokerTestRequest) -> dict:
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("error", "Koneksi ke Broker API gagal."))
     return res
-
-
-@app.post("/api/telegram/test")
-def test_telegram_connection(req: TelegramConfigRequest) -> dict:
-    token, chat_id = _resolve_telegram_credentials(req.bot_token, req.chat_id)
-    if not token or not chat_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Telegram Bot Token dan Chat ID wajib diisi.",
-        )
-    ok, msg = send_telegram_message(token, chat_id, format_test_message())
-    if not ok:
-        raise HTTPException(status_code=400, detail=msg)
-    return {"status": "success", "message": msg}
-
-
-@app.post("/api/telegram/send")
-async def send_smart_telegram_recommendations(req: TelegramSendRequest) -> dict:
-    token, chat_id = _resolve_telegram_credentials(req.bot_token, req.chat_id)
-    if not token or not chat_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Telegram Bot Token dan Chat ID belum disetel. Buka pengaturan Telegram untuk memasukkan Token & Chat ID.",
-        )
-
-    # 1. Pastikan state data pasar tersedia
-    if STATE["analysis"] is None:
-        init_default_state()
-
-    # 2. Saring kandidat saham terbaik yang belum terbang (dibatasi maksimal 5 saham agar tidak terpotong batas Telegram)
-    stocks = STATE["analysis"]["stocks"] if STATE["analysis"] else []
-    market_date = STATE["analysis"]["kpis"]["latest_date"] if STATE["analysis"] else "Hari Ini"
-    safe_max_picks = max(1, min(int(req.max_picks or 3), 5))
-
-    picks = filter_smart_telegram_picks(
-        stocks=stocks,
-        max_picks=safe_max_picks,
-        max_pct_change=req.max_pct_change,
-        min_score=req.min_score,
-    )
-
-    # 3. Format pesan HTML Telegram yang rapi
-    text = format_telegram_broadcast(picks, market_date)
-
-    # 4. Kirim ke Telegram
-    ok, send_msg = await asyncio.to_thread(send_telegram_message, token, chat_id, text)
-    if not ok:
-        raise HTTPException(status_code=400, detail=send_msg)
-
-    return {
-        "status": "success",
-        "picks_count": len(picks),
-        "message": f"🚀 Berhasil mengirim {len(picks)} rekomendasi saham aman ke Telegram Anda!",
-        "preview": text,
-        "picks": [
-            {
-                "ticker": p.get("ticker"),
-                "sector": p.get("sector"),
-                "close": p.get("close"),
-                "pct_change": p.get("pct_change"),
-                "smart_money_score": p.get("smart_money_score"),
-                "trigger_label": p.get("trigger_label"),
-                "trading_plan": p.get("trading_plan"),
-            }
-            for p in picks
-        ],
-    }
 
 
 # ===================== PROGRESSIVE WEB APP (PWA) =====================

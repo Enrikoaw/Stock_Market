@@ -2853,29 +2853,6 @@ async function resetTracker() {
 }
 
 // =====================================================================
-// TELEGRAM NOTIFIER INTEGRATION
-// =====================================================================
-async function sendTelegramRecommendations() {
-  try {
-    showToast('🔍 Menyaring saham akumulasi aman (< 2.5%) & mengirim ke Telegram...');
-    const res = await fetch('/api/telegram/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        max_picks: 3,
-        max_pct_change: 2.5,
-        min_score: 70,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Gagal mengirim rekomendasi ke Telegram');
-    showToast(data.message, 'success');
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-// =====================================================================
 // PWA REGISTRATION
 // =====================================================================
 if ('serviceWorker' in navigator) {
