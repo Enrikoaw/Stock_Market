@@ -1223,18 +1223,19 @@ def compute_support_entry_plan(
     entry_low = entry_price
     entry_high = entry_price
 
-    sl_distance = max(int(round(entry_price * 0.040)), min(int(round(entry_price * 0.050)), int(round(1.5 * atr))))
+    # Rasio baku Risk:Reward 1:2 (SL terukur ~3.5%, TP1 2x Risk ~7.0%, TP2 ~12%)
+    sl_distance = max(int(round(entry_price * 0.035)), min(int(round(entry_price * 0.045)), int(round(1.5 * atr))))
     stop_loss = _round_idx_tick(entry_price - sl_distance)
     risk_idr = max(1, entry_price - stop_loss)
     risk_pct = round((risk_idr / max(entry_price, 1)) * 100.0, 2)
 
-    tp1 = _round_idx_tick(entry_price * 1.06)
-    tp2 = _round_idx_tick(entry_price * 1.10)
+    tp1 = _round_idx_tick(entry_price + (2 * risk_idr))
+    tp2 = _round_idx_tick(entry_price + int(round(3.5 * risk_idr)))
     if tp2 <= tp1:
         tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
     tp1_pct = round(((tp1 - entry_price) / max(entry_price, 1)) * 100.0, 2)
     tp2_pct = round(((tp2 - entry_price) / max(entry_price, 1)) * 100.0, 2)
-    rr_ratio = round(tp2_pct / max(risk_pct, 0.1), 1)
+    rr_ratio = round(tp1_pct / max(risk_pct, 0.1), 1)
     pullback_from_close_pct = round(((entry_price - c_p) / max(c_p, 1.0)) * 100.0, 2)
 
     return {

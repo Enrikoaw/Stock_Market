@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=78.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=83.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -412,9 +412,60 @@
 
       <!-- Grid 3-5 Kartu Kandidat Saham Hari Ini -->
       <div id="todayCandidatesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <!-- Kartu di-render dinamis oleh app.js -->
-        <div class="p-6 rounded-2xl glass-panel text-center text-slate-300 text-xs col-span-full py-12">
-          <p>Menganalisis saham kandidat terbaik hari ini...</p>
+        <!-- Skeleton Loader Bar Berkedip (Temuan K6) -->
+        <div class="p-5 rounded-2xl glass-panel animate-pulse space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-slate-800/80"></div>
+              <div class="space-y-1.5">
+                <div class="h-4 bg-slate-800 rounded w-16"></div>
+                <div class="h-3 bg-slate-800/60 rounded w-24"></div>
+              </div>
+            </div>
+            <div class="h-5 bg-slate-800 rounded w-16"></div>
+          </div>
+          <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-900/40 border border-white/[0.04]">
+            <div class="h-8 bg-slate-800/60 rounded"></div>
+            <div class="h-8 bg-slate-800/60 rounded"></div>
+            <div class="h-8 bg-slate-800/60 rounded"></div>
+          </div>
+          <div class="h-14 bg-slate-800/50 rounded-xl"></div>
+        </div>
+        <div class="p-5 rounded-2xl glass-panel animate-pulse space-y-4 hidden md:block">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-slate-800/80"></div>
+              <div class="space-y-1.5">
+                <div class="h-4 bg-slate-800 rounded w-16"></div>
+                <div class="h-3 bg-slate-800/60 rounded w-24"></div>
+              </div>
+            </div>
+            <div class="h-5 bg-slate-800 rounded w-16"></div>
+          </div>
+          <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-900/40 border border-white/[0.04]">
+            <div class="h-8 bg-slate-800/60 rounded"></div>
+            <div class="h-8 bg-slate-800/60 rounded"></div>
+            <div class="h-8 bg-slate-800/60 rounded"></div>
+          </div>
+          <div class="h-14 bg-slate-800/50 rounded-xl"></div>
+        </div>
+        <div class="p-5 rounded-2xl glass-panel animate-pulse space-y-4 hidden lg:block">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-slate-800/80"></div>
+              <div class="space-y-1.5">
+                <div class="h-4 bg-slate-800 rounded w-16"></div>
+                <div class="h-3 bg-slate-800/60 rounded w-24"></div>
+              </div>
+            </div>
+            <div class="h-5 bg-slate-800 rounded w-16"></div>
+          </div>
+          <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-900/40 border border-white/[0.04]">
+            <div class="h-8 bg-slate-800/60 rounded"></div>
+            <div class="h-8 bg-slate-800/60 rounded"></div>
+            <div class="h-8 bg-slate-800/60 rounded"></div>
+          </div>
+          <div class="h-14 bg-slate-800/50 rounded-xl"></div>
         </div>
       </div>
 
@@ -484,8 +535,16 @@
 
         <!-- Feed List Kontainer Berita -->
         <div id="marketNewsList" class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          <div class="p-8 rounded-xl glass-subcard text-center text-slate-400 text-xs col-span-full">
-            Memuat berita dan sentimen pasar...
+          <!-- Skeleton Loader Berita (Temuan K6) -->
+          <div class="p-4 rounded-xl glass-subcard animate-pulse space-y-2.5">
+            <div class="h-3.5 bg-slate-800 rounded w-1/4"></div>
+            <div class="h-4 bg-slate-800/80 rounded w-5/6"></div>
+            <div class="h-3 bg-slate-800/50 rounded w-1/2"></div>
+          </div>
+          <div class="p-4 rounded-xl glass-subcard animate-pulse space-y-2.5 hidden md:block">
+            <div class="h-3.5 bg-slate-800 rounded w-1/4"></div>
+            <div class="h-4 bg-slate-800/80 rounded w-5/6"></div>
+            <div class="h-3 bg-slate-800/50 rounded w-1/2"></div>
           </div>
         </div>
 
@@ -752,10 +811,30 @@
                 </tr>
               </thead>
               <tbody id="screenerTableBody" class="divide-y divide-white/[0.05]">
-                <tr>
-                  <td colspan="6" class="py-12 text-center text-slate-300">
-                    Memuat daftar saham bursa...
-                  </td>
+                <!-- Skeleton Loader Tabel (Temuan K6) -->
+                <tr class="animate-pulse">
+                  <td class="py-4 pl-4 pr-2"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-slate-800/80"></div><div class="space-y-1"><div class="h-3.5 bg-slate-800 rounded w-14"></div><div class="h-2.5 bg-slate-800/60 rounded w-20"></div></div></div></td>
+                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-16 ml-auto"></div></td>
+                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-12 ml-auto"></div></td>
+                  <td class="py-4 px-2 text-center"><div class="h-5 bg-slate-800/60 rounded-full w-20 mx-auto"></div></td>
+                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-10 ml-auto"></div></td>
+                  <td class="py-4 pl-2 pr-4"><div class="space-y-1"><div class="h-3 bg-slate-800/60 rounded w-28"></div><div class="h-2.5 bg-slate-800/40 rounded w-36"></div></div></td>
+                </tr>
+                <tr class="animate-pulse">
+                  <td class="py-4 pl-4 pr-2"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-slate-800/80"></div><div class="space-y-1"><div class="h-3.5 bg-slate-800 rounded w-14"></div><div class="h-2.5 bg-slate-800/60 rounded w-20"></div></div></div></td>
+                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-16 ml-auto"></div></td>
+                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-12 ml-auto"></div></td>
+                  <td class="py-4 px-2 text-center"><div class="h-5 bg-slate-800/60 rounded-full w-20 mx-auto"></div></td>
+                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-10 ml-auto"></div></td>
+                  <td class="py-4 pl-2 pr-4"><div class="space-y-1"><div class="h-3 bg-slate-800/60 rounded w-28"></div><div class="h-2.5 bg-slate-800/40 rounded w-36"></div></div></td>
+                </tr>
+                <tr class="animate-pulse">
+                  <td class="py-4 pl-4 pr-2"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-slate-800/80"></div><div class="space-y-1"><div class="h-3.5 bg-slate-800 rounded w-14"></div><div class="h-2.5 bg-slate-800/60 rounded w-20"></div></div></div></td>
+                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-16 ml-auto"></div></td>
+                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-12 ml-auto"></div></td>
+                  <td class="py-4 px-2 text-center"><div class="h-5 bg-slate-800/60 rounded-full w-20 mx-auto"></div></td>
+                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-10 ml-auto"></div></td>
+                  <td class="py-4 pl-2 pr-4"><div class="space-y-1"><div class="h-3 bg-slate-800/60 rounded w-28"></div><div class="h-2.5 bg-slate-800/40 rounded w-36"></div></div></td>
                 </tr>
               </tbody>
             </table>
@@ -889,7 +968,7 @@
           <div id="autoTradingPlanCard" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.08] space-y-3 shadow-sm dark:shadow-none">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5">
-                <span class="text-xs font-bold text-slate-900 dark:text-white">Rencana Eksekusi Swing 1:2</span>
+                <span id="planHeaderTitle" class="text-xs font-bold text-slate-900 dark:text-white">Rencana Eksekusi Swing (R:R 1 : 2.0)</span>
                 <button type="button" class="tip-btn text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onclick="openGlossaryModal('scenario')" title="Arti Skenario">ⓘ</button>
               </div>
               <div>
@@ -1052,7 +1131,7 @@
 
       <!-- BAGIAN 1: DAFTAR FAVORIT PRIBADI (BINTANG ★) -->
       <div id="favoritesSection" class="glass-panel rounded-2xl p-4 sm:p-5 space-y-3">
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-white/[0.08] pb-3">
+        <div class="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-white/[0.08] pb-3 gap-2">
           <div class="flex items-center gap-2">
             <span class="text-base font-extrabold text-amber-500 dark:text-amber-300">⭐</span>
             <div>
@@ -1060,9 +1139,26 @@
               <p class="text-xs text-slate-600 dark:text-slate-300">Saham yang Anda tandai bintang ★. Disimpan di peramban Anda tanpa penolakan syarat skor.</p>
             </div>
           </div>
-          <span id="favoritesCountBadge" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/30">
-            0 Saham
-          </span>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onclick="exportFavoritesData()"
+              class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer active:scale-95"
+              title="Ekspor daftar pantauan bintang favorit ke file JSON"
+            >
+              <span>📥 Ekspor Data</span>
+            </button>
+            <label
+              class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer active:scale-95"
+              title="Pulihkan daftar pantauan dari file cadangan JSON"
+            >
+              <span>📤 Impor Cadangan</span>
+              <input type="file" id="inputImportFavorites" accept=".json,.csv" class="hidden" onchange="importFavoritesData(event)" />
+            </label>
+            <span id="favoritesCountBadge" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/30">
+              0 Saham
+            </span>
+          </div>
         </div>
 
         <div id="favoritesContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1245,13 +1341,30 @@
               Catatan transaksi saham nyata yang Anda beli di sekuritas beserta live floating &amp; realized P/L terupdate.
             </p>
           </div>
-          <button
-            onclick="openPortfolioBuyModal()"
-            class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(16,185,129,0.35)] transition flex items-center gap-1.5 active:scale-95"
-          >
-            <span>＋</span>
-            <span>Catat Transaksi Beli</span>
-          </button>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onclick="exportPortfolioData()"
+              class="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-xs font-semibold transition flex items-center gap-1 cursor-pointer active:scale-95"
+              title="Ekspor seluruh riwayat transaksi jurnal portofolio ke file CSV"
+            >
+              <span>📥 Ekspor Jurnal (CSV)</span>
+            </button>
+            <label
+              class="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-xs font-semibold transition flex items-center gap-1 cursor-pointer active:scale-95"
+              title="Impor catatan transaksi dari file cadangan CSV/JSON"
+            >
+              <span>📤 Impor Cadangan</span>
+              <input type="file" id="inputImportPortfolio" accept=".json,.csv" class="hidden" onchange="importPortfolioData(event)" />
+            </label>
+            <button
+              onclick="openPortfolioBuyModal()"
+              class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(16,185,129,0.35)] transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+            >
+              <span>＋</span>
+              <span>Catat Transaksi Beli</span>
+            </button>
+          </div>
         </div>
 
         <!-- Portfolio Summary KPI Cards -->
@@ -1562,9 +1675,9 @@
         <div id="calcModalResult" class="p-3 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 space-y-1.5 mt-2">
           <div class="font-bold text-sm text-white">Simulasi Kapasitas: <span id="resLotCount" class="text-emerald-400 text-base">0 Lot</span></div>
           <div class="text-[10px] text-slate-400 font-medium">Position Sizing: Maks. 20% modal per emiten &amp; risiko &le; 2% modal (Bukan ajakan beli/jual).</div>
-          <div class="text-[11px] text-slate-300">Total Nilai Beli: <span id="resTotalVal" class="text-white font-mono font-semibold">Rp 4.000.000</span> <span class="text-[10px] text-slate-400">(inc. fee beli 0.15%)</span></div>
+          <div class="text-[11px] text-slate-300">Total Nilai Beli: <span id="resTotalVal" class="text-white font-mono font-semibold">Rp 5.700.000</span> <span class="text-[10px] text-slate-400">(inc. fee beli 0.15%)</span></div>
           <div class="text-[11px] text-slate-300">Risiko Maksimal: <span id="resMaxRisk" class="text-rose-300 font-mono font-semibold">Rp 200.000</span> <span class="text-[10px] text-slate-400">(inc. fee roundtrip 0.40%)</span></div>
-          <div class="text-[11px] text-slate-300">Potensi Untung (TP1 +6%): <span id="resTargetProfit" class="text-emerald-300 font-mono font-semibold">Rp 224.000</span> <span class="text-[10px] text-emerald-400/80">(net setelah fee)</span></div>
+          <div class="text-[11px] text-slate-300">Potensi Untung (TP1 +7.0%): <span id="resTargetProfit" class="text-emerald-300 font-mono font-semibold">Rp 400.000</span> <span class="text-[10px] text-emerald-400/80">(net setelah fee, R:R 1 : 2.0)</span></div>
         </div>
       </div>
     </div>
@@ -1698,7 +1811,7 @@
                 <tr class="text-slate-400 border-b border-white/10 font-sans">
                   <th class="py-1">Kelompok Skor</th>
                   <th class="py-1 text-center">Trade Masuk</th>
-                  <th class="py-1 text-center">Win Rate (TP1 +4%)</th>
+                  <th class="py-1 text-center">Win Rate (Target TP1)</th>
                   <th class="py-1 text-right">Avg Win</th>
                   <th class="py-1 text-right">Avg Loss</th>
                   <th class="py-1 text-right">Avg Hold</th>
@@ -2142,6 +2255,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=82.0"></script>
+  <script src="/static/app.js?v=83.0"></script>
 </body>
 </html>

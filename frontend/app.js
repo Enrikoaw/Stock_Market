@@ -39,6 +39,14 @@ const escHtml = (str) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+// Parameter Baku Rencana Trading & Rasio Risk:Reward (K8 - Seragam di seluruh aplikasi)
+const APP_TRADING_RULES = {
+  DEFAULT_SL_PCT: 3.5,    // Batas Rugi Baku (-3.5%)
+  DEFAULT_TP1_PCT: 7.0,   // Target Profit 1 Baku (+7.0%) -> Rasio Risk:Reward eksak 1 : 2.0
+  DEFAULT_TP2_PCT: 12.0,  // Target Profit 2 Baku (+12.0%)
+  DEFAULT_RR: 2.0,        // Rasio Baku 1 : 2.0
+};
+
 
 
 // =====================================================================
@@ -384,6 +392,67 @@ function renderFavorites() {
 }
 
 // =====================================================================
+// EKSPOR & IMPOR DAFTAR PANTAUAN FAVORIT (TEMUAN K7)
+// =====================================================================
+function exportFavoritesData() {
+  if (!favoriteTickers || favoriteTickers.length === 0) {
+    showToast('Daftar pantauan favorit masih kosong.', 'info');
+    return;
+  }
+  const exportPayload = {
+    app: 'SmartFlow IDX',
+    type: 'smartflow_favorites_backup',
+    version: '1.0',
+    exported_at: new Date().toISOString(),
+    count: favoriteTickers.length,
+    tickers: favoriteTickers,
+  };
+  const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  a.href = url;
+  a.download = `smartflow_watchlist_${dStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`Cadangan ${favoriteTickers.length} saham favorit berhasil diunduh!`, 'success');
+}
+
+function importFavoritesData(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const content = evt.target.result;
+      let imported = [];
+      if (file.name.endsWith('.json')) {
+        const parsed = JSON.parse(content);
+        imported = Array.isArray(parsed) ? parsed : (parsed.tickers || []);
+      } else {
+        imported = content.split(/[\r\n,]+/).map(s => s.trim().toUpperCase()).filter(s => /^[A-Z0-9]{4,6}$/.test(s));
+      }
+      const validTickers = imported.map(t => String(t).trim().toUpperCase()).filter(t => /^[A-Z0-9]{4,6}$/.test(t));
+      if (!validTickers.length) {
+        throw new Error('Tidak ditemukan kode saham valid dalam file cadangan.');
+      }
+      const merged = Array.from(new Set([...favoriteTickers, ...validTickers]));
+      favoriteTickers = merged;
+      localStorage.setItem('smartflow_favorites', JSON.stringify(favoriteTickers));
+      renderFavorites();
+      showToast(`Berhasil memulihkan ${validTickers.length} saham ke daftar pantauan!`, 'success');
+    } catch (err) {
+      showToast(`Gagal mengimpor file: ${err.message}`, 'error');
+    } finally {
+      e.target.value = '';
+    }
+  };
+  reader.readAsText(file);
+}
+
+// =====================================================================
 // TAB 1: KANDIDAT PILIHAN HARI INI (BERANDA PEMULA)
 // =====================================================================
 function getScoreStrengthDots(score) {
@@ -572,17 +641,17 @@ function renderTodayCandidates(stocks) {
     const strength = getScoreStrengthDots(s.smart_money_score);
     const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
 
-    // Ambil Trading Plan terukur langsung dari backend (TP1 +6%, TP2 +10%, SL Closing Basis)
+    // Ambil Trading Plan terukur langsung dari backend (Sesuai parameter baku APP_TRADING_RULES)
     const plan = s.trading_plan || {};
     const entryLow = plan.entry_low || Math.round(s.close * 0.99);
     const entryHigh = plan.entry_high || s.close;
-    const stopLoss = plan.stop_loss || Math.round(s.close * 0.95);
-    const target1 = plan.target_1 || Math.round(s.close * 1.06);
-    const target2 = plan.target_2 || Math.round(s.close * 1.10);
+    const stopLoss = plan.stop_loss || Math.round(s.close * (1 - APP_TRADING_RULES.DEFAULT_SL_PCT / 100));
+    const target1 = plan.target_1 || Math.round(s.close * (1 + APP_TRADING_RULES.DEFAULT_TP1_PCT / 100));
+    const target2 = plan.target_2 || Math.round(s.close * (1 + APP_TRADING_RULES.DEFAULT_TP2_PCT / 100));
 
-    const slPct = plan.stop_loss_pct != null ? plan.stop_loss_pct : (((stopLoss - s.close) / s.close) * 100).toFixed(1);
-    const tp1Pct = plan.target_1_pct != null ? plan.target_1_pct : (((target1 - s.close) / s.close) * 100).toFixed(1);
-    const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : (((target2 - s.close) / s.close) * 100).toFixed(1);
+    const slPct = plan.stop_loss_pct != null ? plan.stop_loss_pct : -APP_TRADING_RULES.DEFAULT_SL_PCT;
+    const tp1Pct = plan.target_1_pct != null ? plan.target_1_pct : APP_TRADING_RULES.DEFAULT_TP1_PCT;
+    const tp2Pct = plan.target_2_pct != null ? plan.target_2_pct : APP_TRADING_RULES.DEFAULT_TP2_PCT;
 
     // Kualitas Pita (Tape Quality) Badge
     const tapePill = (s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW')
@@ -693,17 +762,21 @@ function renderTodayCandidates(stocks) {
           <!-- Target & Stop Loss -->
           <div class="grid grid-cols-3 gap-1.5 text-center text-[10px] font-mono">
             <div class="p-1.5 rounded-lg bg-slate-900/40 border border-white/[0.04]">
-              <div class="text-slate-400">TP1 (+6%)</div>
+              <div class="text-slate-400">TP1 (+${tp1Pct}%)</div>
               <div class="font-bold text-emerald-400">${fmtPrice(target1)}</div>
-              <div class="text-[9px] text-slate-400">+${tp1Pct}%</div>
+              <div class="text-[9px] text-emerald-400/80">R:R 1:2</div>
             </div>
             <div class="p-1.5 rounded-lg bg-slate-900/40 border border-white/[0.04]">
-              <div class="text-slate-400">TP2 (+10%)</div>
-              <div class="font-bold text-emerald-400">${fmtPrice(target2)}</div>
-              <div class="text-[9px] text-slate-400">+${tp2Pct}%</div>
+              <div class="text-slate-400">TP2 (+${tp2Pct}%)</div>
+              <div class="font-bold text-teal-300">${fmtPrice(target2)}</div>
+              <div class="text-[9px] text-teal-400/80">Kawal Tren</div>
             </div>
             <div class="p-1.5 rounded-lg bg-slate-900/40 border border-white/[0.04]">
-              <div class="text-slate-400">SL (Close)</div>
+              <div class="text-slate-400">SL (${slPct}%)</div>
+              <div class="font-bold text-rose-400">${fmtPrice(stopLoss)}</div>
+              <div class="text-[9px] text-rose-400/80">Closing Basis</div>
+            </div>
+          </div>
               <div class="font-bold text-rose-400">${fmtPrice(stopLoss)}</div>
               <div class="text-[9px] text-slate-400">${slPct}%</div>
             </div>
@@ -746,15 +819,102 @@ let activeNewsCategory = 'ALL';
 let isNewsLoading = false;
 
 
-// Fetch dengan batas waktu agar modul lambat (mis. berita eksternal) tidak menahan UI
-async function fetchWithTimeout(url, opts = {}, ms = 15000) {
+// Fetch dengan batas waktu timeout 9 detik (Temuan K6 - penanganan gagal terukur)
+async function fetchWithTimeout(url, opts = {}, ms = 9000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   try {
     return await fetch(url, { ...opts, signal: ctrl.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Waktu tunggu server melebihi ${Math.round(ms / 1000)} detik (Timeout).`);
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }
+}
+
+// =====================================================================
+// ERROR & SKELETON RENDERERS DENGAN TOMBOL COBA LAGI (TEMUAN K6)
+// =====================================================================
+function renderCandidatesError(errorMsg) {
+  const container = document.getElementById('todayCandidatesGrid');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="col-span-full p-6 rounded-2xl glass-panel border border-rose-500/30 text-center space-y-3 shadow-lg">
+      <div class="text-rose-400 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5">
+        <span>⚠️</span>
+        <span>Gagal Mengambil Data Pasar</span>
+      </div>
+      <p class="text-[11px] text-slate-400 max-w-md mx-auto leading-relaxed">${escHtml(errorMsg || 'Koneksi ke server backend tertunda atau waktu tunggu habis.')}</p>
+      <button onclick="loadScreenerData(true)" class="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition active:scale-95 cursor-pointer shadow-sm">
+        🔄 Muat Ulang / Coba Lagi
+      </button>
+    </div>
+  `;
+}
+
+function renderTableError(errorMsg) {
+  const tbody = document.getElementById('screenerTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="6" class="py-12 text-center space-y-3">
+        <div class="text-rose-400 font-bold text-xs sm:text-sm">⚠️ Gagal Memuat Daftar Saham Bursa</div>
+        <p class="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed">${escHtml(errorMsg || 'Waktu tunggu server melebihi batas. Periksa koneksi backend Anda.')}</p>
+        <button onclick="loadScreenerData(true)" class="mt-2 px-4 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition active:scale-95 cursor-pointer shadow-sm">
+          🔄 Muat Ulang / Coba Lagi
+        </button>
+      </td>
+    </tr>
+  `;
+}
+
+function renderNewsError(errorMsg) {
+  const container = document.getElementById('marketNewsList');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="col-span-full p-6 rounded-xl glass-subcard border border-rose-500/20 text-center space-y-2">
+      <div class="text-xs text-rose-300 font-semibold">⚠️ Gagal Memuat Arus Berita Bursa</div>
+      <p class="text-[10px] text-slate-400">${escHtml(errorMsg || 'Koneksi ke feed berita pasar tertunda.')}</p>
+      <button onclick="loadMarketNews(true)" class="px-3.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold transition cursor-pointer">
+        🔄 Coba Lagi
+      </button>
+    </div>
+  `;
+}
+
+function renderTrackerError(errorMsg) {
+  const tbody = document.getElementById('trackerTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="7" class="py-10 text-center space-y-2.5">
+        <div class="text-rose-400 font-bold text-xs">⚠️ Gagal Memuat Data Uji Sinyal</div>
+        <p class="text-[10px] text-slate-400">${escHtml(errorMsg || 'Koneksi database tracker terputus.')}</p>
+        <button onclick="loadTracker()" class="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition cursor-pointer">
+          🔄 Muat Ulang
+        </button>
+      </td>
+    </tr>
+  `;
+}
+
+function renderPortfolioError(errorMsg) {
+  const tbody = document.getElementById('portfolioTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="7" class="py-10 text-center space-y-2.5">
+        <div class="text-rose-400 font-bold text-xs">⚠️ Gagal Memuat Catatan Jurnal Portofolio</div>
+        <p class="text-[10px] text-slate-400">${escHtml(errorMsg || 'Koneksi database portofolio terputus.')}</p>
+        <button onclick="loadPortfolio()" class="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition cursor-pointer">
+          🔄 Muat Ulang
+        </button>
+      </td>
+    </tr>
+  `;
 }
 
 async function loadMarketNews(forceRefresh = false) {
@@ -775,11 +935,7 @@ async function loadMarketNews(forceRefresh = false) {
     renderMarketNewsFeed(cachedNewsItems);
   } catch (err) {
     if (listEl && (!cachedNewsItems || cachedNewsItems.length === 0)) {
-      listEl.innerHTML = `
-        <div class="p-6 rounded-xl glass-subcard text-center text-slate-400 text-xs col-span-full">
-          Tidak dapat memuat feed berita saat ini. Silakan klik tombol Perbarui.
-        </div>
-      `;
+      renderNewsError(err.message);
     }
   } finally {
     isNewsLoading = false;
@@ -1025,8 +1181,9 @@ function runModalLotCalculation() {
   const actualRiskRp = Math.round(lots * perShareRisk * 100);
   const actualRiskPct = capital > 0 ? ((actualRiskRp / capital) * 100).toFixed(1) : '0.0';
 
-  // Estimasi Target Profit TP1 (+6% dari harga entry) setelah dikurangi fee sekuritas roundtrip 0.4%
-  const tp1Price = Math.round(entry * 1.06);
+  // Estimasi Target Profit TP1 (Target Baku R:R 1 : 2.0 terhadap risiko per lembar) setelah dikurangi fee sekuritas
+  const riskPerShare = Math.max(1, entry - stop);
+  const tp1Price = selectedStockDetail?.trading_plan?.target_1 || Math.round(entry + (APP_TRADING_RULES.DEFAULT_RR * riskPerShare));
   const grossProfit = lots * (tp1Price - entry) * 100;
   const totalFee = (grossCost * feeBuyPct) + (lots * tp1Price * 100 * feeSellPct);
   const netProfit = Math.max(0, Math.round(grossProfit - totalFee));
@@ -1035,7 +1192,7 @@ function runModalLotCalculation() {
   if (lotEl) lotEl.textContent = `${fmtNumber(lots)} Lot (Maks. 20% Modal)`;
   if (valEl) valEl.textContent = fmtPrice(totalCost);
   if (riskEl) riskEl.textContent = `${fmtPrice(actualRiskRp)} (${actualRiskPct}% modal)`;
-  if (profitEl) profitEl.textContent = `${fmtPrice(netProfit)} (+${netProfitPct}% net)`;
+  if (profitEl) profitEl.textContent = `${fmtPrice(netProfit)} (+${netProfitPct}% net, R:R 1 : ${APP_TRADING_RULES.DEFAULT_RR.toFixed(1)})`;
 }
 
 // =====================================================================
@@ -1319,6 +1476,10 @@ async function loadScreenerData(preserveSelection = false) {
     }
   } catch (err) {
     showToast(`Error: ${err.message}`, 'error');
+    if (!currentStocks || currentStocks.length === 0) {
+      renderTableError(err.message);
+      renderCandidatesError(err.message);
+    }
   }
 }
 
@@ -2733,10 +2894,10 @@ const pctClass = (v) => (v === null || v === undefined ? 'text-slate-400' : v >=
 async function loadTracker() {
   try {
     const [statsRes, sigRes] = await Promise.all([
-      fetch(`/api/tracker/stats?_t=${Date.now()}`, { cache: 'no-store' }),
-      fetch(`/api/tracker/signals?status=${encodeURIComponent(trackerTab)}&sort_by=${encodeURIComponent(trackerSortBy)}&_t=${Date.now()}`, { cache: 'no-store' }),
+      fetchWithTimeout(`/api/tracker/stats?_t=${Date.now()}`, { cache: 'no-store' }, 9000),
+      fetchWithTimeout(`/api/tracker/signals?status=${encodeURIComponent(trackerTab)}&sort_by=${encodeURIComponent(trackerSortBy)}&_t=${Date.now()}`, { cache: 'no-store' }, 9000),
     ]);
-    if (!statsRes.ok || !sigRes.ok) return;
+    if (!statsRes.ok || !sigRes.ok) throw new Error('Gagal memuat data pantauan sinyal');
     const statsData = await statsRes.json();
     const sigData = await sigRes.json();
     currentTrackerSignals = sigData.signals || [];
@@ -2744,6 +2905,9 @@ async function loadTracker() {
     filterAndRenderTracker();
   } catch (err) {
     console.warn('Tracker error:', err);
+    if (!currentTrackerSignals || currentTrackerSignals.length === 0) {
+      renderTrackerError(err.message);
+    }
   }
 }
 
@@ -3200,13 +3364,17 @@ async function loadIhsgTodayChart(period = '3mo') {
       }
     });
 
-    const res = await fetch(`/api/ihsg/candles?period=${encodeURIComponent(period)}&_t=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) return;
+    const res = await fetchWithTimeout(`/api/ihsg/candles?period=${encodeURIComponent(period)}&_t=${Date.now()}`, { cache: 'no-store' }, 9000);
+    if (!res.ok) throw new Error('Gagal memuat grafik candle IHSG');
     const data = await res.json();
     lastIhsgChartData = data;
     renderIhsgTodayChart(data);
   } catch (err) {
     console.warn('[IHSGChart] Gagal memuat grafik IHSG:', err);
+    const subStats = document.getElementById('ihsgSubStats');
+    if (subStats) {
+      subStats.innerHTML = `<span class="text-rose-400 font-medium">Gagal memuat grafik IHSG. <button onclick="loadIhsgTodayChart('${period}')" class="underline hover:text-white ml-1 font-bold cursor-pointer">Coba Lagi</button></span>`;
+    }
   }
 }
 
@@ -3470,7 +3638,7 @@ let portfolioTrades = [];
 async function loadPortfolio(status = currentPortfolioStatus) {
   currentPortfolioStatus = status;
   try {
-    const res = await fetch(`/api/portfolio?status=${encodeURIComponent(status)}&_t=${Date.now()}`);
+    const res = await fetchWithTimeout(`/api/portfolio?status=${encodeURIComponent(status)}&_t=${Date.now()}`, { cache: 'no-store' }, 9000);
     if (!res.ok) throw new Error('Gagal mengambil data portofolio riil');
     const data = await res.json();
 
@@ -3519,7 +3687,117 @@ async function loadPortfolio(status = currentPortfolioStatus) {
     renderPortfolioTable(portfolioTrades);
   } catch (err) {
     console.warn('[Portfolio] Error:', err);
+    if (!portfolioTrades || portfolioTrades.length === 0) {
+      renderPortfolioError(err.message);
+    }
   }
+}
+
+// =====================================================================
+// EKSPOR & IMPOR JURNAL PORTOFOLIO RIIL (TEMUAN K7)
+// =====================================================================
+function exportPortfolioData() {
+  if (!portfolioTrades || portfolioTrades.length === 0) {
+    showToast('Jurnal portofolio masih kosong. Belum ada transaksi yang dicatat.', 'info');
+    return;
+  }
+  const headers = ['id', 'ticker', 'entry_date', 'entry_price', 'lots', 'stop_loss', 'target_1', 'target_2', 'status', 'exit_price', 'exit_date', 'pnl_pct', 'pnl_idr', 'notes'];
+  const rows = portfolioTrades.map(t => [
+    t.id || '',
+    t.ticker || '',
+    t.entry_date || '',
+    t.entry_price || '',
+    t.lots || '',
+    t.stop_loss || '',
+    t.target_1 || '',
+    t.target_2 || '',
+    t.status || '',
+    t.exit_price || '',
+    t.exit_date || '',
+    t.pnl_pct || '',
+    t.pnl_idr || '',
+    `"${String(t.notes || '').replace(/"/g, '""')}"`
+  ].join(','));
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  a.href = url;
+  a.download = `smartflow_jurnal_${dStr}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`Cadangan ${portfolioTrades.length} transaksi jurnal berhasil diunduh!`, 'success');
+}
+
+async function importPortfolioData(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (evt) => {
+    try {
+      const content = evt.target.result;
+      let tradesToImport = [];
+      if (file.name.endsWith('.json')) {
+        const parsed = JSON.parse(content);
+        tradesToImport = Array.isArray(parsed) ? parsed : (parsed.trades || []);
+      } else {
+        const lines = content.split(/\r?\n/).filter(Boolean);
+        if (lines.length > 1) {
+          const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+          const getCol = (cols, name, altIdx) => {
+            const idx = headers.indexOf(name);
+            return (idx >= 0 && cols[idx] !== undefined) ? cols[idx].trim() : (cols[altIdx] ? cols[altIdx].trim() : '');
+          };
+          for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',');
+            if (cols.length >= 3) {
+              const ticker = getCol(cols, 'ticker', 1).toUpperCase();
+              const entry_price = parseFloat(getCol(cols, 'entry_price', 3)) || 0;
+              const lots = parseInt(getCol(cols, 'lots', 4)) || 1;
+              if (ticker && entry_price > 0) {
+                tradesToImport.push({
+                  ticker,
+                  entry_date: getCol(cols, 'entry_date', 2) || new Date().toISOString().slice(0, 10),
+                  entry_price,
+                  lots,
+                  stop_loss: parseFloat(getCol(cols, 'stop_loss', 5)) || undefined,
+                  target_1: parseFloat(getCol(cols, 'target_1', 6)) || undefined,
+                  target_2: parseFloat(getCol(cols, 'target_2', 7)) || undefined,
+                  notes: getCol(cols, 'notes', 13) || 'Impor Cadangan'
+                });
+              }
+            }
+          }
+        }
+      }
+
+      if (!tradesToImport.length) throw new Error('Tidak ditemukan baris transaksi yang valid.');
+
+      let importedCount = 0;
+      for (const t of tradesToImport) {
+        try {
+          const res = await fetch('/api/portfolio/buy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(t)
+          });
+          if (res.ok) importedCount++;
+        } catch (err) {
+          console.warn('Import item error:', t.ticker, err);
+        }
+      }
+      await loadPortfolio();
+      showToast(`Berhasil memulihkan ${importedCount} transaksi ke portofolio!`, 'success');
+    } catch (err) {
+      showToast(`Gagal mengimpor file jurnal: ${err.message}`, 'error');
+    } finally {
+      e.target.value = '';
+    }
+  };
+  reader.readAsText(file);
 }
 
 function setPortfolioTab(status) {
