@@ -353,9 +353,15 @@ def run_stage2_broker_enrichment(
                 s["trigger_label"] = "Distribusi (Ritel Trap)"
 
             if metrics.get("bandar_avg") and s.get("trading_plan"):
-                orig_entry = s["trading_plan"].get("entry_high", s.get("close", 0))
                 s["trading_plan"]["bandar_avg_buy"] = metrics["bandar_avg"]
-                s["trading_plan"]["entry_high"] = min(orig_entry, metrics["bandar_avg"])
+                b_avg = float(metrics["bandar_avg"])
+                c_val = float(s.get("close") or 0)
+                if 0 < c_val * 0.915 <= b_avg < c_val * 0.992:
+                    rev_ep = int(round(b_avg))
+                    s["trading_plan"]["entry_price"] = rev_ep
+                    s["trading_plan"]["entry_low"] = rev_ep
+                    s["trading_plan"]["entry_high"] = rev_ep
+                    s["trading_plan"]["support_label"] = "Support Avg Bandar"
 
             # Sinkronisasi ke details_map
             if details_map and ticker in details_map:
@@ -379,7 +385,9 @@ def run_stage2_broker_enrichment(
                     detail["trigger_label"] = "Distribusi (Ritel Trap)"
                 if metrics.get("bandar_avg") and detail.get("trading_plan"):
                     detail["trading_plan"]["bandar_avg_buy"] = metrics["bandar_avg"]
-                    detail["trading_plan"]["entry_high"] = min(detail["trading_plan"].get("entry_high", detail.get("close", 0)), metrics["bandar_avg"])
+                    detail["trading_plan"]["entry_price"] = s["trading_plan"]["entry_price"]
+                    detail["trading_plan"]["entry_low"] = s["trading_plan"]["entry_low"]
+                    detail["trading_plan"]["entry_high"] = s["trading_plan"]["entry_high"]
         else:
             s["has_broker_summary"] = False
 
@@ -446,8 +454,14 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
             s["trigger_label"] = "Distribusi (Ritel Trap)"
 
         if metrics.get("bandar_avg") and s.get("trading_plan"):
-            orig_entry = s["trading_plan"].get("entry_high", s.get("close", 0))
             s["trading_plan"]["bandar_avg_buy"] = metrics["bandar_avg"]
-            s["trading_plan"]["entry_high"] = min(orig_entry, metrics["bandar_avg"])
+            b_avg = float(metrics["bandar_avg"])
+            c_val = float(s.get("close") or 0)
+            if 0 < c_val * 0.915 <= b_avg < c_val * 0.992:
+                rev_ep = int(round(b_avg))
+                s["trading_plan"]["entry_price"] = rev_ep
+                s["trading_plan"]["entry_low"] = rev_ep
+                s["trading_plan"]["entry_high"] = rev_ep
+                s["trading_plan"]["support_label"] = "Support Avg Bandar"
 
     return s

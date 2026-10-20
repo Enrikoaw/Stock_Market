@@ -1107,6 +1107,154 @@ def _tight_entry_zone(ref_high: float, width_pct: float = 0.01) -> tuple[int, in
     return e_low, e_high
 
 
+def compute_support_entry_plan(
+    close_price: float,
+    open_price: float = 0.0,
+    low_price: float = 0.0,
+    prev_close: float = 0.0,
+    pct_change: float = 0.0,
+    vwap_5d: float = 0.0,
+    ma5: float = 0.0,
+    ma10: float = 0.0,
+    ma20: float = 0.0,
+    prev_high_5d: float = 0.0,
+    atr14_val: float = 0.0,
+) -> dict[str, Any]:
+    """
+    Menghitung Harga Entry (Buy on Support / Pullback), Stop Loss, dan Target Profit (TP1 dan TP2).
+    Sesuai prinsip swing trading disiplin: entrian HARUS berada di support terdekat alias
+    menunggu pullback baru entry (tidak mengejar harga pucuk / Last Price).
+    Daftar Support Teknis: VWAP 5H, MA5, Retest Breakout, MA10, MA20, Open/Prev Close,
+    Retracement 50% Candle, atau Low Intraday.
+    """
+    c_p = max(50.0, float(close_price or 50.0))
+    o_p = float(open_price) if open_price and open_price > 0 else c_p
+    l_p = float(low_price) if low_price and low_price > 0 else c_p
+    prev_c = float(prev_close) if prev_close and prev_close > 0 else o_p
+    vwap = float(vwap_5d) if vwap_5d and vwap_5d > 0 else c_p
+    m5 = float(ma5) if ma5 and ma5 > 0 else vwap
+    m10 = float(ma10) if ma10 and ma10 > 0 else m5
+    m20 = float(ma20) if ma20 and ma20 > 0 else vwap
+    ph5 = float(prev_high_5d) if prev_high_5d and prev_high_5d > 0 else o_p
+    atr = max(1.0, float(atr14_val) if atr14_val and atr14_val > 0 else c_p * 0.03)
+
+    close_tick = _round_idx_tick(c_p)
+    step = 1 if close_tick < 200 else 2 if close_tick < 500 else 5 if close_tick < 2000 else 10 if close_tick < 5000 else 25
+
+    diff_vwap_pct = ((c_p - vwap) / max(vwap, 1.0)) * 100.0
+    diff_ma5_pct = ((c_p - m5) / max(m5, 1.0)) * 100.0
+    intraday_gain_pct = ((c_p - o_p) / max(o_p, 1.0)) * 100.0
+
+    is_surged = (
+        (pct_change >= 1.5)
+        or (diff_vwap_pct >= 1.5)
+        or (diff_ma5_pct >= 1.8)
+        or (intraday_gain_pct >= 1.5)
+    )
+
+    primary_supports: list[tuple[str, float]] = [
+        ("Support VWAP 5H", vwap),
+        ("Support MA5", m5),
+        ("Support MA10", m10),
+        ("Support MA20", m20),
+        ("Support Open Candle", o_p),
+        ("Support Prev Close", prev_c),
+    ]
+    if 0 < ph5 < c_p and ph5 >= prev_c * 0.96:
+        primary_supports.append(("Support Retest Breakout", ph5))
+
+    secondary_supports: list[tuple[str, float]] = [
+        ("Support Retracement 50%", 0.5 * (min(o_p, prev_c) + c_p)),
+        ("Support Mid-Candle", 0.5 * (l_p + c_p)),
+        ("Support Low Hari Ini", l_p),
+    ]
+
+    all_supports = primary_supports + secondary_supports
+
+    if is_surged:
+        if pct_change >= 7.0 or diff_vwap_pct >= 6.0:
+            min_pb, max_pb = 0.030, 0.090
+        elif pct_change >= 4.0 or diff_vwap_pct >= 3.5:
+            min_pb, max_pb = 0.022, 0.075
+        elif pct_change >= 2.0 or diff_vwap_pct >= 2.0:
+            min_pb, max_pb = 0.015, 0.060
+        else:
+            min_pb, max_pb = 0.012, 0.050
+
+        ceil_p = c_p * (1.0 - min_pb)
+        floor_p = c_p * (1.0 - max_pb)
+
+        valid_pri = [(n, v) for n, v in primary_supports if floor_p <= v <= ceil_p]
+        if valid_pri:
+            best_name, best_val = max(valid_pri, key=lambda x: x[1])
+        else:
+            valid_sec = [(n, v) for n, v in secondary_supports if floor_p <= v <= ceil_p]
+            if valid_sec:
+                best_name, best_val = max(valid_sec, key=lambda x: x[1])
+            else:
+                below = [(n, v) for n, v in all_supports if 0 < v <= ceil_p]
+                if below:
+                    best_name, best_val = max(below, key=lambda x: x[1])
+                    best_val = max(best_val, floor_p)
+                else:
+                    best_name, best_val = ("Support Pullback Terdekat", ceil_p)
+    else:
+        ceil_p = c_p * 0.995
+        floor_p = c_p * 0.950
+        valid_pri = [(n, v) for n, v in primary_supports if floor_p <= v <= ceil_p]
+        if valid_pri:
+            best_name, best_val = max(valid_pri, key=lambda x: x[1])
+        else:
+            valid_sec = [(n, v) for n, v in secondary_supports if floor_p <= v <= ceil_p]
+            if valid_sec:
+                best_name, best_val = max(valid_sec, key=lambda x: x[1])
+            else:
+                below = [(n, v) for n, v in all_supports if 0 < v < c_p]
+                if below:
+                    best_name, best_val = max(below, key=lambda x: x[1])
+                else:
+                    best_name, best_val = ("Support Intraday", max(l_p, c_p - step))
+
+    entry_price = _round_idx_tick(best_val)
+    # Wajib nunggu pullback: harga entry tidak boleh menyamai atau melebihi harga close
+    if entry_price >= close_tick:
+        entry_price = max(50, close_tick - step * (2 if is_surged else 1))
+
+    entry_low = entry_price
+    entry_high = entry_price
+
+    sl_distance = max(int(round(entry_price * 0.040)), min(int(round(entry_price * 0.050)), int(round(1.5 * atr))))
+    stop_loss = _round_idx_tick(entry_price - sl_distance)
+    risk_idr = max(1, entry_price - stop_loss)
+    risk_pct = round((risk_idr / max(entry_price, 1)) * 100.0, 2)
+
+    tp1 = _round_idx_tick(entry_price * 1.06)
+    tp2 = _round_idx_tick(entry_price * 1.10)
+    if tp2 <= tp1:
+        tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
+    tp1_pct = round(((tp1 - entry_price) / max(entry_price, 1)) * 100.0, 2)
+    tp2_pct = round(((tp2 - entry_price) / max(entry_price, 1)) * 100.0, 2)
+    rr_ratio = round(tp2_pct / max(risk_pct, 0.1), 1)
+    pullback_from_close_pct = round(((entry_price - c_p) / max(c_p, 1.0)) * 100.0, 2)
+
+    return {
+        "entry_price": entry_price,
+        "entry_low": entry_low,
+        "entry_high": entry_high,
+        "stop_loss": stop_loss,
+        "risk_idr": risk_idr,
+        "risk_pct": risk_pct,
+        "tp1": tp1,
+        "tp2": tp2,
+        "tp1_pct": tp1_pct,
+        "tp2_pct": tp2_pct,
+        "rr_ratio": rr_ratio,
+        "support_label": best_name,
+        "is_surged": is_surged,
+        "pullback_from_close_pct": pullback_from_close_pct,
+    }
+
+
 def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     """
     Mesin Analisis Kuantitatif Ter-Vektorisasi Lengkap SmartFlow IDX (v4.0).
@@ -1146,8 +1294,15 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     if is_multi_day:
         df["Vol_MA20"] = df.groupby("Ticker")["Volume_Lot"].transform(lambda s: s.rolling(20, min_periods=1).mean())
         df["Volume_Ratio"] = (df["Volume_Lot"] / np.maximum(df["Vol_MA20"], 1.0)).round(2)
+        df["MA5"] = df.groupby("Ticker")["Close"].transform(lambda s: s.rolling(5, min_periods=1).mean())
+        df["MA10"] = df.groupby("Ticker")["Close"].transform(lambda s: s.rolling(10, min_periods=1).mean())
         df["MA20"] = df.groupby("Ticker")["Close"].transform(lambda s: s.rolling(20, min_periods=1).mean())
         df["MA50"] = df.groupby("Ticker")["Close"].transform(lambda s: s.rolling(50, min_periods=1).mean())
+        df["Prev_High_5D"] = (
+            df.groupby("Ticker")["High"]
+            .transform(lambda s: s.shift(1).rolling(5, min_periods=1).max())
+            .fillna(df["Open"])
+        )
         df["High_10D"] = (
             df.groupby("Ticker")["High"]
             .transform(lambda s: s.shift(1).rolling(10, min_periods=1).max())
@@ -1164,8 +1319,11 @@ def compute_quantitative_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
         )
         df["Vol_MA20"] = (df["Volume_Lot"] / np.maximum(est_vol_ratio, 0.1)).round()
         df["Volume_Ratio"] = est_vol_ratio.round(2)
+        df["MA5"] = df["Prev_Close"]
+        df["MA10"] = df["Prev_Close"]
         df["MA20"] = df["Prev_Close"]
         df["MA50"] = df["Prev_Close"]
+        df["Prev_High_5D"] = df["Open"]
         df["High_10D"] = df["High"]
         df["Low_10D"] = df["Low"]
         est_ticket_ratio = np.clip(df["Val_Per_Tx"] / median_val_per_tx, 0.4, 3.8)
@@ -1573,28 +1731,41 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             },
         ]
 
-        # Parameter 4: Titik Masuk (Entry) di Area Retest / Pullback / VWAP (Buy on Weakness, bukan Hajar Kanan di Pucuk)
-        if (pct_change > 2.0 or diff_vwap_pct > 1.5) and vwap_5d > 0 and vwap_5d < close_price:
-            retest_anchor = int(round(max(float(vwap_5d), close_price * 0.985, (close_price + vwap_5d) * 0.5)))
-            entry_price = _round_idx_tick(min(close_price, retest_anchor))
-        else:
-            entry_price = _round_idx_tick(close_price)
-        entry_low = entry_price
-        entry_high = entry_price
+        # Parameter 4: Titik Masuk (Entry) di Support Terdekat (Jika harga sudah terbang, revisi entry ke Support Terdekat)
+        open_price_val = float(latest["Open"]) if "Open" in latest else float(close_price)
+        low_price_val = float(latest["Low"]) if "Low" in latest else float(close_price)
+        prev_close_val = float(latest["Prev_Close"]) if "Prev_Close" in latest else open_price_val
+        ma5_val = float(latest["MA5"]) if "MA5" in latest else float(vwap_5d)
+        ma10_val = float(latest["MA10"]) if "MA10" in latest else ma5_val
+        prev_high_5d_val = float(latest["Prev_High_5D"]) if "Prev_High_5D" in latest else open_price_val
 
-        # Parameter 2 & 3: Stop Loss Proporsional -4.0% s/d -5.0% (Closing Basis) & Target Profit RRR 1:2 (TP1 +6%, TP2 +10%)
-        sl_distance = max(int(round(entry_price * 0.040)), min(int(round(entry_price * 0.050)), int(round(1.5 * atr14_val))))
-        stop_loss = _round_idx_tick(entry_price - sl_distance)
-        risk_idr = max(1, entry_price - stop_loss)
-        risk_pct = round((risk_idr / max(entry_price, 1)) * 100.0, 2)
-
-        tp1 = _round_idx_tick(entry_price * 1.06)
-        tp2 = _round_idx_tick(entry_price * 1.10)
-        if tp2 <= tp1:
-            tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
-        tp1_pct = round(((tp1 - entry_price) / max(entry_price, 1)) * 100.0, 2)
-        tp2_pct = round(((tp2 - entry_price) / max(entry_price, 1)) * 100.0, 2)
-        rr_ratio = round(tp2_pct / max(risk_pct, 0.1), 1)
+        ep_plan = compute_support_entry_plan(
+            close_price=close_price,
+            open_price=open_price_val,
+            low_price=low_price_val,
+            prev_close=prev_close_val,
+            pct_change=pct_change,
+            vwap_5d=vwap_5d,
+            ma5=ma5_val,
+            ma10=ma10_val,
+            ma20=ma20,
+            prev_high_5d=prev_high_5d_val,
+            atr14_val=atr14_val,
+        )
+        entry_price = ep_plan["entry_price"]
+        entry_low = ep_plan["entry_low"]
+        entry_high = ep_plan["entry_high"]
+        stop_loss = ep_plan["stop_loss"]
+        risk_idr = ep_plan["risk_idr"]
+        risk_pct = ep_plan["risk_pct"]
+        tp1 = ep_plan["tp1"]
+        tp2 = ep_plan["tp2"]
+        tp1_pct = ep_plan["tp1_pct"]
+        tp2_pct = ep_plan["tp2_pct"]
+        rr_ratio = ep_plan["rr_ratio"]
+        support_label = ep_plan["support_label"]
+        is_surged = ep_plan["is_surged"]
+        pullback_from_close_pct = ep_plan["pullback_from_close_pct"]
 
         if trigger_type == "DISTRIBUTION_WARNING":
             action_bias = "AVOID / SELL ON STRENGTH"
@@ -1654,11 +1825,21 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
             f"Strategi: Begitu TP1 tercapai, geser Stop Loss sisa lot ke Rp {entry_high:,} (BEP/Modal) untuk mengunci cuan bebas risiko."
         )
 
+        if is_surged and trigger_type != "DISTRIBUTION_WARNING":
+            rationale = (
+                f"Harga telah naik ({pct_change:+.2f}%), entry direvisi ke {support_label} di Rp {entry_price:,} "
+                f"({pullback_from_close_pct:+.1f}% dari Last Rp {close_price:,}). "
+                + rationale
+            )
+
         trading_plan = {
             "action_bias": action_bias,
             "entry_price": entry_price,
             "entry_low": entry_low,
             "entry_high": entry_high,
+            "support_label": support_label,
+            "is_surged": is_surged,
+            "pullback_from_close_pct": pullback_from_close_pct,
             "stop_loss": stop_loss,
             "stop_loss_pct": -risk_pct,
             "target_1": tp1,
@@ -1865,29 +2046,32 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
     is_rebound_confirmed = (not is_market_crash) and ihsg_above_ma50 and (breadth_ma20 >= 42.0) and (avg_market_pct >= 0.5)
 
     if is_market_crash:
-        regime_status = "CRASH_LOCKED"
-        regime_label = "Pasar Bearish / IHSG < MA50 (Watchlist Dibekukan)"
-        regime_color = "rose"
-        regime_alloc = "Cash 100% / Dilarang Entry Baru (IHSG < MA50)"
-        allow_watchlist = False
+        regime_status = "DEFENSIVE_PULLBACK"
+        regime_label = "Pasar Defensif / IHSG Tertekan"
+        regime_color = "amber"
+        regime_alloc = "Sinyal Selektif (Tunggu Pullback Support)"
+        allow_watchlist = True
         regime_note = (
-            f"Hard Macro Gate Aktif: IHSG di bawah MA50 / Breadth MA20 {breadth_ma20:.1f}% (MA50 {breadth_ma50:.1f}%). "
-            "Seluruh sinyal beli baru dikunci (Cash 100%) demi mengamankan modal."
+            f"IHSG sedang tertekan / terkoreksi (Breadth MA20 {breadth_ma20:.1f}%, MA50 {breadth_ma50:.1f}%). "
+            "Sinyal akumulasi terbaik tetap dicatat di Watchlist dengan disiplin antre di Support Terdekat."
         )
     elif (not ihsg_above_ma50) or (not is_rebound_confirmed and breadth_ma20 < 45.0):
         regime_status = "WAITING_REBOUND"
-        regime_label = "Menunggu IHSG > MA50 & Konfirmasi Rebound"
+        regime_label = "Pasar Konsolidasi / Menunggu Rebound"
         regime_color = "amber"
-        regime_alloc = "Cash 100% (Wait & See — Menunggu IHSG > MA50)"
-        allow_watchlist = False
-        regime_note = "Pasar belum melewati batas aman makro (IHSG > MA50 & Breadth >= 45%). Menghindari jebakan Dead Cat Bounce."
+        regime_alloc = "Sinyal Selektif (Tunggu Pullback Support)"
+        allow_watchlist = True
+        regime_note = (
+            f"Pasar konsolidasi (Breadth MA20 {breadth_ma20:.1f}%). "
+            "Sinyal akumulasi tetap dicatat di Watchlist dengan disiplin antre di Support Terdekat."
+        )
     else:
         regime_status = "NORMAL_ACTIVE"
         regime_label = "Pasar Kondusif (IHSG > MA50 Terkonfirmasi)"
         regime_color = "emerald"
         regime_alloc = "Alokasi Modal Normal Terukur (RRR 1:2)"
         allow_watchlist = True
-        regime_note = f"Hard Macro Gate Lolos (IHSG > MA50, Breadth {breadth_ma20:.1f}% > MA20). Sinyal akumulasi diizinkan muncul."
+        regime_note = f"Kondisi pasar kondusif (IHSG > MA50, Breadth {breadth_ma20:.1f}% > MA20). Sinyal akumulasi aktif."
 
     market_regime = {
         "status": regime_status,
@@ -1934,3 +2118,109 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         "stocks": stocks_result,
         "details": stocks_detail_map,
     }
+
+
+def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 6) -> list[dict[str, Any]]:
+    """
+    Menyaring dan memilih saham terbaik untuk menu 'Pilihan Saham Hari Ini'.
+    Strategi Swing Trading: Buy on Pullback / Koreksi Sehat + Akumulasi Broker Nyata.
+    Sesuai prinsip swing: cari saham saat koreksi sehat / harga diskon di area support/modal bandar,
+    bukan saat hijau terbang tinggi (breakout chase).
+    """
+    if not stocks:
+        return []
+
+    # 1. Kriteria Primer: Koreksi Sehat & Akumulasi Broker Kuat di Dekat Modal Bandar
+    primary_list = []
+    for s in stocks:
+        c = float(s.get("close") or 0)
+        val_b = float(s.get("value_b_idr") or (float(s.get("value_idr") or 0) / 1e9))
+        sec = str(s.get("sector") or "").lower()
+        if c < 70 or val_b < 1.0:
+            continue
+        if "pemantauan khusus" in sec or "akselerasi" in sec:
+            continue
+        fs = s.get("fundamental_safety")
+        if isinstance(fs, dict) and fs.get("is_safe") is False:
+            continue
+        tq = s.get("tape_quality")
+        if isinstance(tq, dict) and tq.get("is_organic") is False:
+            continue
+        if s.get("trigger_type") == "DISTRIBUTION_WARNING" or s.get("retail_trap"):
+            continue
+        if s.get("tracker_status") in ("WIN", "LOSS"):
+            continue
+
+        pct = float(s.get("pct_change") or 0)
+        vr = float(s.get("vol_ratio") or 1.0)
+        diff_bdr = float(s.get("diff_bandar_avg_pct") or 0)
+        bdr = float(s.get("bdr_pct") or 0)
+        top3_bsr = float(s.get("top3_bsr") or 0)
+
+        # Koreksi Sehat (-3.5% s/d +2.0%), Volume Kering (<= 1.40x), Dekat Modal Bandar (-3.0% s/d +2.5%)
+        is_pullback = (-3.5 <= pct <= 2.0) and (vr <= 1.40) and (-3.0 <= diff_bdr <= 2.5)
+        has_accum = (bdr >= 5.0) or (top3_bsr >= 1.15) or (int(s.get("smart_money_score") or 0) >= 70)
+
+        if is_pullback and has_accum:
+            primary_list.append(s)
+
+    # Sort primary candidates by BDR desc, score desc
+    primary_list.sort(
+        key=lambda x: (
+            float(x.get("bdr_pct") or 0),
+            int(x.get("smart_money_score") or 0),
+            -abs(float(x.get("diff_bandar_avg_pct") or 0)),
+        ),
+        reverse=True,
+    )
+
+    # Batasan Korelasi Sektor: Maksimal 1 saham per kategori sektor
+    chosen: list[dict[str, Any]] = []
+    seen_sectors = set()
+    for s in primary_list:
+        sec_cat = str(s.get("sector_category") or s.get("sector") or "General")
+        if sec_cat not in seen_sectors:
+            seen_sectors.add(sec_cat)
+            chosen.append(s)
+        if len(chosen) >= max_picks:
+            break
+
+    # Fallback 1: Jika kandidat kurang dari 3, ambil dari saham akumulasi tertinggi yang aman
+    if len(chosen) < 3:
+        fallback_list = [
+            s for s in stocks
+            if float(s.get("close") or 0) >= 70
+            and float(s.get("value_b_idr") or (float(s.get("value_idr") or 0) / 1e9)) >= 1.0
+            and not ("pemantauan khusus" in str(s.get("sector") or "").lower() or "akselerasi" in str(s.get("sector") or "").lower())
+            and (s.get("fundamental_safety", {}).get("is_safe", True) if isinstance(s.get("fundamental_safety"), dict) else True)
+            and (s.get("tape_quality", {}).get("is_organic", True) if isinstance(s.get("tape_quality"), dict) else True)
+            and s.get("trigger_type") != "DISTRIBUTION_WARNING"
+            and not s.get("retail_trap")
+            and s.get("tracker_status") not in ("WIN", "LOSS")
+        ]
+        fallback_list.sort(
+            key=lambda x: (
+                float(x.get("bdr_pct") or 0),
+                int(x.get("smart_money_score") or 0),
+            ),
+            reverse=True,
+        )
+        for s in fallback_list:
+            if any(c["ticker"] == s["ticker"] for c in chosen):
+                continue
+            sec_cat = str(s.get("sector_category") or s.get("sector") or "General")
+            if sec_cat not in seen_sectors:
+                seen_sectors.add(sec_cat)
+                chosen.append(s)
+            if len(chosen) >= max_picks:
+                break
+
+    # Fallback 2: Jaminan minimal 3 saham jika data sangat terbatas
+    if len(chosen) < 3:
+        for s in stocks:
+            if float(s.get("close") or 0) >= 70 and not any(c["ticker"] == s["ticker"] for c in chosen):
+                chosen.append(s)
+            if len(chosen) >= 3:
+                break
+
+    return chosen

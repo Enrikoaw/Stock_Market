@@ -103,14 +103,7 @@ def run_historical_backtest(
         if sub_latest.empty:
             continue
 
-        # Parameter 1: Filter Pasar Makro Keras (Hard Macro Gate: IHSG > MA50 & Breadth Sehat)
-        # Jika pasar sedang bearish / crash pada date_str, tahan seluruh sinyal beli baru (Cash 100%)
-        breadth_ma50 = float((sub_latest["Close"] >= sub_latest["MA50"]).mean() * 100.0) if "MA50" in sub_latest.columns else 50.0
-        breadth_ma20 = float((sub_latest["Close"] >= sub_latest["MA20"]).mean() * 100.0) if "MA20" in sub_latest.columns else 50.0
-        median_pct = float(sub_latest["Pct_Change"].median()) if "Pct_Change" in sub_latest.columns else 0.0
-        ihsg_ok = ihsg_uptrend_map.get(str(date_str), breadth_ma50 >= 40.0)
-        if len(sub_latest) >= 30 and ((not ihsg_ok and breadth_ma50 < 42.0) or breadth_ma20 < 35.0 or median_pct <= -1.5):
-            continue
+        # Evaluasi Sinyal Akumulasi (Sistem tanpa pembekuan IHSG, tetap selektif berbasis support terdekat)
 
         # 6 Filter Kuantitatif Wajib SmartFlow IDX:
         score_col = "Daily_SM_Score" if "Daily_SM_Score" in sub_latest.columns else "Smart_Money_Score"
@@ -144,22 +137,26 @@ def run_historical_backtest(
             pct_chg = float(cand.Pct_Change) if hasattr(cand, "Pct_Change") and not np.isnan(cand.Pct_Change) else 0.0
             diff_vwap = float(cand.Diff_VWAP_Pct) if hasattr(cand, "Diff_VWAP_Pct") and not np.isnan(cand.Diff_VWAP_Pct) else 0.0
 
-            # Parameter 4: Titik Masuk (Entry) di Area Retest / Pullback / VWAP (Buy on Weakness, bukan Hajar Kanan di Pucuk)
-            if (pct_chg > 2.0 or diff_vwap > 1.5) and vwap_5d > 0 and vwap_5d < close_p:
-                retest_anchor = max(vwap_5d, close_p * 0.985, (close_p + vwap_5d) * 0.5)
-                entry_high = float(_round_idx_tick(min(close_p, retest_anchor)))
-            else:
-                entry_high = float(_round_idx_tick(close_p))
-            entry_low = entry_high
-
-            # Parameter 2 & 3: Stop Loss Proporsional -4.0% s/d -5.0% & Target Profit RRR 1:2 (TP1 +6%, TP2 +10%)
-            sl_dist = max(int(round(entry_low * 0.040)), min(int(round(entry_low * 0.050)), int(round(1.5 * atr14))))
-            stop_loss = _round_idx_tick(entry_low - sl_dist)
-            risk = max(1.0, entry_high - stop_loss)
-            tp1 = _round_idx_tick(entry_high * 1.06)
-            tp2 = _round_idx_tick(entry_high * 1.10)
-            if tp2 <= tp1:
-                tp2 = _round_idx_tick(tp1 + (2 if entry_high >= 200 else 1))
+            # Parameter 4: Titik Masuk (Entry) di Support Terdekat (Revisi ke support jika harga sudah terbang)
+            ep_plan = compute_support_entry_plan(
+                close_price=close_p,
+                open_price=float(cand.Open) if hasattr(cand, "Open") else close_p,
+                low_price=float(cand.Low) if hasattr(cand, "Low") else close_p,
+                prev_close=float(cand.Prev_Close) if hasattr(cand, "Prev_Close") else close_p,
+                pct_change=pct_chg,
+                vwap_5d=vwap_5d,
+                ma5=float(cand.MA5) if hasattr(cand, "MA5") else vwap_5d,
+                ma10=float(cand.MA10) if hasattr(cand, "MA10") else vwap_5d,
+                ma20=float(cand.MA20) if hasattr(cand, "MA20") else vwap_5d,
+                prev_high_5d=float(cand.Prev_High_5D) if hasattr(cand, "Prev_High_5D") else close_p,
+                atr14_val=atr14,
+            )
+            entry_high = float(ep_plan["entry_high"])
+            entry_low = float(ep_plan["entry_low"])
+            stop_loss = ep_plan["stop_loss"]
+            risk = float(ep_plan["risk_idr"])
+            tp1 = ep_plan["tp1"]
+            tp2 = ep_plan["tp2"]
 
             # Klasifikasikan ke bucket (Semua wajib lolos skor >= 70)
             if score >= 80:

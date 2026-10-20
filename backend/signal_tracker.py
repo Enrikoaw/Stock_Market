@@ -34,6 +34,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from sqlalchemy import (
+    UniqueConstraint,
     Column,
     Float,
     Integer,
@@ -88,6 +89,20 @@ signals_table = Table(
     Column("created_at", String(19)),
     Column("updated_at", String(19)),
 )
+today_candidates_table = Table(
+    "today_candidates",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("date", String(10), nullable=False, index=True),
+    Column("ticker", String(10), nullable=False, index=True),
+    Column("first_seen_time", String(20)),
+    Column("session_label", String(40)),
+    Column("batch_order", Integer, default=0),
+    Column("created_at", String(19)),
+    Column("updated_at", String(19)),
+    UniqueConstraint("date", "ticker", name="uq_today_cand_date_ticker"),
+)
+
 
 
 def now_wib() -> datetime:
@@ -380,32 +395,27 @@ class SignalTracker:
         return True, f"{ticker} masuk Watchlist (zona entry Rp {e_low:,.0f} - {e_high:,.0f}, SL {sl:,.0f}, TP {target:,.0f})."
 
     def cancel_pending_watchlist(self, reason: str) -> int:
-        """Membatalkan seluruh posisi gantung berstatus WATCHLIST yang belum terbeli saat pasar crash/downtrend."""
+        """Membatalkan antrean watchlist hanya jika diminta eksplisit (tidak membatalkan karena IHSG koreksi)."""
+        if "crash" in reason.lower() or "downtrend" in reason.lower():
+            # Sesuai aturan: IHSG minus/crash tidak membekukan atau membatalkan watchlist
+            return 0
         with self._lock, self.engine.begin() as conn:
             res = conn.execute(
                 update(signals_table)
                 .where(signals_table.c.status == "WATCHLIST")
                 .values(
                     status="CANCELLED",
-                    note=f"Dibatalkan otomatis: {reason}",
+                    note=f"Dibatalkan: {reason}",
                     updated_at=_now_str(),
                 )
             )
             count = res.rowcount if hasattr(res, "rowcount") and res.rowcount is not None else 0
-            if count > 0:
-                print(f"[Tracker] Membatalkan {count} antrean WATCHLIST gantung karena: {reason}")
             return count
 
     def auto_track(self, analysis: dict) -> int:
         """Catat otomatis sinyal akumulasi terbaik (score >= min_score, maks 3 sinyal/hari) dari sesi bursa yang terdeteksi.
         Saham yang masih WATCHLIST / RUNNING atau dalam masa cooldown 5 hari tidak dimasukkan ulang."""
-        market_regime = analysis.get("kpis", {}).get("market_regime", {})
-        # Jika pasar crash / downtrend belum rebound, hentikan penambahan sinyal
-        if not market_regime.get("allow_watchlist", True):
-            print("[Tracker] Auto-track dibatalkan: Pasar terkunci (Downtrend/Crash).")
-            # Otomatis batalkan semua status WATCHLIST yang belum terbeli agar terhindar dari gap down
-            self.cancel_pending_watchlist("Pasar IHSG Crash / Downtrend.")
-            return 0
+        # Sistem tanpa pembekuan IHSG: saham yang lolos kriteria tetap dicatat ke Watchlist
 
         market_date = analysis.get("kpis", {}).get("latest_date")
         active_tickers = set(self.get_active_tickers())
@@ -696,6 +706,20 @@ class SignalTracker:
                         break
 
                 r["last_close"] = float(hist[-1]["close"])
+                if r["status"] == "WATCHLIST" and isinstance(d.get("trading_plan"), dict):
+                    tp_live = d["trading_plan"]
+                    new_ep = float(tp_live.get("entry_price") or tp_live.get("entry_high") or 0)
+                    if new_ep > 0 and new_ep < r["last_close"]:
+                        r["entry_low"] = new_ep
+                        r["entry_high"] = new_ep
+                        if tp_live.get("stop_loss"):
+                            r["stop_loss"] = float(tp_live["stop_loss"])
+                        if tp_live.get("target_1"):
+                            r["target"] = float(tp_live["target_1"])
+                        if tp_live.get("target_2"):
+                            r["target_2"] = float(tp_live["target_2"])
+                        sup_lbl = tp_live.get("support_label") or "Support Terdekat"
+                        r["note"] = f"Menunggu entry di {sup_lbl} (Rp {new_ep:,.0f})."
                 if r["status"] == "RUNNING" and r.get("entry_price"):
                     r["pnl_pct"] = round((r["last_close"] - r["entry_price"]) / r["entry_price"] * 100.0, 2)
                     # Pertahankan peringatan distribusi bila terdeteksi pada analisis terbaru
@@ -1093,20 +1117,26 @@ class SignalTracker:
                         continue
                     diff_vwap = round(float(r.Diff_VWAP_Pct), 2) if hasattr(r, "Diff_VWAP_Pct") else 0.0
                     vwap_5d_val = int(round(float(r.VWAP_5D))) if hasattr(r, "VWAP_5D") and not pd.isna(r.VWAP_5D) else c_price
-                    if (pct_val > 2.0 or diff_vwap > 1.5) and vwap_5d_val > 0 and vwap_5d_val < c_price:
-                        retest_anchor = int(round(max(float(vwap_5d_val), c_price * 0.985, (c_price + vwap_5d_val) * 0.5)))
-                        entry_price = _round_idx_tick(min(c_price, retest_anchor))
-                    else:
-                        entry_price = _round_idx_tick(c_price)
-                    entry_low = entry_price
-                    entry_high = entry_price
-                    atr14_val = int(r.ATR14) if hasattr(r, "ATR14") and not pd.isna(r.ATR14) else max(1, int(round(entry_price * 0.03)))
-                    sl_dist = max(int(round(entry_price * 0.040)), min(int(round(entry_price * 0.050)), int(round(1.5 * atr14_val))))
-                    sl = _round_idx_tick(entry_price - sl_dist)
-                    tp1 = _round_idx_tick(entry_price * 1.06)
-                    tp2 = _round_idx_tick(entry_price * 1.10)
-                    if tp2 <= tp1:
-                        tp2 = _round_idx_tick(tp1 + (2 if entry_price >= 200 else 1))
+                    atr14_val = int(r.ATR14) if hasattr(r, "ATR14") and not pd.isna(r.ATR14) else max(1, int(round(c_price * 0.03)))
+                    ep_plan = compute_support_entry_plan(
+                        close_price=c_price,
+                        open_price=float(r.Open) if hasattr(r, "Open") else c_price,
+                        low_price=float(r.Low) if hasattr(r, "Low") else c_price,
+                        prev_close=float(r.Prev_Close) if hasattr(r, "Prev_Close") else c_price,
+                        pct_change=pct_val,
+                        vwap_5d=vwap_5d_val,
+                        ma5=float(r.MA5) if hasattr(r, "MA5") else vwap_5d_val,
+                        ma10=float(r.MA10) if hasattr(r, "MA10") else vwap_5d_val,
+                        ma20=float(r.MA20) if hasattr(r, "MA20") else vwap_5d_val,
+                        prev_high_5d=float(r.Prev_High_5D) if hasattr(r, "Prev_High_5D") else c_price,
+                        atr14_val=atr14_val,
+                    )
+                    entry_price = ep_plan["entry_price"]
+                    entry_low = ep_plan["entry_low"]
+                    entry_high = ep_plan["entry_high"]
+                    sl = ep_plan["stop_loss"]
+                    tp1 = ep_plan["tp1"]
+                    tp2 = ep_plan["tp2"]
 
                     val_idr = float(r.Value_IDR) if hasattr(r, "Value_IDR") else 1_000_000_000.0
                     trig_type = str(r.Trigger_Type)
@@ -1155,3 +1185,189 @@ class SignalTracker:
             if is_sqlite:
                 with self.engine.begin() as con:
                     con.exec_driver_sql("PRAGMA synchronous = NORMAL")
+
+    def get_today_candidates(self, date_str: str) -> list[dict]:
+        with self._lock, self.engine.begin() as conn:
+            today_candidates_table.create(conn, checkfirst=True)
+            rows = conn.execute(
+                select(today_candidates_table)
+                .where(today_candidates_table.c.date == date_str)
+                .order_by(today_candidates_table.c.batch_order.asc(), today_candidates_table.c.id.asc())
+            ).mappings().all()
+            return [dict(r) for r in rows]
+
+    def sync_today_candidates(
+        self,
+        date_str: str,
+        candidate_stocks: list[dict],
+        all_stocks: list[dict] | None = None,
+    ) -> list[dict]:
+        """
+        Konsistensi Menu 'Pilihan Saham Hari Ini':
+        1. Jika siang menampilkan saham A lalu ada tambahan data saham karena diperbarui,
+           saham A tetap ditampilkan tapi diberi label sesi deteksi (misal: Sesi 1 (Siang)).
+        2. Saham baru yang lolos di sesi berikutnya ditambahkan dengan label 'Pembaruan Sesi 2'.
+        3. Saham yang masuk kriteria di menu hari ini yang ditampilkan WAJIB dicatat di Watchlist.
+        4. Setiap saham entry-nya berada di Support Terdekat (menunggu pullback).
+        """
+        now = now_wib()
+        t = now.time()
+        if t < dtime(11, 30):
+            cur_session = "Sesi 1 (Pagi)"
+        elif t < dtime(13, 30):
+            cur_session = "Sesi 1 (Siang)"
+        elif t < dtime(16, 15):
+            cur_session = "Pembaruan Sesi 2"
+        else:
+            cur_session = "Sesi Penutupan (EOD)"
+
+        time_str = now.strftime("%H:%M WIB")
+        stocks_pool = {str(s.get("ticker", "")).upper(): s for s in (all_stocks or candidate_stocks)}
+
+        with self._lock, self.engine.begin() as conn:
+            today_candidates_table.create(conn, checkfirst=True)
+            existing_rows = conn.execute(
+                select(today_candidates_table)
+                .where(today_candidates_table.c.date == date_str)
+                .order_by(today_candidates_table.c.batch_order.asc(), today_candidates_table.c.id.asc())
+            ).mappings().all()
+
+            existing_map = {r["ticker"].upper(): dict(r) for r in existing_rows}
+            curr_count = len(existing_rows)
+
+            # Tambahkan emiten baru dari candidate_stocks yang belum ada di tabel hari ini
+            for idx, c in enumerate(candidate_stocks):
+                t_up = str(c.get("ticker", "")).upper()
+                if not t_up or t_up in existing_map:
+                    continue
+
+                session_lbl = cur_session
+                if curr_count > 0 and "Sesi 2" in cur_session:
+                    session_lbl = "Pembaruan Sesi 2"
+
+                conn.execute(
+                    insert(today_candidates_table).values(
+                        date=date_str,
+                        ticker=t_up,
+                        first_seen_time=time_str,
+                        session_label=session_lbl,
+                        batch_order=curr_count + idx + 1,
+                        created_at=_now_str(),
+                        updated_at=_now_str(),
+                    )
+                )
+                existing_map[t_up] = {
+                    "date": date_str,
+                    "ticker": t_up,
+                    "first_seen_time": time_str,
+                    "session_label": session_lbl,
+                    "batch_order": curr_count + idx + 1,
+                }
+
+            # Ambil seluruh emiten hari ini sesuai urutan batch
+            final_rows = conn.execute(
+                select(today_candidates_table)
+                .where(today_candidates_table.c.date == date_str)
+                .order_by(today_candidates_table.c.batch_order.asc(), today_candidates_table.c.id.asc())
+            ).mappings().all()
+
+        merged_candidates = []
+        for r in final_rows:
+            t_up = r["ticker"].upper()
+            s_data = stocks_pool.get(t_up)
+            if not s_data:
+                for cs in candidate_stocks:
+                    if str(cs.get("ticker", "")).upper() == t_up:
+                        s_data = cs
+                        break
+            if not s_data:
+                continue
+
+            item = dict(s_data)
+            item["session_label"] = r.get("session_label") or "Tercatat Siang"
+            item["first_seen_time"] = r.get("first_seen_time") or time_str
+
+            plan = item.get("trading_plan") or {}
+            support_entry = float(plan.get("entry_price") or plan.get("entry_high") or item.get("close") or 0)
+            item["entry_price"] = support_entry
+            item["support_label"] = plan.get("support_label") or "Support Terdekat"
+
+            # Wajib dicatat / disinkronkan ke Watchlist
+            self._ensure_candidate_in_watchlist(item, date_str, item["session_label"])
+            merged_candidates.append(item)
+
+        return merged_candidates
+
+    def _ensure_candidate_in_watchlist(self, stock: dict, date_str: str, session_label: str) -> None:
+        """Memastikan saham pilihan hari ini tercatat di Watchlist (signals_table)."""
+        ticker = str(stock.get("ticker", "")).upper()
+        if not ticker:
+            return
+
+        with self._lock, self.engine.begin() as conn:
+            existing = conn.execute(
+                select(signals_table).where(
+                    signals_table.c.ticker == ticker,
+                    signals_table.c.status.in_(ACTIVE_STATUSES),
+                )
+            ).mappings().first()
+
+            plan = stock.get("trading_plan") or {}
+            c_p = float(stock.get("close") or 0)
+            e_p = float(plan.get("entry_price") or plan.get("entry_high") or (c_p * 0.98))
+            sl = float(plan.get("stop_loss") or (e_p * 0.95))
+            tp1 = float(plan.get("target_1") or (e_p * 1.06))
+            tp2 = float(plan.get("target_2") or (e_p * 1.10))
+            score = int(stock.get("smart_money_score") or 70)
+            sup_lbl = str(plan.get("support_label") or "Support Terdekat")
+            trig_type = str(stock.get("trigger_type") or "BIG_ACCUMULATION")
+            trig_lbl = str(stock.get("trigger_label") or "Akumulasi Broker")
+
+            if not existing:
+                # Cek apakah sudah pernah ada record hari ini
+                closed_today = conn.execute(
+                    select(signals_table).where(
+                        signals_table.c.ticker == ticker,
+                        signals_table.c.signal_date == date_str,
+                    )
+                ).mappings().first()
+                if closed_today:
+                    return
+
+                conn.execute(
+                    insert(signals_table).values(
+                        ticker=ticker,
+                        sector=str(stock.get("sector", "")),
+                        trigger_type=trig_type,
+                        trigger_label=trig_lbl,
+                        score=score,
+                        source="AUTO_TODAY",
+                        signal_date=date_str,
+                        signal_close=c_p,
+                        entry_low=e_p,
+                        entry_high=e_p,
+                        stop_loss=sl,
+                        target=tp1,
+                        target_2=tp2,
+                        status="WATCHLIST",
+                        note=f"Pilihan Saham Hari Ini ({session_label}) - Antre Pullback di {sup_lbl}",
+                        created_at=_now_str(),
+                        updated_at=_now_str(),
+                    )
+                )
+            else:
+                if existing["status"] == "WATCHLIST":
+                    conn.execute(
+                        update(signals_table)
+                        .where(signals_table.c.id == existing["id"])
+                        .values(
+                            entry_low=e_p,
+                            entry_high=e_p,
+                            stop_loss=sl,
+                            target=tp1,
+                            target_2=tp2,
+                            last_close=c_p,
+                            note=f"Pilihan Saham Hari Ini ({session_label}) - Antre Pullback di {sup_lbl}",
+                            updated_at=_now_str(),
+                        )
+                    )

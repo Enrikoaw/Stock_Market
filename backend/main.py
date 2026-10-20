@@ -52,6 +52,7 @@ from screener_engine import (
     enrich_master_ticker_list,
     read_multiple_uploaded_files,
     read_uploaded_file,
+    select_today_candidates,
 )
 from news_fetcher import get_market_news
 
@@ -106,23 +107,26 @@ def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> No
     plan["status"] = st
     plan["tracker_id"] = sig["id"]
     plan["signal_date"] = sig.get("signal_date")
-    if e_p > 0:
-        plan["entry_price"] = e_p
-        plan["entry_high"] = e_p
-        plan["entry_low"] = e_p
-    if sig.get("stop_loss") is not None:
-        plan["stop_loss"] = float(sig["stop_loss"])
-    if sig.get("target") is not None:
-        plan["target_1"] = float(sig["target"])
-    if sig.get("target_2") is not None:
-        plan["target_2"] = float(sig["target_2"])
-    if e_p > 0:
-        if plan.get("stop_loss"):
-            plan["stop_loss_pct"] = round(((plan["stop_loss"] - e_p) / e_p) * 100.0, 2)
-        if plan.get("target_1"):
-            plan["target_1_pct"] = round(((plan["target_1"] - e_p) / e_p) * 100.0, 2)
-        if plan.get("target_2"):
-            plan["target_2_pct"] = round(((plan["target_2"] - e_p) / e_p) * 100.0, 2)
+    # Hanya kunci harga entry ke histori tracker jika posisi SUDAH tereksekusi (RUNNING / WIN / LOSS).
+    # Jika masih WATCHLIST (belum terbeli), gunakan harga entry Support Terdekat terbaru agar jika harga terbang otomatis direvisi ke support.
+    if st in ("RUNNING", "WIN", "LOSS"):
+        if e_p > 0:
+            plan["entry_price"] = e_p
+            plan["entry_high"] = e_p
+            plan["entry_low"] = e_p
+        if sig.get("stop_loss") is not None:
+            plan["stop_loss"] = float(sig["stop_loss"])
+        if sig.get("target") is not None:
+            plan["target_1"] = float(sig["target"])
+        if sig.get("target_2") is not None:
+            plan["target_2"] = float(sig["target_2"])
+        if e_p > 0:
+            if plan.get("stop_loss"):
+                plan["stop_loss_pct"] = round(((plan["stop_loss"] - e_p) / e_p) * 100.0, 2)
+            if plan.get("target_1"):
+                plan["target_1_pct"] = round(((plan["target_1"] - e_p) / e_p) * 100.0, 2)
+            if plan.get("target_2"):
+                plan["target_2_pct"] = round(((plan["target_2"] - e_p) / e_p) * 100.0, 2)
     if pnl_val is not None:
         plan["pnl_pct"] = float(pnl_val)
 
@@ -189,8 +193,20 @@ def _process_tracker(analysis: dict, sync_live_network: bool = False, force_auto
             main_res = TRACKER.evaluate(analysis["details"])
             for k in ("entered", "win", "loss", "expired", "timeout"):
                 result[k] = max(result.get(k, 0), main_res.get(k, 0))
-            if force_auto_track or not is_idx_market_open_now():
-                result["added"] = TRACKER.auto_track(analysis)
+
+            # Sinkronisasi & konsistensi menu Pilihan Saham Hari Ini + catat otomatis ke Watchlist
+            if "stocks" in analysis and analysis["stocks"]:
+                latest_dt = analysis.get("kpis", {}).get("latest_date") or datetime.now().strftime("%Y-%m-%d")
+                raw_picks = select_today_candidates(analysis["stocks"])
+                today_cands = TRACKER.sync_today_candidates(
+                    date_str=str(latest_dt),
+                    candidate_stocks=raw_picks,
+                    all_stocks=analysis["stocks"],
+                )
+                analysis["today_candidates"] = today_cands
+
+            # Pencatatan sinyal akumulasi tanpa pembekuan IHSG
+            result["added"] = TRACKER.auto_track(analysis)
             sync_tracker_to_analysis(analysis)
 
         STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -597,6 +613,18 @@ def get_screener_data(
     }
     stocks.sort(key=sort_key_map.get(sort_by, sort_key_map["score"]), reverse=True)
 
+    # Pastikan Pilihan Saham Hari Ini sinkron dan konsisten antar sesi
+    today_cands = analysis.get("today_candidates")
+    if not today_cands and analysis.get("stocks"):
+        latest_dt = analysis.get("kpis", {}).get("latest_date") or datetime.now().strftime("%Y-%m-%d")
+        raw_picks = select_today_candidates(analysis["stocks"])
+        today_cands = TRACKER.sync_today_candidates(
+            date_str=str(latest_dt),
+            candidate_stocks=raw_picks,
+            all_stocks=analysis["stocks"],
+        )
+        analysis["today_candidates"] = today_cands
+
     return {
         "source_name": STATE["source_name"],
         "last_sync_time": STATE["last_sync_time"],
@@ -606,8 +634,32 @@ def get_screener_data(
         "kpis": analysis["kpis"],
         "count": len(stocks),
         "stocks": stocks,
+        "today_candidates": today_cands or [],
     }
 
+
+
+@app.get("/api/today-candidates")
+def get_today_candidates_endpoint() -> dict:
+    """Mengembalikan daftar Saham Pilihan Hari Ini yang konsisten antar sesi (siang & sore) dan tercatat di Watchlist."""
+    if STATE["analysis"] is None:
+        init_default_state()
+    analysis = STATE["analysis"]
+    today_cands = analysis.get("today_candidates")
+    if not today_cands and analysis.get("stocks"):
+        latest_dt = analysis.get("kpis", {}).get("latest_date") or datetime.now().strftime("%Y-%m-%d")
+        raw_picks = select_today_candidates(analysis["stocks"])
+        today_cands = TRACKER.sync_today_candidates(
+            date_str=str(latest_dt),
+            candidate_stocks=raw_picks,
+            all_stocks=analysis["stocks"],
+        )
+        analysis["today_candidates"] = today_cands
+    return {
+        "status": "success",
+        "count": len(today_cands or []),
+        "candidates": today_cands or [],
+    }
 
 @app.get("/api/news")
 def get_news_endpoint(
@@ -939,6 +991,16 @@ async def upload_excel_files(
         STATE["analysis"] = analysis
         STATE["is_real_market"] = False
         STATE["last_sync_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if analysis and "stocks" in analysis and analysis["stocks"]:
+            latest_dt = analysis.get("kpis", {}).get("latest_date") or datetime.now().strftime("%Y-%m-%d")
+            raw_picks = select_today_candidates(analysis["stocks"])
+            today_cands = TRACKER.sync_today_candidates(
+                date_str=str(latest_dt),
+                candidate_stocks=raw_picks,
+                all_stocks=analysis["stocks"],
+            )
+            analysis["today_candidates"] = today_cands
+            sync_tracker_to_analysis(analysis)
         return {
             "status": "success",
             "message": f"Berhasil memuat & menganalisis {analysis['kpis']['total_emiten']} saham aktif IDX dari {src_label}!",
