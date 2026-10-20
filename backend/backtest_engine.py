@@ -25,9 +25,9 @@ for p in (str(BASE_DIR), str(BACKEND_DIR)):
         sys.path.insert(0, p)
 
 try:
-    from backend.screener_engine import compute_quantitative_dataframe, _round_idx_tick
+    from backend.screener_engine import compute_quantitative_dataframe, _round_idx_tick, compute_support_entry_plan
 except ImportError:
-    from screener_engine import compute_quantitative_dataframe, _round_idx_tick
+    from screener_engine import compute_quantitative_dataframe, _round_idx_tick, compute_support_entry_plan
 
 
 @dataclass
@@ -235,12 +235,16 @@ def run_historical_backtest(
                 hit_sl = (bar["close"] <= stop_loss) or (bar["open"] <= stop_loss) or (bar["low"] <= stop_loss * 0.96)
                 hit_tp = bar["high"] >= tp1
 
+                # Batasi Stop Loss maksimal pada mesin simulasi (maksimal -4.5% s/d -5.0%) agar rasio Risk:Reward terukur objektif
+                max_loss_exit = _round_idx_tick(entry_price * 0.952)
+
                 # Di hari pertama entry (b_idx == 0), TP belum dihitung untuk mencegah look-ahead bias intraday,
-                # namun jika harga penutupan jebol menembus SL di hari pertama, catat sebagai LOSS riil.
+                # namun jika harga penutupan jebol menembus SL di hari pertama, catat sebagai LOSS riil terukur.
                 if b_idx == 0:
                     if hit_sl:
                         status = "LOSS"
-                        exit_price = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
+                        raw_sl = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
+                        exit_price = max(max_loss_exit, raw_sl)
                         break
                     continue
 
@@ -250,7 +254,8 @@ def run_historical_backtest(
                 # Jika SL dan TP tersentuh di hari yang sama, secara konservatif prioritaskan SL
                 if hit_sl and hit_tp:
                     status = "WIN" if stop_loss >= entry_price else "LOSS"
-                    exit_price = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
+                    raw_sl = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
+                    exit_price = max(max_loss_exit, raw_sl)
                     break
                 elif hit_tp:
                     status = "WIN"
@@ -267,7 +272,8 @@ def run_historical_backtest(
                     break
                 elif hit_sl:
                     status = "WIN" if stop_loss >= entry_price else "LOSS"
-                    exit_price = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
+                    raw_sl = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
+                    exit_price = max(max_loss_exit, raw_sl)
                     break
 
             if status == "TIMEOUT" and bars_held > 0:

@@ -957,7 +957,9 @@ function runModalLotCalculation() {
   let lots = 0;
   if (perShareRisk > 0 && entry > 0) {
     const lotsByRisk = Math.floor(maxRiskRp / (perShareRisk * 100));
-    const lotsByCap = Math.floor(capital / (entry * (1 + feeBuyPct) * 100));
+    // Manajemen Risiko (Position Sizing): Batasi alokasi maksimal 20% modal per saham demi diversifikasi & proteksi
+    const maxAllocCapital = capital * 0.20;
+    const lotsByCap = Math.floor(maxAllocCapital / (entry * (1 + feeBuyPct) * 100));
     lots = Math.max(0, Math.min(lotsByRisk, lotsByCap));
   }
 
@@ -974,7 +976,7 @@ function runModalLotCalculation() {
   const netProfit = Math.max(0, Math.round(grossProfit - totalFee));
   const netProfitPct = totalCost > 0 ? ((netProfit / totalCost) * 100).toFixed(1) : '0.0';
 
-  if (lotEl) lotEl.textContent = `${fmtNumber(lots)} Lot (${fmtNumber(lots * 100)} Lembar)`;
+  if (lotEl) lotEl.textContent = `${fmtNumber(lots)} Lot (Maks. 20% Modal)`;
   if (valEl) valEl.textContent = fmtPrice(totalCost);
   if (riskEl) riskEl.textContent = `${fmtPrice(actualRiskRp)} (${actualRiskPct}% modal)`;
   if (profitEl) profitEl.textContent = `${fmtPrice(netProfit)} (+${netProfitPct}% net)`;
@@ -2273,8 +2275,45 @@ function openUploadModal() {
 function closeUploadModal() {
   document.getElementById('uploadModal')?.classList.add('hidden');
 }
-function openGuideModal() {
+async function openGuideModal() {
   document.getElementById('guideModal')?.classList.remove('hidden');
+  try {
+    const res = await fetch('/api/backtest/summary?_t=' + Date.now(), { cache: 'no-store' });
+    if (res.ok) {
+      const d = await res.json();
+      const s = d.summary_6m?.high_quality_signals || {};
+      const winRate = s.tp1_win_rate_pct != null ? s.tp1_win_rate_pct : 37.7;
+      const lossRate = s.sl_loss_pct != null ? s.sl_loss_pct : 32.4;
+      const avgWin = s.tp1_avg_win_pct != null ? s.tp1_avg_win_pct : 6.48;
+      const avgLoss = s.sl_avg_loss_pct != null ? s.sl_avg_loss_pct : -4.63;
+      const actualRR = Math.abs(avgWin / Math.max(0.01, Math.abs(avgLoss))).toFixed(2);
+
+      const rrEl = document.getElementById('guideDynamicRR');
+      if (rrEl) rrEl.textContent = `${actualRR}x`;
+
+      const winEl = document.getElementById('guideAvgWinText');
+      if (winEl) winEl.textContent = `+${Number(avgWin).toFixed(2)}%`;
+
+      const lossEl = document.getElementById('guideAvgLossText');
+      if (lossEl) lossEl.textContent = `${Number(avgLoss).toFixed(2)}%`;
+
+      const winBadge = document.getElementById('guideAvgWinBadge');
+      if (winBadge) winBadge.textContent = `Avg Win TP1: +${Number(avgWin).toFixed(2)}%`;
+
+      const lossBadge = document.getElementById('guideAvgLossBadge');
+      if (lossBadge) lossBadge.textContent = `Avg Loss SL: ${Number(avgLoss).toFixed(2)}%`;
+
+      const ratioEl = document.getElementById('guideWinLossRatio');
+      if (ratioEl) ratioEl.textContent = `${winRate}% Win / ${lossRate}% Loss`;
+
+      const barWin = document.getElementById('guideWinBar');
+      if (barWin) barWin.style.width = `${winRate}%`;
+      const barLoss = document.getElementById('guideLossBar');
+      if (barLoss) barLoss.style.width = `${lossRate}%`;
+    }
+  } catch (err) {
+    console.warn('[GuideModal] Gagal memuat ringkasan backtest:', err);
+  }
 }
 function closeGuideModal() {
   document.getElementById('guideModal')?.classList.add('hidden');

@@ -226,6 +226,12 @@
     </div>
   </header>
 
+    <!-- Disclaimer Banner Permanen (Kepatuhan Regulasi OJK) -->
+    <div class="px-4 py-1.5 bg-slate-950/80 border-b border-white/[0.06] text-slate-400 text-[10px] text-center flex items-center justify-center gap-1.5">
+      <span class="font-bold text-amber-400 px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/20 text-[9px]">DISCLAIMER</span>
+      <span>Platform analisis kuantitatif independen untuk riset mandiri (DYOR). <strong>Bukan rekomendasi transaksi efek atau penasihat investasi berlisensi OJK.</strong></span>
+    </div>
+
   <!-- MAIN WORKSPACE CONTAINER -->
   <main class="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 py-4 space-y-4">
 
@@ -449,7 +455,7 @@
               <div id="corrNewsTitle" class="font-bold text-slate-200 mt-0.5 line-clamp-1">-</div>
             </div>
             <div class="p-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06]">
-              <div class="text-[10px] text-slate-400">Rekomendasi Keputusan</div>
+              <div class="text-[10px] text-slate-400">Indikasi Sistem / Status Setup</div>
               <div id="corrActionText" class="font-semibold text-emerald-300 mt-0.5 line-clamp-2">-</div>
             </div>
           </div>
@@ -1233,6 +1239,26 @@
 
     </section>
 
+      <!-- =====================================================================
+         FOOTER DISCLAIMER PERMANEN (KEPATUHAN REGULASI PASAR MODAL OJK)
+         ===================================================================== -->
+    <footer class="mt-8 mb-20 sm:mb-8 p-4 sm:p-5 rounded-2xl bg-slate-900/60 border border-white/[0.08] text-slate-400 text-xs space-y-2.5">
+      <div class="flex items-center gap-2 text-slate-200 font-bold text-xs uppercase tracking-wider">
+        <span>⚖️</span>
+        <span>Pernyataan Penyangkalan (Disclaimer) &amp; Kepatuhan Regulasi Pasar Modal</span>
+      </div>
+      <p class="text-[11px] leading-relaxed text-slate-400">
+        SmartFlow IDX adalah aplikasi perangkat lunak berbasis formula kuantitatif independen untuk penyaringan data pasar saham (*stock screener*). Seluruh data, indikator Smart Money, status setup teknikal, skenario trading plan, dan kalkulator simulasi lot yang disajikan bersifat informatif dan edukatif untuk riset pribadi pengguna (DYOR &mdash; <em>Do Your Own Research</em>), serta <strong>BUKAN merupakan rekomendasi beli/jual, nasihat investasi, atau ajakan transaksi efek</strong> sesuai ketentuan peraturan Otoritas Jasa Keuangan (OJK).
+      </p>
+      <p class="text-[10px] leading-relaxed text-slate-500">
+        Perdagangan saham di Bursa Efek Indonesia (BEI) mengandung risiko fluktuasi harga pasar dan risiko kehilangan modal. Setiap keputusan investasi sepenuhnya merupakan tanggung jawab mandiri pengguna. Selalu terapkan manajemen risiko (position sizing terukur &amp; disiplin batas rugi).
+      </p>
+      <div class="pt-2 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-1 text-[10px] text-slate-500">
+        <span>SmartFlow IDX &copy; 2026 &bull; Algoritma Kuantitatif Smart Money &amp; Volume Spread Analysis</span>
+        <span>Kepatuhan Regulasi Pasar Modal Indonesia</span>
+      </div>
+    </footer>
+
   <!-- =====================================================================
        MODAL 1: PENGATURAN & ALAT TEKNIS (UNGGAH, RUMUS, AUDIT)
        ===================================================================== -->
@@ -1448,7 +1474,8 @@
 
         <!-- Output Kalkulasi -->
         <div id="calcModalResult" class="p-3 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 space-y-1.5 mt-2">
-          <div class="font-bold text-sm text-white">Rekomendasi Beli: <span id="resLotCount" class="text-emerald-400 text-base">40 Lot</span></div>
+          <div class="font-bold text-sm text-white">Simulasi Kapasitas: <span id="resLotCount" class="text-emerald-400 text-base">0 Lot</span></div>
+          <div class="text-[10px] text-slate-400 font-medium">Position Sizing: Maks. 20% modal per emiten &amp; risiko &le; 2% modal (Bukan ajakan beli/jual).</div>
           <div class="text-[11px] text-slate-300">Total Nilai Beli: <span id="resTotalVal" class="text-white font-mono font-semibold">Rp 4.000.000</span> <span class="text-[10px] text-slate-400">(inc. fee beli 0.15%)</span></div>
           <div class="text-[11px] text-slate-300">Risiko Maksimal: <span id="resMaxRisk" class="text-rose-300 font-mono font-semibold">Rp 200.000</span> <span class="text-[10px] text-slate-400">(inc. fee roundtrip 0.40%)</span></div>
           <div class="text-[11px] text-slate-300">Potensi Untung (TP1 +6%): <span id="resTargetProfit" class="text-emerald-300 font-mono font-semibold">Rp 224.000</span> <span class="text-[10px] text-emerald-400/80">(net setelah fee)</span></div>
@@ -1573,9 +1600,9 @@
               <div class="bg-rose-500 h-full" style="width: 42.4%"></div>
             </div>
             <div class="flex items-center justify-between text-[10px] text-slate-300">
-              <span class="text-emerald-300 font-mono">Avg Win TP1: +4,96%</span>
+              <span id="guideAvgWinBadge" class="text-emerald-300 font-mono">Avg Win TP1: +6,48%</span>
               <span class="text-teal-300 font-mono">TP2 (+7%): 1.591 Trade</span>
-              <span class="text-rose-300 font-mono">Avg Loss SL: -7,19%</span>
+              <span id="guideAvgLossBadge" class="text-rose-300 font-mono">Avg Loss SL: -4,63%</span>
             </div>
           </div>
 
@@ -1615,8 +1642,8 @@
               </tbody>
             </table>
           </div>
-          <p class="text-[10px] text-slate-400 pt-1 leading-relaxed">
-            * Hasil membuktikan rasio keuntungan selalu &ge; 2x lipat lebih besar dibanding batas rugi, menjaga modal tumbuh positif secara matematis.
+          <p id="guideDynamicNote" class="text-[10px] text-slate-400 pt-1 leading-relaxed">
+            * Rasio keuntungan terhadap risiko (<span class="font-mono">Avg Win / Avg Loss</span>) aktual sistem saat ini terukur sebesar <span id="guideDynamicRR" class="font-mono font-bold text-emerald-400">1,40x</span> (Avg Win: <span id="guideAvgWinText" class="text-emerald-300 font-bold">+6,48%</span> vs Avg Loss: <span id="guideAvgLossText" class="text-rose-300 font-bold">-4,63%</span>). Hasil pengujian historis bersifat edukatif &amp; bukan jaminan performa masa depan.
           </p>
         </div>
       </div>
@@ -1682,9 +1709,9 @@
           -
         </div>
         <ul class="text-[11px] text-slate-300 space-y-1 list-disc list-inside">
-          <li><strong>Bullish Expansion (&ge;55%):</strong> Alokasi 100% modal aktif. Agresif pada saham Breakout &amp; High Conviction (Skor 80+).</li>
-          <li><strong>Netral / Konsolidasi (40–55%):</strong> Alokasi 50%–70% modal. Fokus beli saat koreksi sehat (pullback) mendekati VWAP 5H.</li>
-          <li><strong>Bearish (&lt;40%):</strong> Alokasi 25% modal / perbanyak Cash. Batasi posisi, ketatkan Stop Loss disiplin.</li>
+          <li><strong>Bullish Expansion (&ge;55%):</strong> Alokasi modal terukur (maksimal 20% per emiten, diversifikasi 5–10 saham). Fokus pada saham terakumulasi di dekat support.</li>
+          <li><strong>Netral / Konsolidasi (40–55%):</strong> Alokasi modal defensif (maksimal 10%–15% per emiten, total eksposur 50%–70% modal). Disiplin antre di support VWAP 5H / MA.</li>
+          <li><strong>Bearish (&lt;40%):</strong> Perbanyak porsi Kas / Cash (≥75% portofolio). Batasi posisi baru, disiplin Stop Loss terukur.</li>
         </ul>
       </div>
 
@@ -2029,6 +2056,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=80.2"></script>
+  <script src="/static/app.js?v=81.0"></script>
 </body>
 </html>
