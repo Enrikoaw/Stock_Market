@@ -12,3 +12,5 @@ data/real_idx_market_5y.parquet
 data/broker_api_config.json
 *.db-shm
 *.db-wal
+data/news_cache.json
+data/screener_snapshot.json

@@ -8,8 +8,12 @@ dan menyelaraskannya dengan data teknikal 5-Pilar Smart Money & Trading Plan.
 from __future__ import annotations
 
 import email.utils
+import json
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
@@ -21,6 +25,31 @@ NEWS_CACHE: dict[str, Any] = {
     "items": [],
 }
 CACHE_TTL_SECONDS = 600.0  # 10 menit
+NEWS_DISK_CACHE = Path(__file__).resolve().parent.parent / "data" / "news_cache.json"
+_REFRESH_LOCK = threading.Lock()
+_REFRESH_STATE = {"running": False}
+
+
+def _load_disk_cache() -> None:
+    """Pulihkan snapshot berita dari disk agar start dingin langsung punya data."""
+    try:
+        if NEWS_DISK_CACHE.exists() and not NEWS_CACHE["items"]:
+            d = json.loads(NEWS_DISK_CACHE.read_text(encoding="utf-8"))
+            NEWS_CACHE["items"] = d.get("items", [])
+            NEWS_CACHE["timestamp"] = float(d.get("timestamp", 0.0))
+    except Exception as ex:
+        print(f"[NewsFetcher] Gagal memuat cache disk: {ex}")
+
+
+def _save_disk_cache() -> None:
+    try:
+        NEWS_DISK_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        NEWS_DISK_CACHE.write_text(
+            json.dumps({"timestamp": NEWS_CACHE["timestamp"], "items": NEWS_CACHE["items"]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as ex:
+        print(f"[NewsFetcher] Gagal menyimpan cache disk: {ex}")
 
 
 POSITIVE_KEYWORDS = [
@@ -297,12 +326,17 @@ def get_market_news(
     ]
 
     raw_news = []
-    for u in urls:
+
+    def _one(u: str) -> list:
         try:
-            feed_items = _fetch_rss_feed(u, timeout=5)
-            raw_news.extend(feed_items[:30])
+            return _fetch_rss_feed(u, timeout=4)[:30]
         except Exception as ex:
             print(f"[NewsFetcher] Gagal menarik RSS dari {u}: {ex}")
+            return []
+
+    with ThreadPoolExecutor(max_workers=len(urls)) as pool:
+        for feed_items in pool.map(_one, urls):
+            raw_news.extend(feed_items)
 
     if not raw_news and NEWS_CACHE["items"]:
         return NEWS_CACHE["items"]
@@ -407,4 +441,33 @@ def get_market_news(
 
     NEWS_CACHE["timestamp"] = now
     NEWS_CACHE["items"] = enriched_news
+    _save_disk_cache()
     return enriched_news
+
+
+def get_market_news_nonblocking(
+    known_tickers: Optional[set[str]] = None,
+    analysis_stocks: Optional[list[dict[str, Any]]] = None,
+) -> list[dict[str, Any]]:
+    """Stale-while-revalidate: selalu langsung mengembalikan cache (memori/disk), pembaruan RSS
+    dijalankan di thread latar sehingga timeout sumber eksternal tidak menahan antarmuka."""
+    _load_disk_cache()
+    stale = (time.time() - NEWS_CACHE["timestamp"]) >= CACHE_TTL_SECONDS
+    if (stale or not NEWS_CACHE["items"]) and not _REFRESH_STATE["running"]:
+        with _REFRESH_LOCK:
+            if not _REFRESH_STATE["running"]:
+                _REFRESH_STATE["running"] = True
+
+                def _job():
+                    try:
+                        get_market_news(known_tickers=known_tickers, analysis_stocks=analysis_stocks, force_refresh=True)
+                    except Exception as ex:
+                        print(f"[NewsFetcher] Refresh latar gagal: {ex}")
+                    finally:
+                        _REFRESH_STATE["running"] = False
+
+                threading.Thread(target=_job, daemon=True).start()
+    return NEWS_CACHE["items"]
+
+
+_load_disk_cache()

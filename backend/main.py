@@ -54,7 +54,7 @@ from screener_engine import (
     read_uploaded_file,
     select_today_candidates,
 )
-from news_fetcher import get_market_news, validate_catalyst, NEWS_CACHE
+from news_fetcher import get_market_news, get_market_news_nonblocking, validate_catalyst, NEWS_CACHE
 
 DATA_DIR = BASE_DIR / "data"
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -262,6 +262,12 @@ def _run_sync_job_blocking() -> dict:
     STATE["last_sync_error"] = None
     STATE["is_real_market"] = True
     tracker_res = _process_tracker(analysis, sync_live_network=False)
+    try:
+        kt = {str(s.get("ticker", "")).upper() for s in analysis["stocks"] if s.get("ticker")}
+        get_market_news(known_tickers=kt, analysis_stocks=analysis["stocks"], force_refresh=True)
+    except Exception as exc:
+        print(f"[Sync] Pra-pemanasan berita gagal: {exc}")
+    save_screener_snapshot()
     return {
         "status": "success",
         "message": f"Sync selesai: {analysis['kpis'].get('total_emiten', len(analysis['stocks']))} saham diperbarui (data {latest_dt}).",
@@ -554,23 +560,10 @@ _NEWS_WARMING = {"running": False}
 
 def _news_catalyst_map(analysis_stocks: list[dict]) -> dict[str, dict]:
     """Peta ticker -> validasi katalis berita terbaru (dihitung ulang dengan data Smart Money live).
-    Hanya memakai cache berita (tanpa blok jaringan); bila kosong, pemanasan cache dijalankan di thread."""
-    items = NEWS_CACHE.get("items") or []
+    Tidak pernah memblok jaringan: memakai cache memori/disk dan memicu refresh di thread latar."""
+    kt = {str(s.get("ticker", "")).upper() for s in analysis_stocks if s.get("ticker")}
+    items = get_market_news_nonblocking(known_tickers=kt, analysis_stocks=analysis_stocks)
     if not items:
-        if not _NEWS_WARMING["running"]:
-            _NEWS_WARMING["running"] = True
-
-            def _warm():
-                try:
-                    kt = {str(s.get("ticker", "")).upper() for s in analysis_stocks if s.get("ticker")}
-                    get_market_news(known_tickers=kt, analysis_stocks=analysis_stocks)
-                except Exception as exc:
-                    print(f"[NewsWarm] {exc}")
-                finally:
-                    _NEWS_WARMING["running"] = False
-
-            import threading
-            threading.Thread(target=_warm, daemon=True).start()
         return {}
     lookup = {str(s.get("ticker", "")).upper(): s for s in analysis_stocks}
     out: dict[str, dict] = {}
@@ -591,14 +584,13 @@ def _news_catalyst_map(analysis_stocks: list[dict]) -> dict[str, dict]:
     return out
 
 
-@app.get("/api/screener")
-def get_screener_data(
-    trigger: Optional[str] = Query(default="ALL", description="Filter berdasarkan tipe trigger Smart Money"),
-    min_score: int = Query(default=0, ge=0, le=100, description="Minimum Smart Money Score (0-100)"),
-    min_vol_ratio: float = Query(default=0.0, ge=0.0, description="Minimum Volume Spike Ratio terhadap MA20"),
-    search: Optional[str] = Query(default="", description="Cari kode Ticker atau Sektor"),
-    sort_by: str = Query(default="score", description="Urutkan hasil: score, vol_ratio, top3_bsr, foreign, pct_change"),
-    min_value_b: float = Query(default=0.0, ge=0.0, description="Minimum Nilai Transaksi (Miliar Rupiah)"),
+def _screener_compute(
+    trigger: Optional[str] = "ALL",
+    min_score: int = 0,
+    min_vol_ratio: float = 0.0,
+    search: Optional[str] = "",
+    sort_by: str = "score",
+    min_value_b: float = 0.0,
 ) -> dict:
     check_and_reload_cache_if_updated()
     if STATE["analysis"] is None:
@@ -698,6 +690,59 @@ def get_screener_data(
 
 
 
+
+SCREENER_MEMO: dict = {}
+SCREENER_MEMO_TTL = 15.0
+SNAPSHOT_FILE = DATA_DIR / "screener_snapshot.json"
+
+
+def _screener_memo_key(args: tuple) -> tuple:
+    a = STATE.get("analysis")
+    return (args, id(a), STATE.get("last_sync_time"), STATE.get("last_tracker_run"), NEWS_CACHE.get("timestamp"))
+
+
+def _screener_cached(trigger, min_score, min_vol_ratio, search, sort_by, min_value_b) -> dict:
+    import time as _t
+    args = (str(trigger), int(min_score), float(min_vol_ratio), str(search or ""), str(sort_by), float(min_value_b))
+    key = _screener_memo_key(args)
+    hit = SCREENER_MEMO.get(key)
+    if hit and (_t.time() - hit[0]) < SCREENER_MEMO_TTL:
+        return hit[1]
+    result = _screener_compute(*args)
+    if len(SCREENER_MEMO) > 24:
+        SCREENER_MEMO.clear()
+    SCREENER_MEMO[key] = (_t.time(), result)
+    return result
+
+
+def save_screener_snapshot() -> None:
+    """Simpan snapshot matang (scoring seluruh emiten + kandidat hari ini) ke JSON statis setelah Auto-Sync."""
+    try:
+        import json
+        SCREENER_MEMO.clear()
+        snap = _screener_cached("ALL", 0, 0.0, "", "score", 0.0)
+        tmp = SNAPSHOT_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(snap, ensure_ascii=False, default=str), encoding="utf-8")
+        tmp.replace(SNAPSHOT_FILE)
+    except Exception as exc:
+        print(f"[Snapshot] Gagal menyimpan snapshot: {exc}")
+
+
+@app.get("/api/screener")
+def get_screener_data(
+    trigger: Optional[str] = Query(default="ALL", description="Filter berdasarkan tipe trigger Smart Money"),
+    min_score: int = Query(default=0, ge=0, le=100, description="Minimum Smart Money Score (0-100)"),
+    min_vol_ratio: float = Query(default=0.0, ge=0.0, description="Minimum Volume Spike Ratio terhadap MA20"),
+    search: Optional[str] = Query(default="", description="Cari kode Ticker atau Sektor"),
+    sort_by: str = Query(default="score", description="Urutkan hasil: score, vol_ratio, top3_bsr, foreign, pct_change"),
+    min_value_b: float = Query(default=0.0, ge=0.0, description="Minimum Nilai Transaksi (Miliar Rupiah)"),
+) -> dict:
+    check_and_reload_cache_if_updated()
+    if STATE["analysis"] is None:
+        init_default_state()
+    return _screener_cached(trigger, min_score, min_vol_ratio, search, sort_by, min_value_b)
+
+
 @app.get("/api/today-candidates")
 def get_today_candidates_endpoint() -> dict:
     """Mengembalikan daftar Saham Pilihan Hari Ini yang konsisten antar sesi (siang & sore) dan tercatat di Watchlist."""
@@ -734,7 +779,10 @@ def get_news_endpoint(
         analysis_stocks = STATE["analysis"]["stocks"]
         known_tickers = {str(s.get("ticker", "")).upper() for s in analysis_stocks if s.get("ticker")}
 
-    news_items = get_market_news(known_tickers=known_tickers, analysis_stocks=analysis_stocks, force_refresh=refresh)
+    if refresh:
+        news_items = list(get_market_news(known_tickers=known_tickers, analysis_stocks=analysis_stocks, force_refresh=True))
+    else:
+        news_items = list(get_market_news_nonblocking(known_tickers=known_tickers, analysis_stocks=analysis_stocks))
 
     cat_upper = category.upper().strip()
     if ticker and ticker.strip():
@@ -906,7 +954,7 @@ def get_stock_news_catalyst(ticker: str) -> dict:
     if not stock:
         raise HTTPException(status_code=404, detail=f"Saham '{key}' tidak ditemukan.")
     known = {str(s.get("ticker", "")).upper() for s in stocks if s.get("ticker")}
-    items = get_market_news(known_tickers=known, analysis_stocks=stocks)
+    items = get_market_news_nonblocking(known_tickers=known, analysis_stocks=stocks)
     related = [n for n in items if n.get("ticker") == key or key in n.get("other_tickers", [])]
     related.sort(key=lambda n: n.get("published_ts", 0), reverse=True)
     latest = related[0] if related else None

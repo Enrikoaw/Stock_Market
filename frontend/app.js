@@ -689,6 +689,18 @@ let cachedNewsItems = [];
 let activeNewsCategory = 'ALL';
 let isNewsLoading = false;
 
+
+// Fetch dengan batas waktu agar modul lambat (mis. berita eksternal) tidak menahan UI
+async function fetchWithTimeout(url, opts = {}, ms = 15000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function loadMarketNews(forceRefresh = false) {
   if (isNewsLoading) return;
   const listEl = document.getElementById('marketNewsList');
@@ -700,7 +712,7 @@ async function loadMarketNews(forceRefresh = false) {
   if (refreshBtn) refreshBtn.disabled = true;
 
   try {
-    const res = await fetch(`/api/news?category=${encodeURIComponent(activeNewsCategory)}&refresh=${forceRefresh ? 'true' : 'false'}&limit=25`);
+    const res = await fetchWithTimeout(`/api/news?category=${encodeURIComponent(activeNewsCategory)}&refresh=${forceRefresh ? 'true' : 'false'}&limit=25`, {}, forceRefresh ? 25000 : 10000);
     if (!res.ok) throw new Error('Gagal memuat berita pasar');
     const data = await res.json();
     cachedNewsItems = (data.items || []).sort((a, b) => (b.published_ts || 0) - (a.published_ts || 0));
@@ -1182,7 +1194,7 @@ async function loadScreenerData(preserveSelection = false) {
   });
 
   try {
-    const res = await fetch(`/api/screener?${params.toString()}`, { cache: 'no-store' });
+    const res = await fetchWithTimeout(`/api/screener?${params.toString()}`, { cache: 'no-store' }, 30000);
     if (!res.ok) throw new Error('Gagal mengambil data screener');
     const data = await res.json();
 
@@ -3713,7 +3725,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   switchMainTab(activeMainTab);
 
   // 2. Muat data awal secepat mungkin
-  await Promise.all([loadScreenerData(false), loadTracker(), loadPortfolio(), loadMarketRegime(), loadIhsgTodayChart('3mo')]);
+  // Modul independen & paralel: kegagalan/keterlambatan satu modul tidak menahan modul lain
+  const initTasks = [
+    ['screener', () => loadScreenerData(false)],
+    ['tracker', () => loadTracker()],
+    ['portfolio', () => loadPortfolio()],
+    ['regime', () => loadMarketRegime()],
+    ['ihsg', () => loadIhsgTodayChart('3mo')],
+    ['news', () => loadMarketNews(false)],
+  ];
+  const initDone = Promise.allSettled(initTasks.map(([, fn]) => fn())).then((results) => {
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') console.warn(`[Init] Modul ${initTasks[i][0]} gagal:`, r.reason);
+    });
+  });
 
   // 3. Setup filter listeners di Tab Jelajah
   ['filterTrigger', 'filterVolRatio', 'filterMinScore', 'filterSortBy', 'filterMinValue'].forEach((id) => {
