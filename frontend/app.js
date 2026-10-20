@@ -586,7 +586,7 @@ function renderTodayCandidates(stocks) {
           </div>
           <div class="text-right">
             <div class="font-mono font-bold text-base text-slate-900 dark:text-white">${fmtPrice(s.close)}</div>
-            <div class="font-mono text-xs font-semibold ${chgColor}">${fmtPct(s.pct_change)}</div>
+            <div class="font-mono text-xs font-semibold ${chgColor}">${(s.pct_change >= 0 ? '+' : '') + Number(s.pct_change || 0).toFixed(2)}%</div>
           </div>
         </div>
 
