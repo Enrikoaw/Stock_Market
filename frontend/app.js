@@ -832,7 +832,10 @@ function inspectNewsCorrelation(idx) {
 
   if (corr.score != null) {
     if (techEl) {
-      techEl.textContent = `Skor ${corr.score}/100 (${corr.trigger_label || 'Aktif'})`;
+      const cat = corr.catalyst;
+      techEl.textContent = cat
+        ? `${cat.label} · Skor ${cat.base_score} → ${cat.adjusted_score}`
+        : `Skor ${corr.score}/100 (${corr.trigger_label || 'Aktif'})`;
     }
   } else {
     if (techEl) {
@@ -1173,6 +1176,7 @@ async function loadScreenerData(preserveSelection = false) {
     min_vol_ratio: minVol,
     min_score: minScore,
     sort_by: sortBy,
+    min_value_b: document.getElementById('filterMinValue')?.value || '0',
     search,
     _t: Date.now(),
   });
@@ -1502,6 +1506,54 @@ function renderScreenerTable(stocks) {
 // =====================================================================
 // INSPECTOR PANEL & DETAIL SAHAM
 // =====================================================================
+
+const CATALYST_STYLE = {
+  VALID_CATALYST: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
+  ABSORBED: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
+  SELL_ON_NEWS: 'bg-rose-500/15 text-rose-300 border-rose-400/30',
+  NEGATIVE_CONFIRMED: 'bg-rose-500/15 text-rose-300 border-rose-400/30',
+  UNCONFIRMED: 'bg-amber-500/15 text-amber-300 border-amber-400/30',
+  WAIT_CONFIRM: 'bg-amber-500/15 text-amber-300 border-amber-400/30',
+  NEGATIVE_UNCONFIRMED: 'bg-amber-500/15 text-amber-300 border-amber-400/30',
+};
+
+async function loadStockNewsCatalyst(ticker) {
+  const badge = document.getElementById('snc-verdict');
+  if (!badge) return;
+  const factorsEl = document.getElementById('snc-factors');
+  const noteEl = document.getElementById('snc-note');
+  const newsEl = document.getElementById('snc-news');
+  badge.textContent = 'Memuat...';
+  badge.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border bg-slate-700/40 text-slate-300 border-white/10';
+  try {
+    const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}/news-catalyst?_t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('gagal');
+    const d = await res.json();
+    if (selectedTicker !== ticker) return; // pengguna sudah pindah emiten
+    const v = d.verdict || {};
+    const cls = CATALYST_STYLE[v.code] || 'bg-slate-700/40 text-slate-300 border-white/10';
+    badge.className = `text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border ${cls}`;
+    badge.textContent = d.has_news ? `${v.label} (Skor ${v.base_score} → ${v.adjusted_score})` : 'Belum Ada Berita Terkait';
+    factorsEl.innerHTML = (v.factors || []).map(f => `
+      <div class="px-2 py-1 rounded-md border ${f.ok ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10' : 'border-white/10 text-slate-400 bg-slate-900/30'}">
+        ${f.ok ? 'Terpenuhi' : 'Belum'}: ${escHtml(f.label)}
+      </div>`).join('');
+    noteEl.textContent = d.has_news
+      ? v.note
+      : 'Tidak ada berita terbaru untuk emiten ini. Keputusan bertumpu pada 5 Pilar kuantitatif dan rencana eksekusi di bawah.';
+    newsEl.innerHTML = (d.news || []).map(n => `
+      <div class="text-[11px] text-slate-400">
+        <span class="font-mono text-[10px]">${escHtml(n.source || '')} · ${escHtml(n.published_at || '')}</span>
+        ${n.link ? `<a href="${escHtml(n.link)}" target="_blank" rel="noopener noreferrer" class="block text-slate-200 hover:text-white underline-offset-2 hover:underline">${escHtml(n.title || '')}</a>` : `<span class="block text-slate-200">${escHtml(n.title || '')}</span>`}
+      </div>`).join('');
+  } catch (e) {
+    badge.textContent = 'Data berita tidak tersedia';
+    if (factorsEl) factorsEl.innerHTML = '';
+    if (noteEl) noteEl.textContent = '';
+    if (newsEl) newsEl.innerHTML = '';
+  }
+}
+
 async function selectStock(ticker, isUserClick = false, scrollToTradingPlan = false) {
   selectedTicker = ticker;
 
@@ -1514,6 +1566,7 @@ async function selectStock(ticker, isUserClick = false, scrollToTradingPlan = fa
     if (!res.ok) throw new Error(`Gagal memuat detail ${ticker}`);
     selectedStockDetail = await res.json();
     renderInspectorPanel(selectedStockDetail);
+    loadStockNewsCatalyst(ticker);
 
     if (scrollToTradingPlan) {
       setTimeout(() => {
@@ -3663,7 +3716,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await Promise.all([loadScreenerData(false), loadTracker(), loadPortfolio(), loadMarketRegime(), loadIhsgTodayChart('3mo')]);
 
   // 3. Setup filter listeners di Tab Jelajah
-  ['filterTrigger', 'filterVolRatio', 'filterMinScore', 'filterSortBy'].forEach((id) => {
+  ['filterTrigger', 'filterVolRatio', 'filterMinScore', 'filterSortBy', 'filterMinValue'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', () => loadScreenerData(true));
   });

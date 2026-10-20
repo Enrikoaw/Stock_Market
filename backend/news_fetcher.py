@@ -208,6 +208,75 @@ def _fetch_rss_feed(url: str, default_source: str = "", timeout: int = 5) -> lis
     return raw_items
 
 
+
+ACCUM_TRIGGERS = ("MARKUP_BREAKOUT", "BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW")
+
+
+def validate_catalyst(sentiment: str, stock: dict[str, Any]) -> dict[str, Any]:
+    """
+    Event-Driven Re-Analysis: matriks validasi silang Sentimen Berita x Respons Smart Money
+    (Volume VSA + Turnover riil + Closing Range + Akumulasi Broker).
+    Membedakan Valid Catalyst Breakout dari jebakan Sell on News.
+    """
+    base = int(stock.get("smart_money_score") or 0)
+    vr = float(stock.get("vol_ratio") or 0)
+    val_b = float(stock.get("value_b_idr") or 0)
+    cr = float(stock.get("closing_range_pct") or 0)
+    pct = float(stock.get("pct_change") or 0)
+    bdr = float(stock.get("bdr_pct") or 0)
+    accum = stock.get("trigger_type") in ACCUM_TRIGGERS or bdr >= 5.0
+
+    vol_spike = vr >= 1.5
+    turnover_ok = val_b >= 1.0
+    close_strong = cr >= 65
+    close_weak = cr < 50
+
+    factors = [
+        {"label": f"Volume {vr:.1f}x MA20 (VSA)", "ok": vol_spike},
+        {"label": f"Turnover Rp {val_b:.1f} M", "ok": turnover_ok},
+        {"label": f"Closing Range {cr:.0f}%", "ok": close_strong},
+        {"label": "Akumulasi Smart Money", "ok": accum},
+    ]
+
+    if sentiment == "POSITIVE":
+        if vol_spike and turnover_ok and close_strong and accum:
+            code, label, delta = "VALID_CATALYST", "Valid Catalyst Breakout", 8
+            note = "Berita positif dikonfirmasi lonjakan volume, turnover riil, penutupan kuat, dan akumulasi broker."
+        elif pct >= 4.0 and (close_weak or not accum):
+            code, label, delta = "SELL_ON_NEWS", "Waspada Sell on News", -15
+            note = "Harga sudah naik tajam namun penutupan lemah / tanpa akumulasi: indikasi distribusi saat berita keluar."
+        elif not vol_spike or not turnover_ok:
+            code, label, delta = "UNCONFIRMED", "Katalis Belum Terkonfirmasi", -3
+            note = "Smart Money belum merespons (volume / turnover rendah). Tunggu konfirmasi sebelum antre."
+        else:
+            code, label, delta = "WAIT_CONFIRM", "Pantau Konfirmasi Penutupan", 0
+            note = "Respons volume ada, namun penutupan atau akumulasi belum meyakinkan."
+    elif sentiment == "NEGATIVE":
+        if vol_spike and close_weak:
+            code, label, delta = "NEGATIVE_CONFIRMED", "Tekanan Jual Terkonfirmasi", -12
+            note = "Berita negatif disertai volume tinggi dan penutupan lemah. Hindari entry baru."
+        elif vol_spike and close_strong and accum:
+            code, label, delta = "ABSORBED", "Berita Negatif Diserap Smart Money", 3
+            note = "Volume tinggi namun harga bertahan kuat dan diakumulasi: tekanan jual diserap."
+        else:
+            code, label, delta = "NEGATIVE_UNCONFIRMED", "Sentimen Negatif Belum Terkonfirmasi", -4
+            note = "Belum ada respons volume yang menegaskan tekanan jual. Disiplin pada Stop Loss."
+    else:
+        code, label, delta = "NEUTRAL", "Tanpa Katalis Dominan", 0
+        note = "Sentimen netral: keputusan bertumpu pada 5 Pilar kuantitatif."
+
+    return {
+        "code": code,
+        "label": label,
+        "note": note,
+        "base_score": base,
+        "adjusted_score": max(0, min(100, base + delta)),
+        "delta": delta,
+        "factors": factors,
+        "is_valid": code in ("VALID_CATALYST", "ABSORBED"),
+    }
+
+
 def get_market_news(
     known_tickers: Optional[set[str]] = None,
     analysis_stocks: Optional[list[dict[str, Any]]] = None,
@@ -279,7 +348,14 @@ def get_market_news(
             else:
                 action_eval = f"Sentimen netral. Ikuti disiplin rencana trading: Beli Rp {entry_p:,.0f}, SL Rp {sl_p:,.0f}, TP1 Rp {tp1_p:,.0f}."
 
+            catalyst = validate_catalyst(sentiment, correlated_stock)
+            if catalyst["code"] == "VALID_CATALYST":
+                action_eval = f"{catalyst['label']}: {catalyst['note']} Antre beli objektif di support Rp {entry_p:,.0f}."
+            elif catalyst["code"] in ("SELL_ON_NEWS", "NEGATIVE_CONFIRMED"):
+                action_eval = f"{catalyst['label']}: {catalyst['note']} Jika sudah hold, jaga SL Rp {sl_p:,.0f}."
             correlation_info = {
+                "catalyst": catalyst,
+                "adjusted_score": catalyst["adjusted_score"],
                 "ticker": primary_ticker,
                 "score": score,
                 "trigger_label": trigger_lbl,
@@ -322,6 +398,7 @@ def get_market_news(
             "sentiment_label": sentiment_label,
             "summary": item["description"][:160] + "..." if len(item["description"]) > 160 else item["description"],
             "is_pick": bool(correlated_stock),
+            "catalyst_code": (correlation_info.get("catalyst") or {}).get("code"),
             "correlation": correlation_info,
         })
 

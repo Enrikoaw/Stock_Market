@@ -54,7 +54,7 @@ from screener_engine import (
     read_uploaded_file,
     select_today_candidates,
 )
-from news_fetcher import get_market_news
+from news_fetcher import get_market_news, validate_catalyst, NEWS_CACHE
 
 DATA_DIR = BASE_DIR / "data"
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -548,6 +548,49 @@ def health_check() -> dict:
     }
 
 
+
+_NEWS_WARMING = {"running": False}
+
+
+def _news_catalyst_map(analysis_stocks: list[dict]) -> dict[str, dict]:
+    """Peta ticker -> validasi katalis berita terbaru (dihitung ulang dengan data Smart Money live).
+    Hanya memakai cache berita (tanpa blok jaringan); bila kosong, pemanasan cache dijalankan di thread."""
+    items = NEWS_CACHE.get("items") or []
+    if not items:
+        if not _NEWS_WARMING["running"]:
+            _NEWS_WARMING["running"] = True
+
+            def _warm():
+                try:
+                    kt = {str(s.get("ticker", "")).upper() for s in analysis_stocks if s.get("ticker")}
+                    get_market_news(known_tickers=kt, analysis_stocks=analysis_stocks)
+                except Exception as exc:
+                    print(f"[NewsWarm] {exc}")
+                finally:
+                    _NEWS_WARMING["running"] = False
+
+            import threading
+            threading.Thread(target=_warm, daemon=True).start()
+        return {}
+    lookup = {str(s.get("ticker", "")).upper(): s for s in analysis_stocks}
+    out: dict[str, dict] = {}
+    for n in sorted(items, key=lambda x: x.get("published_ts", 0), reverse=True):
+        tk = n.get("ticker")
+        st = lookup.get(tk)
+        if not st or tk in out:
+            continue
+        out[tk] = {
+            "title": n.get("title"),
+            "link": n.get("link"),
+            "source": n.get("source"),
+            "published_at": n.get("published_at"),
+            "sentiment": n.get("sentiment"),
+            "sentiment_label": n.get("sentiment_label"),
+            **validate_catalyst(n.get("sentiment") or "NEUTRAL", st),
+        }
+    return out
+
+
 @app.get("/api/screener")
 def get_screener_data(
     trigger: Optional[str] = Query(default="ALL", description="Filter berdasarkan tipe trigger Smart Money"),
@@ -555,6 +598,7 @@ def get_screener_data(
     min_vol_ratio: float = Query(default=0.0, ge=0.0, description="Minimum Volume Spike Ratio terhadap MA20"),
     search: Optional[str] = Query(default="", description="Cari kode Ticker atau Sektor"),
     sort_by: str = Query(default="score", description="Urutkan hasil: score, vol_ratio, top3_bsr, foreign, pct_change"),
+    min_value_b: float = Query(default=0.0, ge=0.0, description="Minimum Nilai Transaksi (Miliar Rupiah)"),
 ) -> dict:
     check_and_reload_cache_if_updated()
     if STATE["analysis"] is None:
@@ -563,8 +607,23 @@ def get_screener_data(
     analysis = STATE["analysis"]
     stocks = list(analysis["stocks"])
 
+    cat_map = _news_catalyst_map(analysis["stocks"])
+    if cat_map:
+        stocks = [({**s, "news_catalyst": cat_map[s["ticker"]]} if s["ticker"] in cat_map else s) for s in stocks]
+
+    if isinstance(min_value_b, (int, float)) and min_value_b > 0:
+        stocks = [s for s in stocks if float(s.get("value_b_idr") or 0) >= min_value_b]
+
     if trigger and isinstance(trigger, str) and trigger.upper() != "ALL":
-        if trigger.upper() == "ACCUM_ALL":
+        if trigger.upper() == "NEWS_ACCUM":
+            stocks = [
+                s for s in stocks
+                if s.get("news_catalyst")
+                and s["news_catalyst"].get("sentiment") != "NEGATIVE"
+                and s["news_catalyst"].get("code") not in ("SELL_ON_NEWS", "NEGATIVE_CONFIRMED")
+                and s.get("trigger_type") in ("MARKUP_BREAKOUT", "BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW")
+            ]
+        elif trigger.upper() == "ACCUM_ALL":
             stocks = [
                 s
                 for s in stocks
@@ -833,6 +892,41 @@ def _fetch_ticker_candles_blocking(ticker: str, period: str = "6mo") -> list[dic
     except Exception as exc:
         print(f"[CandlesAPI] Fallback ke history lokal untuk {ticker}: {exc}")
     return []
+
+
+
+@app.get("/api/stock/{ticker}/news-catalyst")
+def get_stock_news_catalyst(ticker: str) -> dict:
+    """Korelasi Sentimen Berita x Smart Money untuk satu emiten (dipakai panel Detail Saham)."""
+    if STATE["analysis"] is None:
+        init_default_state()
+    key = ticker.strip().upper()
+    stocks = STATE["analysis"]["stocks"]
+    stock = next((s for s in stocks if str(s.get("ticker", "")).upper() == key), None)
+    if not stock:
+        raise HTTPException(status_code=404, detail=f"Saham '{key}' tidak ditemukan.")
+    known = {str(s.get("ticker", "")).upper() for s in stocks if s.get("ticker")}
+    items = get_market_news(known_tickers=known, analysis_stocks=stocks)
+    related = [n for n in items if n.get("ticker") == key or key in n.get("other_tickers", [])]
+    related.sort(key=lambda n: n.get("published_ts", 0), reverse=True)
+    latest = related[0] if related else None
+    verdict = validate_catalyst(latest.get("sentiment") if latest else "NEUTRAL", stock)
+    plan = stock.get("trading_plan") or {}
+    return {
+        "ticker": key,
+        "has_news": bool(latest),
+        "verdict": verdict,
+        "news": [
+            {k: n.get(k) for k in ("title", "link", "source", "published_at", "relative_time", "sentiment", "sentiment_label")}
+            for n in related[:3]
+        ],
+        "plan": {
+            "entry_price": plan.get("entry_price"),
+            "support_label": plan.get("support_label"),
+            "stop_loss": plan.get("stop_loss"),
+            "target_1": plan.get("target_1"),
+        },
+    }
 
 
 @app.get("/api/stock/{ticker}/candles")

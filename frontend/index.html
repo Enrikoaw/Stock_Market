@@ -619,6 +619,7 @@
             <select id="filterTrigger" class="px-3 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
               <option value="ALL" class="bg-slate-900 text-white">Semua Sinyal</option>
               <option value="ACCUM_ALL" class="bg-slate-900 text-white">🔥 Akumulasi Sah</option>
+              <option value="NEWS_ACCUM" class="bg-slate-900 text-white">Katalis Berita + Akumulasi</option>
               <option value="MARKUP_BREAKOUT" class="bg-slate-900 text-white">⚡ Markup Breakout</option>
               <option value="BIG_ACCUMULATION" class="bg-slate-900 text-white">🐋 Big Accumulation</option>
               <option value="SILENT_ACCUMULATION" class="bg-slate-900 text-white">🕵️ Silent Accumulation</option>
@@ -640,6 +641,15 @@
               <option value="1.2" class="bg-slate-900 text-white">Vol &ge; 1.2x MA20</option>
               <option value="1.5" class="bg-slate-900 text-white">Vol &ge; 1.5x (Spike)</option>
               <option value="2.0" class="bg-slate-900 text-white">Vol &ge; 2.0x (Ledakan)</option>
+            </select>
+
+            <!-- Likuiditas (Turnover) Filter -->
+            <select id="filterMinValue" class="px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
+              <option value="0" class="bg-slate-900 text-white">Transaksi: Semua</option>
+              <option value="1" class="bg-slate-900 text-white">Transaksi &ge; Rp 1 M</option>
+              <option value="5" class="bg-slate-900 text-white">Transaksi &ge; Rp 5 M</option>
+              <option value="10" class="bg-slate-900 text-white">Transaksi &ge; Rp 10 M</option>
+              <option value="50" class="bg-slate-900 text-white">Transaksi &ge; Rp 50 M</option>
             </select>
 
             <!-- Sort By Selector -->
@@ -785,6 +795,17 @@
               <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-sky-500 dark:bg-sky-400 inline-block"></span> Garis Harga Saat Ini</span>
               <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-emerald-500 dark:bg-emerald-400 inline-block"></span> MA20 Trendline</span>
             </div>
+          </div>
+
+          <!-- 2b. KORELASI SENTIMEN BERITA x SMART MONEY (mengikuti emiten terpilih) -->
+          <div id="stockNewsCatalystCard" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.08] space-y-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-slate-900 dark:text-white">Korelasi Sentimen Berita &amp; Smart Money</span>
+              <span id="snc-verdict" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-slate-700/40 text-slate-300 border border-white/10">Memuat...</span>
+            </div>
+            <div id="snc-factors" class="grid grid-cols-2 gap-1.5 text-[10px]"></div>
+            <p id="snc-note" class="text-[11px] text-slate-500 dark:text-slate-300 leading-relaxed"></p>
+            <div id="snc-news" class="space-y-1"></div>
           </div>
 
           <!-- 3. SKENARIO TERUKUR & KALKULATOR LOT -->
@@ -2008,6 +2029,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=79.0"></script>
+  <script src="/static/app.js?v=80.0"></script>
 </body>
 </html>
