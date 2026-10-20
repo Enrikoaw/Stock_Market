@@ -1,8 +1,8 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'smartflow-idx-v83';
+const CACHE_NAME = 'smartflow-idx-v84';
 const ASSETS_TO_CACHE = [
-  '/static/styles.css?v=83.0',
-  '/static/app.js?v=83.0',
+  '/static/styles.css?v=84.0',
+  '/static/app.js?v=84.0',
   '/manifest.json',
   '/static/icons/icon.svg',
   '/static/icons/icon-192.svg',

@@ -777,10 +777,6 @@ function renderTodayCandidates(stocks) {
               <div class="text-[9px] text-rose-400/80">Closing Basis</div>
             </div>
           </div>
-              <div class="font-bold text-rose-400">${fmtPrice(stopLoss)}</div>
-              <div class="text-[9px] text-slate-400">${slPct}%</div>
-            </div>
-          </div>
         </div>
 
         <!-- Action Buttons -->
