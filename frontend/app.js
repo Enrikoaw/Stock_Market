@@ -50,72 +50,61 @@ const APP_TRADING_RULES = {
 
 
 // =====================================================================
-// THEME ENGINE (Emerald · Obsidian Gold · Midnight Blue · Clean Slate · Clean Paper)
+// THEME ENGINE (HANYA TEMA GELAP & TERANG)
 // =====================================================================
-const VALID_THEMES = ['emerald', 'gold', 'midnight', 'slate', 'paper'];
-
 function initTheme() {
-  let saved = localStorage.getItem('smartflow_theme') || 'emerald';
-  if (saved === 'dark') saved = 'emerald';
-  if (saved === 'light') saved = 'paper';
-  selectTheme(saved, false);
+  const saved = localStorage.getItem('smartflow_theme') || 'dark';
+  const isLight = saved === 'light' || saved === 'paper';
+  setAppTheme(isLight ? 'light' : 'dark', false);
 }
 
-function selectTheme(themeName, renderChart = true) {
-  const valid = VALID_THEMES.includes(themeName) ? themeName : 'emerald';
+function setAppTheme(mode, renderChart = true) {
   const html = document.documentElement;
+  const isLight = mode === 'light';
 
-  // Hapus seluruh kelas tema terdahulu
-  VALID_THEMES.forEach((t) => html.classList.remove(`theme-${t}`));
-  html.classList.add(`theme-${valid}`);
+  // Bersihkan kelas tema kustom masa lalu agar bersih
+  const obsoleteThemes = ['theme-emerald', 'theme-gold', 'theme-midnight', 'theme-slate', 'theme-paper'];
+  obsoleteThemes.forEach((t) => html.classList.remove(t));
 
   const icon = document.getElementById('themeIcon');
   const label = document.getElementById('themeLabel');
-  const badge = document.getElementById('activeThemeBadge');
+  const badge = document.getElementById('themeModeBadge');
+  const btnDark = document.getElementById('btnThemeDark');
+  const btnLight = document.getElementById('btnThemeLight');
 
-  if (valid === 'paper') {
+  if (isLight) {
     html.classList.remove('dark');
     html.classList.add('light');
     if (icon) icon.textContent = '☀️';
     if (label) label.textContent = 'Terang';
     if (badge) {
-      badge.textContent = 'Clean Paper';
-      badge.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 border border-slate-300';
+      badge.textContent = 'Terang';
+      badge.className = 'text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40';
     }
+    if (btnLight) {
+      btnLight.className = 'py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 border bg-amber-500/20 text-amber-300 border-amber-400/40 shadow-sm';
+    }
+    if (btnDark) {
+      btnDark.className = 'py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 border bg-white/[0.04] text-slate-400 border-white/5 hover:text-white';
+    }
+    localStorage.setItem('smartflow_theme', 'light');
   } else {
     html.classList.remove('light');
     html.classList.add('dark');
     if (icon) icon.textContent = '🌙';
     if (label) label.textContent = 'Gelap';
-
-    const themeMeta = {
-      emerald: { label: 'Emerald Cyber', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30' },
-      gold: { label: 'Obsidian Gold', badgeClass: 'bg-yellow-500/20 text-yellow-300 border-yellow-400/30' },
-      midnight: { label: 'Midnight Blue', badgeClass: 'bg-sky-500/20 text-sky-300 border-sky-400/30' },
-      slate: { label: 'Clean Slate', badgeClass: 'bg-slate-500/20 text-slate-300 border-slate-400/30' },
-    };
-    const meta = themeMeta[valid] || themeMeta.emerald;
     if (badge) {
-      badge.textContent = meta.label;
-      badge.className = `text-[10px] font-mono px-2 py-0.5 rounded-full border ${meta.badgeClass}`;
+      badge.textContent = 'Gelap';
+      badge.className = 'text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
     }
+    if (btnDark) {
+      btnDark.className = 'py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 border bg-emerald-500/20 text-emerald-300 border-emerald-400/40 shadow-sm';
+    }
+    if (btnLight) {
+      btnLight.className = 'py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 border bg-white/[0.04] text-slate-400 border-white/5 hover:text-white';
+    }
+    localStorage.setItem('smartflow_theme', 'dark');
   }
-
-  // Perbarui indikator tombol aktif di modal Pengaturan
-  VALID_THEMES.forEach((t) => {
-    const btn = document.getElementById(`themeBtn-${t}`);
-    if (btn) {
-      if (t === valid) {
-        btn.classList.add('active-theme', 'border-emerald-400', 'shadow-[0_0_12px_rgba(16,185,129,0.25)]');
-        btn.classList.remove('border-white/10');
-      } else {
-        btn.classList.remove('active-theme', 'border-emerald-400', 'shadow-[0_0_12px_rgba(16,185,129,0.25)]');
-        btn.classList.add('border-white/10');
-      }
-    }
-  });
-
-  localStorage.setItem('smartflow_theme', valid);
 
   if (renderChart && typeof renderInspectorChart === 'function' && selectedStockDetail) {
     renderInspectorChart(selectedStockDetail);
@@ -125,19 +114,19 @@ function selectTheme(themeName, renderChart = true) {
   }
 }
 
-function applyTheme(theme) {
-  selectTheme(theme);
+function toggleTheme() {
+  const isLight = document.documentElement.classList.contains('light');
+  setAppTheme(isLight ? 'dark' : 'light');
 }
 
-function toggleTheme() {
-  const current = localStorage.getItem('smartflow_theme') || 'emerald';
-  if (current === 'paper') {
-    const lastDark = localStorage.getItem('smartflow_last_dark_theme') || 'emerald';
-    selectTheme(lastDark);
-  } else {
-    localStorage.setItem('smartflow_last_dark_theme', current);
-    selectTheme('paper');
-  }
+// Fungsi kompatibilitas jika dipanggil dari modul lain
+function selectTheme(themeName, renderChart = true) {
+  const isLight = themeName === 'paper' || themeName === 'light';
+  setAppTheme(isLight ? 'light' : 'dark', renderChart);
+}
+
+function applyTheme(theme) {
+  selectTheme(theme);
 }
 
 initTheme();

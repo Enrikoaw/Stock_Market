@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=85.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=86.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -210,27 +210,36 @@
               </div>
             </button>
 
-            <!-- Toggle Tema & Mini Palette 5 Tema -->
-            <div class="p-1 rounded-xl hover:bg-white/[0.04] transition space-y-1.5">
-              <button
-                id="btnThemeToggle"
-                type="button"
-                onclick="toggleTheme();"
-                class="w-full flex items-center gap-2.5 px-2 py-1 text-slate-200 hover:text-white transition text-left cursor-pointer"
-              >
-                <span id="themeIcon" class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 text-xs">🌙</span>
-                <div class="flex-1">
-                  <div class="font-semibold text-white">Tema Tampilan</div>
-                  <div id="themeDropdownLabel" class="text-[10px] text-slate-400">Beralih Gelap / Terang</div>
+            <!-- Tema Tampilan (Hanya Gelap & Terang) -->
+            <div class="p-2 rounded-xl bg-white/[0.03] border border-white/[0.06] space-y-1.5">
+              <div class="flex items-center justify-between text-[11px]">
+                <div class="flex items-center gap-2">
+                  <span id="themeIcon" class="w-5 h-5 rounded-md bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 text-xs">🌙</span>
+                  <span class="font-semibold text-white">Tema Tampilan</span>
                 </div>
-              </button>
-              <!-- 5 Warna Nuansa Langsung (Tanpa Perlu Modal) -->
-              <div class="flex items-center justify-between px-2 pt-0.5 pb-1 gap-1 border-t border-white/[0.06]">
-                <button type="button" onclick="selectTheme('emerald')" class="w-5 h-5 rounded-full bg-emerald-500 border border-white/20 hover:scale-125 transition" title="Emerald Cyber"></button>
-                <button type="button" onclick="selectTheme('gold')" class="w-5 h-5 rounded-full bg-yellow-400 border border-white/20 hover:scale-125 transition" title="Obsidian Gold"></button>
-                <button type="button" onclick="selectTheme('midnight')" class="w-5 h-5 rounded-full bg-sky-400 border border-white/20 hover:scale-125 transition" title="Midnight Blue"></button>
-                <button type="button" onclick="selectTheme('slate')" class="w-5 h-5 rounded-full bg-slate-400 border border-white/20 hover:scale-125 transition" title="Clean Slate"></button>
-                <button type="button" onclick="selectTheme('paper')" class="w-5 h-5 rounded-full bg-slate-100 border border-slate-400 hover:scale-125 transition" title="Clean Paper (Terang)"></button>
+                <span id="themeModeBadge" class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">Gelap</span>
+              </div>
+              <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+                <button
+                  type="button"
+                  id="btnThemeDark"
+                  onclick="setAppTheme('dark')"
+                  class="py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 border bg-emerald-500/20 text-emerald-300 border-emerald-400/40 shadow-sm"
+                  title="Pilih Tema Gelap"
+                >
+                  <span>🌙</span>
+                  <span>Gelap</span>
+                </button>
+                <button
+                  type="button"
+                  id="btnThemeLight"
+                  onclick="setAppTheme('light')"
+                  class="py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 border bg-white/[0.04] text-slate-400 border-white/5 hover:text-white"
+                  title="Pilih Tema Terang"
+                >
+                  <span>☀️</span>
+                  <span>Terang</span>
+                </button>
               </div>
             </div>
 
@@ -2265,6 +2274,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=85.0"></script>
+  <script src="/static/app.js?v=86.0"></script>
 </body>
 </html>
