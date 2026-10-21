@@ -1667,6 +1667,33 @@ function getTriggerBadgeClass(triggerType) {
   }
 }
 
+const SIGNAL_SHORT_LABEL = {
+  MARKUP_BREAKOUT: 'Breakout',
+  BIG_ACCUMULATION: 'Big Accum',
+  SILENT_ACCUMULATION: 'Silent Accum',
+  FOREIGN_INFLOW: 'Foreign Inflow',
+  DISTRIBUTION_WARNING: 'Distribusi',
+};
+
+// Badge tipe sinyal (Mode Mahir): sinyal hari ini, atau sinyal aktif yang tercatat di Watchlist
+function renderSignalTypeBadge(s) {
+  const today = String(s.trigger_type || '').toUpperCase();
+  const wl = String(s.tracker_trigger_type || '').toUpperCase();
+  const wlActive = ['WATCHLIST', 'RUNNING'].includes(String(s.tracker_status || '').toUpperCase());
+  let code = '';
+  let suffix = '';
+  if (SIGNAL_SHORT_LABEL[today]) {
+    code = today;
+  } else if (wl && wlActive && SIGNAL_SHORT_LABEL[wl]) {
+    code = wl;
+    suffix = ' · WL';
+  }
+  if (!code) return '';
+  const hidden = isExpertMode ? '' : 'hidden';
+  const title = suffix ? `Sinyal ${SIGNAL_SHORT_LABEL[code]} aktif di Watchlist sejak ${s.tracker_signal_date || '-'}` : `Sinyal hari ini: ${SIGNAL_SHORT_LABEL[code]}`;
+  return `<span class="expert-only ${hidden} block mb-1 mx-auto w-fit px-2 py-0.5 rounded-full text-[9px] font-bold ${getTriggerBadgeClass(code)}" title="${escHtml(title)}">${SIGNAL_SHORT_LABEL[code]}${suffix}</span>`;
+}
+
 function getScoreColor(score) {
   if (score >= 76) return 'from-emerald-500 to-teal-400 text-emerald-300';
   if (score >= 64) return 'from-blue-500 to-emerald-400 text-blue-300';
@@ -2032,6 +2059,7 @@ function renderScreenerTable(stocks) {
 
           <!-- Volume Spike Badge & Status Pantauan -->
           <td class="py-3 px-2 text-center font-mono">
+            ${renderSignalTypeBadge(s)}
             <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
               ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
             </span>

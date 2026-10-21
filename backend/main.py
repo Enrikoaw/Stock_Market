@@ -99,6 +99,10 @@ def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> No
         pnl_val = round(((live_close - e_p) / e_p) * 100.0, 2)
 
     item["tracker_status"] = st
+    # Tipe sinyal akumulasi/breakout yang tercatat di Watchlist (agar screener Mode Mahir konsisten dengan Watchlist)
+    if is_active and sig.get("trigger_type"):
+        item["tracker_trigger_type"] = str(sig.get("trigger_type")).upper()
+        item["tracker_trigger_label"] = sig.get("trigger_label") or item["tracker_trigger_type"]
     item["tracker_pnl_pct"] = pnl_val
     item["tracker_entry_price"] = sig.get("entry_price")
     item["tracker_signal_date"] = sig.get("signal_date")
@@ -584,6 +588,27 @@ def _news_catalyst_map(analysis_stocks: list[dict]) -> dict[str, dict]:
     return out
 
 
+ACCUM_TRIGGER_SET = {"MARKUP_BREAKOUT", "BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW"}
+
+
+def _effective_triggers(s: dict) -> set[str]:
+    """Sinyal hari ini + sinyal akumulasi/breakout yang masih aktif di Watchlist (WATCHLIST/RUNNING)."""
+    out = {str(s.get("trigger_type") or "").upper()}
+    tt = s.get("tracker_trigger_type")
+    if tt and str(s.get("tracker_status") or "").upper() in ("WATCHLIST", "RUNNING"):
+        out.add(str(tt).upper())
+    return out
+
+
+def _signal_kpi_counts(stocks: list[dict]) -> dict:
+    markup = sum(1 for s in stocks if "MARKUP_BREAKOUT" in _effective_triggers(s))
+    accum = sum(
+        1 for s in stocks
+        if _effective_triggers(s) & {"BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW"}
+    )
+    return {"markup_triggers": markup, "accum_triggers": accum}
+
+
 def _screener_compute(
     trigger: Optional[str] = "ALL",
     min_score: int = 0,
@@ -607,22 +632,22 @@ def _screener_compute(
         stocks = [s for s in stocks if float(s.get("value_b_idr") or 0) >= min_value_b]
 
     if trigger and isinstance(trigger, str) and trigger.upper() != "ALL":
-        if trigger.upper() == "NEWS_ACCUM":
+        t_up = trigger.upper()
+        if t_up == "NEWS_ACCUM":
             stocks = [
                 s for s in stocks
                 if s.get("news_catalyst")
                 and s["news_catalyst"].get("sentiment") != "NEGATIVE"
                 and s["news_catalyst"].get("code") not in ("SELL_ON_NEWS", "NEGATIVE_CONFIRMED")
-                and s.get("trigger_type") in ("MARKUP_BREAKOUT", "BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW")
+                and _effective_triggers(s) & ACCUM_TRIGGER_SET
             ]
-        elif trigger.upper() == "ACCUM_ALL":
-            stocks = [
-                s
-                for s in stocks
-                if s["trigger_type"] in ("MARKUP_BREAKOUT", "BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW")
-            ]
+        elif t_up == "ACCUM_ALL":
+            stocks = [s for s in stocks if _effective_triggers(s) & ACCUM_TRIGGER_SET]
+        elif t_up == "DISTRIBUTION_WARNING":
+            stocks = [s for s in stocks if s.get("trigger_type") == t_up]
         else:
-            stocks = [s for s in stocks if s["trigger_type"] == trigger.upper()]
+            # Sinyal hari ini ATAU sinyal aktif di Watchlist (Silent/Big Accum, Breakout, Foreign)
+            stocks = [s for s in stocks if t_up in _effective_triggers(s)]
 
     if isinstance(min_score, int) and min_score > 0:
         stocks = [s for s in stocks if s["smart_money_score"] >= min_score]
@@ -682,7 +707,7 @@ def _screener_compute(
         "last_sync_error": STATE.get("last_sync_error"),
         "is_syncing": STATE["is_syncing"],
         "auto_sync_interval_min": STATE["auto_sync_interval_min"],
-        "kpis": analysis["kpis"],
+        "kpis": {**analysis["kpis"], **_signal_kpi_counts(analysis["stocks"])},
         "count": len(stocks),
         "stocks": stocks,
         "today_candidates": today_cands or [],
