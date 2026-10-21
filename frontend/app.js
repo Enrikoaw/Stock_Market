@@ -3430,6 +3430,7 @@ function renderTrackerStats(data) {
 
   // Tab counts
   const counts = {
+    PRIORITY: Math.min(3, s.watchlist || 0),
     ALL: s.total,
     WATCHLIST: s.watchlist,
     RUNNING: s.running,
@@ -3463,9 +3464,10 @@ function renderTrackerTable(rows) {
   if (!tbody) return;
 
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">
-      Belum ada sinyal pada kategori ini. Sinyal akumulasi dengan score tinggi akan otomatis tercatat setelah sinkronisasi data real.
-    </td></tr>`;
+    const emptyMsg = trackerTab === 'PRIORITY'
+      ? 'Belum ada saham antrean yang memenuhi kriteria Top 3 Siap Beli saat ini. Pantau tab Menunggu.'
+      : 'Belum ada sinyal pada kategori ini. Sinyal akumulasi dengan score tinggi akan otomatis tercatat setelah sinkronisasi data real.';
+    tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">${emptyMsg}</td></tr>`;
     return;
   }
 
@@ -3487,11 +3489,36 @@ function renderTrackerTable(rows) {
       const exitOrLast = isClosed && r.exit_price
         ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.exit_date || '')}</div>`
         : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">last</div>`;
-      const entryCell = r.entry_price
-        ? `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.entry_date || '')}</div>`
-        : r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined
-        ? `<span class="text-slate-400 dark:text-slate-500">-</span><div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">jarak ${fmtPctOrDash(r.dist_to_entry_pct)}</div>`
-        : '<span class="text-slate-400 dark:text-slate-500">-</span>';
+
+      let entryCell = '<span class="text-slate-400 dark:text-slate-500">-</span>';
+      if (r.entry_price) {
+        entryCell = `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.entry_date || '')}</div>`;
+      } else if (r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined && r.dist_to_entry_pct !== null) {
+        const distNum = Number(r.dist_to_entry_pct);
+        const absDist = Math.abs(distNum);
+        const distStr = fmtPctOrDash(distNum);
+        if (absDist <= 1.0) {
+          entryCell = `
+            <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>🟢 Siap Beli (${distStr})</span>
+            </div>
+            <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">Dekat Entry Support</div>`;
+        } else if (absDist <= 2.5) {
+          entryCell = `
+            <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span>🟡 Mendekati (${distStr})</span>
+            </div>
+            <div class="text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">Pantau Ketat</div>`;
+        } else {
+          entryCell = `
+            <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
+              <span>⚪ Masih Jauh (${distStr})</span>
+            </div>
+            <div class="text-[10px] text-slate-500 font-medium dark:text-slate-400 mt-0.5">Menunggu Retrace</div>`;
+        }
+      }
 
       let isHighFlyer = false;
       if (r.status === 'RUNNING' && pnl !== null && pnl >= 2.0) {
@@ -3519,6 +3546,7 @@ function renderTrackerTable(rows) {
             <div>
               <div class="font-sans font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 flex items-center gap-1.5 transition">
                 <span>${safeTicker}</span>
+                ${trackerTab === 'PRIORITY' ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500/25 text-amber-300 border border-amber-400/40 tracking-wider">⭐ TOP 3</span>' : ''}
                 ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
                 ${hasDistWarning ? `<span class="text-xs animate-pulse" title="${safeNote}">⚠️</span>` : ''}
               </div>
@@ -3590,6 +3618,12 @@ function setTrackerTab(tab) {
     trackerSortBy = 'pnl_desc';
     const sel = document.getElementById('trackerSortSelect');
     if (sel) sel.value = 'pnl_desc';
+  } else if (tab === 'PRIORITY' || tab === 'WATCHLIST') {
+    if (trackerSortBy === 'pnl_desc' || trackerSortBy === 'pnl_asc') {
+      trackerSortBy = 'distance_asc';
+      const sel = document.getElementById('trackerSortSelect');
+      if (sel) sel.value = 'distance_asc';
+    }
   }
   updateTrackerSortIcons();
   loadTracker();
@@ -3638,6 +3672,32 @@ async function evaluateTracker() {
     if (btn) {
       btn.disabled = false;
       btn.textContent = '⚡ Evaluasi Sekarang';
+    }
+  }
+}
+
+async function cleanupStaleWatchlist() {
+  if (!confirm('Bersihkan antrean saham yang sudah lebih dari 3 hari bursa tidak menyentuh zona beli?\n\nSinyal lama akan diarsipkan ke status EXPIRED agar antrean tetap fokus.')) {
+    return;
+  }
+  const btn = document.getElementById('btnCleanupStaleTracker');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span><span>Membersihkan...</span>';
+  }
+  try {
+    const res = await fetch('/api/tracker/cleanup-stale', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal membersihkan antrean');
+    showToast(data.message || `${data.cleaned} antrean kedaluwarsa berhasil dibersihkan.`, 'success');
+    await loadTracker();
+  } catch (err) {
+    console.error('cleanupStaleWatchlist error:', err);
+    showToast(err.message || 'Gagal membersihkan antrean.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>🧹</span><span>Bersihkan Basi</span>';
     }
   }
 }

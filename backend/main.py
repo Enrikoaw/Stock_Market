@@ -211,6 +211,16 @@ def _process_tracker(analysis: dict, sync_live_network: bool = False, force_auto
 
             # Pencatatan sinyal akumulasi tanpa pembekuan IHSG
             result["added"] = TRACKER.auto_track(analysis)
+
+            # Auto-expire antrean Watchlist yang sudah stale (> 3 hari bursa tanpa kena zona entry)
+            try:
+                latest_dt = analysis.get("kpis", {}).get("latest_date") or datetime.now().strftime("%Y-%m-%d")
+                stale_cleaned = TRACKER.cleanup_stale_watchlist(max_days=3, latest_date=str(latest_dt))
+                if stale_cleaned:
+                    result["expired"] = result.get("expired", 0) + stale_cleaned
+            except Exception as e_stale:
+                print(f"[Tracker] Auto-cleanup stale watchlist error: {e_stale}")
+
             sync_tracker_to_analysis(analysis)
 
         STATE["last_tracker_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1279,10 +1289,21 @@ def tracker_stats() -> dict:
 @app.get("/api/tracker/signals")
 def tracker_signals(
     status: str = Query(default="ALL"),
-    sort_by: str = Query(default="id_desc", description="Urutkan sinyal: pnl_desc, pnl_asc, score_desc, date_desc, ticker_asc"),
+    sort_by: str = Query(default="id_desc", description="Urutkan sinyal: pnl_desc, pnl_asc, score_desc, date_desc, ticker_asc, distance_asc"),
 ) -> dict:
-    rows = TRACKER.list_signals(status=status, sort_by=sort_by)
+    if status.upper() == "PRIORITY":
+        rows = TRACKER.get_priority_watchlist_candidates(limit=3)
+    else:
+        rows = TRACKER.list_signals(status=status, sort_by=sort_by)
     return {"count": len(rows), "signals": rows}
+
+
+@app.post("/api/tracker/cleanup-stale")
+def tracker_cleanup_stale() -> dict:
+    analysis = STATE.get("analysis")
+    ref_dt = analysis.get("kpis", {}).get("latest_date") if analysis else None
+    removed = TRACKER.cleanup_stale_watchlist(max_days=3, latest_date=ref_dt)
+    return {"success": True, "cleaned": removed, "message": f"{removed} sinyal antrean kedaluwarsa berhasil dibersihkan."}
 
 
 @app.post("/api/tracker/add/{ticker}")

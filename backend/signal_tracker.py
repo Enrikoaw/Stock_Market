@@ -218,6 +218,52 @@ class SignalTracker:
                 removed = len(ids_to_cancel)
         return removed
 
+    def cleanup_stale_watchlist(self, max_days: int = 3, latest_date: str | None = None) -> int:
+        """Membatalkan / meng-expire antrean WATCHLIST yang sudah melewati batas antre (default 3 hari bursa)."""
+        removed = 0
+        ref_date = str(latest_date or self.last_final_session_date() or now_wib().strftime("%Y-%m-%d"))
+        with self._lock, self.engine.begin() as conn:
+            rows = conn.execute(
+                select(signals_table).where(signals_table.c.status == "WATCHLIST")
+            ).mappings().all()
+            stale_items: list[tuple[int, float]] = []
+            for r in rows:
+                bw = int(r.get("bars_waited") or 0)
+                sig_dt = str(r.get("signal_date") or "")
+                is_stale = False
+                if bw >= max_days:
+                    is_stale = True
+                elif sig_dt and ref_date and sig_dt != ref_date:
+                    try:
+                        d1 = datetime.strptime(sig_dt, "%Y-%m-%d").date()
+                        d2 = datetime.strptime(ref_date, "%Y-%m-%d").date()
+                        diff_days = (d2 - d1).days
+                        # Jika selisih hari bursa/kalender >= 3 hari
+                        if diff_days >= (max_days + 2 if d2.weekday() < d1.weekday() else max_days):
+                            is_stale = True
+                    except Exception:
+                        pass
+
+                if is_stale:
+                    px = float(r.get("last_close") or r.get("entry_high") or 0)
+                    stale_items.append((int(r["id"]), px))
+
+            for sid, px in stale_items:
+                conn.execute(
+                    update(signals_table)
+                    .where(signals_table.c.id == sid)
+                    .values(
+                        status="EXPIRED",
+                        exit_date=ref_date,
+                        exit_price=px,
+                        pnl_pct=0.0,
+                        note=f"Kedaluwarsa: zona entry tidak tersentuh dalam {max_days} hari bursa.",
+                        updated_at=_now_str(),
+                    )
+                )
+            removed = len(stale_items)
+        return removed
+
     @staticmethod
     def _make_engine(url: str):
         kwargs: dict[str, Any] = {"pool_pre_ping": True}
@@ -926,7 +972,45 @@ class SignalTracker:
             r["entry_price_target"] = e_high
             if r["status"] == "WATCHLIST" and e_high > 0:
                 r["dist_to_entry_pct"] = round((float(r.get("last_close") or 0) - e_high) / e_high * 100.0, 2)
+
+        if sort_by_clean in ("distance_asc", "dist_asc", "dist"):
+            rows.sort(key=lambda x: (abs(float(x.get("dist_to_entry_pct") if x.get("dist_to_entry_pct") is not None else 999.0)), -int(x.get("score") or 0)))
+
         return rows
+
+    def get_priority_watchlist_candidates(self, limit: int = 3) -> list[dict]:
+        """Mengambil Top N antrean WATCHLIST terbaik & paling siap dieksekusi (jarak harga terdekat ke support & diversifikasi sektor)."""
+        all_wl = self.list_signals(status="WATCHLIST", sort_by="date_desc")
+        if not all_wl:
+            return []
+
+        # Urutkan berdasarkan jarak terdekat ke entry price (terdekat ke support), lalu skor SM tertinggi
+        sorted_wl = sorted(
+            all_wl,
+            key=lambda x: (
+                abs(float(x.get("dist_to_entry_pct") if x.get("dist_to_entry_pct") is not None else 999.0)),
+                -int(x.get("score") or 0),
+            )
+        )
+
+        chosen = []
+        seen_sectors = set()
+        for item in sorted_wl:
+            sec = str(item.get("sector") or "General").strip()
+            if sec not in seen_sectors:
+                seen_sectors.add(sec)
+                chosen.append(item)
+            if len(chosen) >= limit:
+                break
+
+        if len(chosen) < limit:
+            for item in sorted_wl:
+                if item not in chosen:
+                    chosen.append(item)
+                if len(chosen) >= limit:
+                    break
+
+        return chosen
 
     def stats(self) -> dict:
         with self.engine.connect() as conn:

@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=88.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=89.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -1312,6 +1312,7 @@
         <!-- Tracker Toolbar: Tabs, Search & Sort -->
         <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
           <div class="flex flex-wrap items-center gap-1.5" id="trackerTabs">
+            <button data-tab="PRIORITY" onclick="setTrackerTab('PRIORITY')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-400/30 flex items-center gap-1">⭐ Top 3 Siap Beli</button>
             <button data-tab="ALL" onclick="setTrackerTab('ALL')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-semibold">Semua Sinyal</button>
             <button data-tab="WATCHLIST" onclick="setTrackerTab('WATCHLIST')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300">Menunggu</button>
             <button data-tab="RUNNING" onclick="setTrackerTab('RUNNING')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300">Berjalan</button>
@@ -1333,6 +1334,7 @@
             <select id="trackerSortSelect" onchange="changeTrackerSort(this.value)" class="px-3 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200">
               <option value="pnl_desc">Urutkan: Profit Tertinggi</option>
               <option value="pnl_asc">Urutkan: Drawdown / Terendah</option>
+              <option value="distance_asc">Urutkan: Jarak Entry Terdekat</option>
               <option value="date_desc">Urutkan: Sinyal Terbaru</option>
               <option value="score_desc">Urutkan: Skor Tertinggi</option>
             </select>
@@ -1344,6 +1346,15 @@
             >
               <span>⚡</span>
               <span>Evaluasi Sekarang</span>
+            </button>
+            <button
+              id="btnCleanupStaleTracker"
+              onclick="cleanupStaleWatchlist()"
+              class="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-400/30 text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
+              title="Bersihkan antrean saham yang sudah kedaluwarsa (> 3 hari bursa tanpa menyentuh zona beli)"
+            >
+              <span>🧹</span>
+              <span>Bersihkan Basi</span>
             </button>
           </div>
         </div>
@@ -2275,6 +2286,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=88.0"></script>
+  <script src="/static/app.js?v=89.0"></script>
 </body>
 </html>
