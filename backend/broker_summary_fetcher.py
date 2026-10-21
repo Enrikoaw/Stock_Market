@@ -27,27 +27,35 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "broker_api_conf
 
 def load_env_file() -> None:
     """Memuat variabel dari file .env di root proyek ke os.environ jika belum disetel."""
-    try:
-        from dotenv import load_dotenv
-        env_file = Path(__file__).resolve().parent.parent / ".env"
-        if env_file.exists():
-            load_dotenv(dotenv_path=env_file)
-            return
-    except Exception:
-        pass
+    root_dir = Path(__file__).resolve().parent.parent
+    possible_paths = [
+        root_dir / ".env",
+        Path.cwd() / ".env",
+        root_dir / ".env.example",  # Fallback jika user mengedit .env.example langsung
+        Path.cwd() / ".env.example",
+    ]
 
-    env_path = Path(__file__).resolve().parent.parent / ".env"
-    if env_path.exists():
+    for p in possible_paths:
+        if not p.exists():
+            continue
         try:
-            with open(env_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
+            with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                for raw_line in f:
+                    line = raw_line.strip()
                     if not line or line.startswith("#") or "=" not in line:
                         continue
+                    if line.startswith("export "):
+                        line = line[7:].strip()
                     key, val = line.split("=", 1)
                     key = key.strip()
+                    # Bersihkan inline comment jika ada (misal KEY=val # komentar)
+                    if "#" in val and not (val.startswith('"') or val.startswith("'")):
+                        val = val.split("#", 1)[0]
                     val = val.strip().strip('"').strip("'")
-                    if key and key not in os.environ:
+                    # Abaikan teks placeholder bawaan template
+                    if "your_invezgo" in val.lower() or "your_api_key" in val.lower():
+                        continue
+                    if key and (key not in os.environ or not os.environ[key].strip()):
                         os.environ[key] = val
         except Exception:
             pass
@@ -57,12 +65,21 @@ def load_broker_api_config() -> dict[str, Any]:
     """Memuat konfigurasi API broker dari .env atau file data/broker_api_config.json."""
     load_env_file()
 
-    invezgo_key = (
-        os.environ.get("INVEZGO_API_KEY", "").strip() or
-        os.environ.get("INVEZGO_TOKEN", "").strip() or
-        os.environ.get("INVESTGO_API_KEY", "").strip() or
-        os.environ.get("INVESTGO_TOKEN", "").strip()
-    )
+    invezgo_key = ""
+    for k in (
+        "INVEZGO_API_KEY",
+        "INVEZGO_TOKEN",
+        "INVEZGO_KEY",
+        "INVESTGO_API_KEY",
+        "INVESTGO_TOKEN",
+        "INVESTGO_KEY",
+        "BROKER_API_KEY",
+        "BROKER_TOKEN",
+    ):
+        v = os.environ.get(k, "").strip()
+        if v and "your_invezgo" not in v.lower() and "your_api_key" not in v.lower():
+            invezgo_key = v
+            break
 
     cfg = {
         "provider": os.environ.get("BROKER_API_PROVIDER", "").strip().lower(),  # invezgo / stockbit / goapi / mock
@@ -78,6 +95,8 @@ def load_broker_api_config() -> dict[str, Any]:
                 saved = json.load(f)
                 if isinstance(saved, dict):
                     cfg.update({k: v for k, v in saved.items() if v is not None})
+                    if not invezgo_key and saved.get("invezgo_api_key"):
+                        cfg["invezgo_api_key"] = saved["invezgo_api_key"].strip()
         except Exception:
             pass
 
@@ -187,12 +206,48 @@ def analyze_broker_summary(top_buyers: list[dict], top_sellers: list[dict]) -> d
 
 def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
     """Mengekstrak list buyer & seller dari berbagai format API (Invezgo, GoAPI, Stockbit, IPOT)."""
-    if not isinstance(payload, dict):
+    if not payload:
         return [], []
 
-    d = payload.get("data", payload) if isinstance(payload.get("data"), dict) else payload
+    # 1. Format Invezgo: list langsung atau dict dengan key "data" yang bertipe list
+    summary_list = None
+    if isinstance(payload, list):
+        summary_list = payload
+    elif isinstance(payload, dict):
+        d_val = payload.get("data")
+        if isinstance(d_val, list):
+            summary_list = d_val
+        elif isinstance(payload.get("summary"), list):
+            summary_list = payload["summary"]
+        elif isinstance(d_val, dict) and isinstance(d_val.get("summary"), list):
+            summary_list = d_val["summary"]
 
-    # Format Stockbit marketdetectors
+    if summary_list is not None:
+        buyers_list = []
+        sellers_list = []
+        for item in summary_list:
+            if not isinstance(item, dict):
+                continue
+            code = str(item.get("code") or item.get("broker_code") or "").strip().upper()
+            if len(code) != 2 or not code.isalpha():
+                continue
+            nv = float(item.get("net_value") or item.get("net_val") or 0.0)
+            bv = float(item.get("buy_value") or 0.0)
+            sv = float(item.get("sell_value") or 0.0)
+            b_avg = float(item.get("buy_avg") or item.get("avg_price") or 0.0)
+            s_avg = float(item.get("sell_avg") or item.get("avg_price") or 0.0)
+
+            if nv > 0 or (nv == 0 and bv > sv):
+                buyers_list.append({"code": code, "net_val": abs(nv) if nv != 0 else bv, "avg_price": b_avg, "name": item.get("name", "")})
+            elif nv < 0 or (nv == 0 and sv > bv):
+                sellers_list.append({"code": code, "net_val": abs(nv) if nv != 0 else sv, "avg_price": s_avg, "name": item.get("name", "")})
+
+        buyers_list.sort(key=lambda x: x["net_val"], reverse=True)
+        sellers_list.sort(key=lambda x: x["net_val"], reverse=True)
+        return buyers_list, sellers_list
+
+    # 2. Format Stockbit & GoAPI
+    d = payload.get("data", payload) if isinstance(payload, dict) else payload
     bd = d.get("bandar_detector") if isinstance(d, dict) and isinstance(d.get("bandar_detector"), dict) else (d if isinstance(d, dict) else {})
 
     buyers = (
@@ -223,25 +278,6 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
     if not buyers and isinstance(bd.get("top3"), dict):
         buyers = bd["top3"].get("buyer") or bd["top3"].get("buyers") or []
         sellers = bd["top3"].get("seller") or bd["top3"].get("sellers") or []
-
-    # Format Invezgo summary array (seluruh broker dengan net_value, buy_avg, sell_avg)
-    if not buyers and isinstance(d.get("summary"), list):
-        summary_list = d["summary"]
-        b_list = []
-        s_list = []
-        for item in summary_list:
-            if not isinstance(item, dict):
-                continue
-            nv = float(item.get("net_value") or item.get("net_val") or 0.0)
-            t = str(item.get("type") or "").lower()
-            if nv > 0 or t == "buyer":
-                b_list.append(item)
-            elif nv < 0 or t == "seller":
-                s_list.append(item)
-        b_list.sort(key=lambda x: abs(float(x.get("net_value") or x.get("net_val") or x.get("buy_value") or 0.0)), reverse=True)
-        s_list.sort(key=lambda x: abs(float(x.get("net_value") or x.get("net_val") or x.get("sell_value") or 0.0)), reverse=True)
-        buyers = b_list
-        sellers = s_list
 
     def _extract_code(item: dict) -> str:
         for k in ("broker_code", "broker", "code", "brokerCode", "b_code", "symbol"):
@@ -277,17 +313,17 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
     return norm_buyers, norm_sellers
 
 
-def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str) -> dict[str, Any] | None:
+def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str) -> list | dict[str, Any] | None:
     """
     Mengambil data broker summary via API resmi Invezgo:
-    GET https://api.invezgo.com/analysis/summary/stock/{code}?from_date={date_str}&to_date={date_str}&investor=all&market=RG
+    GET https://api.invezgo.com/analysis/summary/stock/{code}?from={date_str}&to={date_str}&investor=all&market=RG
     """
     if not api_key:
         return None
 
     clean_key = api_key.replace("Bearer ", "").strip()
     clean_ticker = ticker.upper().strip()
-    url = f"https://api.invezgo.com/analysis/summary/stock/{clean_ticker}?from_date={date_str}&to_date={date_str}&investor=all&market=RG"
+    url = f"https://api.invezgo.com/analysis/summary/stock/{clean_ticker}?from={date_str}&to={date_str}&investor=all&market=RG"
     headers = {
         "Authorization": f"Bearer {clean_key}",
         "User-Agent": "SmartFlowIDX/93.0",
@@ -297,7 +333,9 @@ def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str) -> di
     try:
         with urllib.request.urlopen(req, timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            if data.get("status") in ("success", 200, True) or "data" in data:
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
                 return data.get("data", data)
     except urllib.error.HTTPError as ex:
         print(f"[InvezgoAPI] HTTP {ex.code} fetch {clean_ticker} ({date_str}): {ex.reason}")
@@ -358,9 +396,17 @@ def test_broker_connection(provider: str = "invezgo", token_or_key: str | None =
             token_or_key = cfg.get("goapi_key", "")
 
     if not token_or_key:
+        root_dir = Path(__file__).resolve().parent.parent
+        env_exists = (root_dir / ".env").exists()
+        example_exists = (root_dir / ".env.example").exists()
         return {
             "success": False,
-            "error": f"Token/API Key {provider_clean.upper()} belum disetel di .env. Pastikan INVEZGO_API_KEY sudah diisi di file .env.",
+            "error": (
+                f"Token/API Key {provider_clean.upper()} belum terbaca atau masih teks placeholder.\n"
+                f"- Status file .env: {'Ditemukan' if env_exists else 'TIDAK DITEMUKAN'}\n"
+                f"- Status file .env.example: {'Ditemukan' if example_exists else 'TIDAK DITEMUKAN'}\n"
+                f"Tips: Jika token dimasukkan di .env.example, salin ke .env dengan: cp .env.example .env"
+            ),
         }
 
     dates_to_try = []
