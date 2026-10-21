@@ -342,9 +342,26 @@ def fetch_broker_summary_stockbit(ticker: str, date_str: str, bearer_token: str)
     return None
 
 
-def test_broker_connection(provider: str, token_or_key: str, ticker: str = "BBCA") -> dict[str, Any]:
+def test_broker_connection(provider: str = "invezgo", token_or_key: str | None = None, ticker: str = "BBCA") -> dict[str, Any]:
     """Menguji koneksi ke endpoint Broker API (Invezgo / Stockbit / GoAPI) dengan 1 ticker tes."""
     from datetime import datetime, timedelta
+
+    cfg = load_broker_api_config()
+    provider_clean = (provider or cfg.get("provider", "invezgo")).strip().lower()
+
+    if not token_or_key:
+        if provider_clean == "invezgo":
+            token_or_key = cfg.get("invezgo_api_key", "")
+        elif provider_clean == "stockbit":
+            token_or_key = cfg.get("stockbit_token", "")
+        else:
+            token_or_key = cfg.get("goapi_key", "")
+
+    if not token_or_key:
+        return {
+            "success": False,
+            "error": f"Token/API Key {provider_clean.upper()} belum disetel di .env. Pastikan INVEZGO_API_KEY sudah diisi di file .env.",
+        }
 
     dates_to_try = []
     now = datetime.now()
@@ -353,7 +370,6 @@ def test_broker_connection(provider: str, token_or_key: str, ticker: str = "BBCA
         if dt.weekday() < 5:
             dates_to_try.append(dt.strftime("%Y-%m-%d"))
 
-    provider_clean = (provider or "invezgo").strip().lower()
     raw = None
     last_err = ""
     used_date = ""
