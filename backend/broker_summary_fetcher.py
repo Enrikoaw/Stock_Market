@@ -816,3 +816,174 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
                 s["trading_plan"]["support_label"] = "Support Avg Bandar"
 
     return s
+
+
+def filter_and_purge_watchlist_by_smart_money(
+    tracker: Any,
+    analysis: dict[str, Any] | None = None,
+    date_str: str | None = None,
+    cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Menyeleksi seluruh sinyal antrean 'WATCHLIST' (Menunggu) dengan uji X-Ray Smart Money Invezgo Broker Summary.
+    Kriteria Eliminasi:
+    1. Terdeteksi Retail Trap (sekuritas ritel menampung jualan sekuritas institusi).
+    2. BDR < 3.0% (Distribusi / tidak ada dominasi akumulasi).
+    3. Mayoritas pembeli adalah sekuritas ritel (>= 2 dari Top 3 Buyer adalah sekuritas ritel YP, PD, XC, XL, KK, NI, SQ, BQ).
+    4. Tidak ada satupun sekuritas institusi di Top 3 Buyer dan BDR < 10.0%.
+
+    Saham yang tidak memenuhi kriteria di atas langsung DIHAPUS dari Watchlist.
+    Saham yang lolos diperbarui dengan catatan konfirmasi smart money dan level antre entry rata-rata bandar.
+    """
+    config = cfg or load_broker_api_config()
+    provider = config.get("provider", "invezgo")
+    token = config.get("invezgo_api_key") or config.get("stockbit_token") or config.get("goapi_key")
+    if not token:
+        print("[SmartPurge] Token API broker belum disetel. Melewati filter eliminasi ritel.")
+        return {"total": 0, "retained": [], "eliminated": [], "message": "Token API broker tidak ditemukan."}
+
+    from datetime import datetime, timedelta
+    dates_to_try = [date_str] if date_str else []
+    now = datetime.now()
+    for d in range(5):
+        dt = (now - timedelta(days=d)).strftime("%Y-%m-%d")
+        if dt not in dates_to_try:
+            dates_to_try.append(dt)
+
+    wl_signals = tracker.list_signals(status="WATCHLIST")
+    if not wl_signals:
+        print("[SmartPurge] Tidak ada sinyal WATCHLIST yang sedang menunggu.")
+        return {"total": 0, "retained": [], "eliminated": []}
+
+    print(f"[SmartPurge] Memulai audit Smart Money untuk {len(wl_signals)} saham antrean Watchlist...")
+
+    details_map = analysis.get("details", {}) if analysis else {}
+    eliminated = []
+    retained = []
+
+    for s in wl_signals:
+        ticker = str(s.get("ticker", "")).upper().strip()
+        sig_id = s.get("id")
+        if not ticker:
+            continue
+
+        metrics = None
+        top_buyers = []
+        top_sellers = []
+
+        # Cek apakah sudah ada di details_map dengan data real
+        if details_map and ticker in details_map and details_map[ticker].get("has_real_broker_summary"):
+            d_item = details_map[ticker]
+            metrics = d_item.get("broker_analysis")
+            top_buyers = d_item.get("top_buyers_list", [])
+            top_sellers = d_item.get("top_sellers_list", [])
+
+        # Jika belum ada data real, fetch langsung ke Invezgo API
+        if not metrics or not top_buyers:
+            time.sleep(max(0.2, config.get("delay_ms", 300) / 1000.0))
+            raw_data = None
+            for dt_c in dates_to_try:
+                try:
+                    if provider == "invezgo" and config.get("invezgo_api_key"):
+                        raw_data = fetch_broker_summary_invezgo(ticker, dt_c, config["invezgo_api_key"])
+                    elif provider == "stockbit" and config.get("stockbit_token"):
+                        raw_data = fetch_broker_summary_stockbit(ticker, dt_c, config["stockbit_token"])
+                    elif provider == "goapi" and config.get("goapi_key"):
+                        raw_data = fetch_broker_summary_goapi(ticker, dt_c, config["goapi_key"])
+                    if raw_data:
+                        break
+                except Exception as ex:
+                    print(f"[SmartPurge] Error fetch {ticker} on {dt_c}: {ex}")
+
+            if raw_data:
+                b_list, s_list = extract_brokers_from_payload(raw_data)
+                metrics = analyze_broker_summary(b_list, s_list)
+                top_buyers = [b["code"] for b in b_list[:3]]
+                top_sellers = [s["code"] for s in s_list[:3]]
+
+                # Update detail & stock di analysis jika ada
+                if details_map and ticker in details_map:
+                    details_map[ticker]["broker_analysis"] = metrics
+                    details_map[ticker]["has_broker_summary"] = True
+                    details_map[ticker]["has_real_broker_summary"] = True
+                    details_map[ticker]["bdr_pct"] = metrics["bdr"]
+                    details_map[ticker]["top_buyers_list"] = top_buyers
+                    details_map[ticker]["top_sellers_list"] = top_sellers
+                    details_map[ticker]["top_buyers"] = ", ".join(top_buyers)
+                    details_map[ticker]["top_sellers"] = ", ".join(top_sellers)
+                    if metrics.get("bandar_avg"):
+                        details_map[ticker]["bandar_avg_buy"] = metrics["bandar_avg"]
+
+        if not metrics:
+            print(f"[SmartPurge] {ticker}: Tidak ada data broker summary dari API. Dieliminasi demi kehati-hatian.")
+            tracker.delete_signal(sig_id)
+            eliminated.append({"ticker": ticker, "reason": "Data API Broker Kosong / Tidak Tersedia", "bdr": 0.0})
+            continue
+
+        bdr = float(metrics.get("bdr", 0.0))
+        is_retail_trap = bool(metrics.get("retail_trap", False))
+        retail_count = sum(1 for c in top_buyers if c in RETAIL_BROKERS)
+        inst_count = sum(1 for c in top_buyers if c in INST_FOREIGN_BROKERS)
+        bandar_avg = metrics.get("bandar_avg")
+
+        # Logika Eliminasi:
+        reason_elim = None
+        if is_retail_trap:
+            reason_elim = f"Jebakan Ritel / Ritel Trap (Buyer: {', '.join(top_buyers)}, Seller: {', '.join(top_sellers)})"
+        elif bdr < 3.0:
+            reason_elim = f"Distribusi / BDR Rendah ({bdr:.1f}%)"
+        elif retail_count >= 2:
+            reason_elim = f"Pembeli didominasi broker ritel ({retail_count} dari 3: {', '.join(top_buyers)})"
+        elif inst_count == 0 and bdr < 10.0:
+            reason_elim = f"Tidak ada jejak broker institusi di Top 3 Buyer ({', '.join(top_buyers)})"
+
+        if reason_elim:
+            print(f"[SmartPurge] [ELIMINASI] {ticker} DIELIMINASI DARI WATCHLIST -> {reason_elim}")
+            tracker.delete_signal(sig_id)
+            eliminated.append({
+                "ticker": ticker,
+                "reason": reason_elim,
+                "bdr": bdr,
+                "buyers": top_buyers,
+                "sellers": top_sellers,
+            })
+            # Bersihkan juga dari today_candidates jika ada
+            if analysis and "today_candidates" in analysis:
+                analysis["today_candidates"] = [c for c in analysis["today_candidates"] if str(c.get("ticker", "")).upper() != ticker]
+        else:
+            # Saham LOLOS kriteria Smart Money!
+            print(f"[SmartPurge] [LOLOS] {ticker} LOLOS SMART MONEY (BDR: +{bdr:.1f}%, Buyer: {', '.join(top_buyers)}, Bandar Avg: {bandar_avg})")
+            upd_values = {
+                "score": min(100, max(5, int(s.get("score", 70) + metrics.get("score_modifier", 10)))),
+                "note": f"Smart Money Terkonfirmasi: BDR +{bdr:.1f}% (Buyer: {', '.join(top_buyers)}) · Avg Bandar: Rp {bandar_avg or '-'}",
+            }
+            if bandar_avg and bandar_avg > 0:
+                upd_values["entry_low"] = float(bandar_avg)
+                upd_values["entry_high"] = float(bandar_avg)
+                upd_values["entry_price"] = float(bandar_avg)
+
+            try:
+                from sqlalchemy import update
+                from signal_tracker import signals_table, _now_str
+                upd_values["updated_at"] = _now_str()
+                with tracker._lock, tracker.engine.begin() as conn:
+                    conn.execute(update(signals_table).where(signals_table.c.id == sig_id).values(**upd_values))
+            except Exception as ex:
+                print(f"[SmartPurge] Warning update signal {ticker}: {ex}")
+
+            retained.append({
+                "ticker": ticker,
+                "bdr": bdr,
+                "buyers": top_buyers,
+                "sellers": top_sellers,
+                "bandar_avg": bandar_avg,
+            })
+
+    print(f"[SmartPurge] Selesai. {len(retained)} saham lolos Smart Money, {len(eliminated)} saham ritel/distribusi dihapus dari Watchlist.")
+    return {
+        "total_initial": len(wl_signals),
+        "retained_count": len(retained),
+        "eliminated_count": len(eliminated),
+        "retained": retained,
+        "eliminated": eliminated,
+    }

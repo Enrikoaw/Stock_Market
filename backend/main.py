@@ -44,6 +44,7 @@ from broker_summary_fetcher import (
     filter_stage1_funnel_candidates,
     run_stage2_broker_enrichment,
     enrich_candidates_and_watchlist,
+    filter_and_purge_watchlist_by_smart_money,
     test_broker_connection,
     enrich_single_stock_broker,
 )
@@ -285,6 +286,17 @@ def _run_sync_job_blocking() -> dict:
             cfg=broker_cfg,
             max_total_candidates=broker_cfg.get("max_candidates", 35),
         )
+
+        # Audit Smart Money & Eliminasi sinyal Watchlist yang didominasi ritel / distribusi
+        try:
+            filter_and_purge_watchlist_by_smart_money(
+                TRACKER,
+                analysis=analysis,
+                date_str=str(latest_dt),
+                cfg=broker_cfg,
+            )
+        except Exception as exc:
+            print(f"[Sync] Warning purge retail watchlist: {exc}")
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["source_name"] = f"Live IDX ({latest_dt})"
@@ -873,13 +885,12 @@ def get_news_endpoint(
 
 
 def _has_real_broker_codes(item: dict) -> bool:
+    if not item.get("has_real_broker_summary"):
+        return False
     buyers = item.get("top_buyers_list") or item.get("top_buyers") or []
     if isinstance(buyers, str):
         buyers = [b.strip() for b in buyers.split(",") if b.strip()]
-    for b in buyers:
-        if len(b) == 2 and b.isalpha() and b.isupper():
-            return True
-    return False
+    return bool(buyers)
 
 
 @app.get("/api/stock/{ticker}")
@@ -1354,6 +1365,20 @@ def tracker_cleanup_stale() -> dict:
     ref_dt = analysis.get("kpis", {}).get("latest_date") if analysis else None
     removed = TRACKER.cleanup_stale_watchlist(max_days=3, latest_date=ref_dt)
     return {"success": True, "cleaned": removed, "message": f"{removed} sinyal antrean kedaluwarsa berhasil dibersihkan."}
+
+
+@app.post("/api/tracker/purge-retail-watchlist")
+def tracker_purge_retail_watchlist() -> dict:
+    """Audit & seleksi seluruh sinyal Watchlist (Menunggu) menggunakan Invezgo Broker Summary.
+    Saham yang didominasi ritel atau distribusi langsung dihapus dari Watchlist."""
+    cfg = load_broker_api_config()
+    latest_dt = STATE.get("analysis", {}).get("kpis", {}).get("latest_date") if STATE.get("analysis") else None
+    res = filter_and_purge_watchlist_by_smart_money(TRACKER, analysis=STATE.get("analysis"), date_str=latest_dt, cfg=cfg)
+    return {
+        "success": True,
+        "message": f"Audit Smart Money selesai: {res.get('retained_count', 0)} saham lolos akumulasi, {res.get('eliminated_count', 0)} saham ritel/distribusi dihapus.",
+        "data": res,
+    }
 
 
 @app.post("/api/tracker/add/{ticker}")

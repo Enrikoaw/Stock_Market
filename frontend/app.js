@@ -4094,6 +4094,32 @@ async function cleanupStaleWatchlist() {
   }
 }
 
+async function purgeRetailWatchlist() {
+  if (!confirm('Audit antrean Watchlist dengan Broker Summary Invezgo?\n\nSaham yang terdeteksi distribusi atau didominasi ritel akan otomatis dihapus agar antrean hanya menyisakan saham yang diakumulasi Smart Money.')) {
+    return;
+  }
+  const btn = document.getElementById('btnPurgeRetailWatchlist');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>Memfilter...</span>';
+  }
+  try {
+    const res = await fetch('/api/tracker/purge-retail-watchlist', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal memfilter watchlist');
+    showToast(data.message || 'Audit Smart Money selesai!', 'success');
+    await loadTracker();
+  } catch (err) {
+    console.error('purgeRetailWatchlist error:', err);
+    showToast(err.message || 'Gagal memfilter watchlist.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>Filter Broksum</span>';
+    }
+  }
+}
+
 async function resetTracker() {
   if (!confirm('Hapus SEMUA catatan Watchlist/Running/Win/Loss dan mulai uji dari nol?')) return;
   const res = await fetch('/api/tracker/reset', { method: 'POST' });

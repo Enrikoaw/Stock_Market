@@ -88,6 +88,16 @@ def main() -> None:
                 cfg=broker_cfg,
                 max_total_candidates=broker_cfg.get("max_candidates", 35),
             )
+
+            # Seleksi & Eliminasi Sinyal Watchlist yang Didominasi Ritel / Distribusi
+            from broker_summary_fetcher import filter_and_purge_watchlist_by_smart_money
+            purge_res = filter_and_purge_watchlist_by_smart_money(
+                tracker,
+                analysis=analysis,
+                date_str=str(latest_dt),
+                cfg=broker_cfg,
+            )
+            print(f"[AutoMarketSync] Audit Smart Money Watchlist: {purge_res.get('retained_count')} lolos, {purge_res.get('eliminated_count')} ritel/distribusi dihapus.")
     except Exception as exc:
         print(f"[AutoMarketSync] Warning: Gagal enrichment broker summary: {exc}")
 
