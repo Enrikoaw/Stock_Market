@@ -832,6 +832,15 @@ function getWhyCandidateReason(s) {
     });
   }
 
+  // Broker Buyer Teratas
+  const topB = s.top_buyers_list && s.top_buyers_list.length ? s.top_buyers_list.slice(0, 2).join(', ') : (s.top_buyers ? s.top_buyers.split(',').slice(0, 2).map(x => x.trim()).join(', ') : '');
+  if (topB && reasons.length < 2) {
+    reasons.push({
+      text: `Buyer: ${topB}`,
+      color: 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800/40'
+    });
+  }
+
   // 5. Setup Teknikal: Koreksi Sehat / Breakout
   const chg = Number(s.pct_change || 0);
   if (chg <= 0.5 && chg >= -3.5 && reasons.length < 2) {
@@ -2244,13 +2253,186 @@ async function loadStockNewsCatalyst(ticker) {
         <span class="font-mono text-[10px]">${escHtml(n.source || '')} · ${escHtml(n.published_at || '')}</span>
         ${n.link ? `<a href="${escHtml(n.link)}" target="_blank" rel="noopener noreferrer" class="block text-slate-200 hover:text-white underline-offset-2 hover:underline">${escHtml(n.title || '')}</a>` : `<span class="block text-slate-200">${escHtml(n.title || '')}</span>`}
       </div>`).join('');
+    if (selectedStockDetail && selectedStockDetail.ticker === ticker) {
+      renderStockBroksum(selectedStockDetail);
+    }
   } catch (e) {
     badge.textContent = 'Data berita tidak tersedia';
     if (factorsEl) factorsEl.innerHTML = '';
     if (noteEl) noteEl.textContent = '';
     if (newsEl) newsEl.innerHTML = '';
+    if (selectedStockDetail && selectedStockDetail.ticker === ticker) {
+      renderStockBroksum(selectedStockDetail);
+    }
   }
 }
+
+function renderStockBroksum(d) {
+  const container = document.getElementById('snc-broksum');
+  if (!container) return;
+
+  if (!d) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const bdr = d.bdr_pct != null ? Number(d.bdr_pct) : (d.broker_analysis && d.broker_analysis.bdr != null ? Number(d.broker_analysis.bdr) : null);
+  const topBuyers = d.top_buyers_list && d.top_buyers_list.length ? d.top_buyers_list : (d.top_buyers ? d.top_buyers.split(',').map(s => s.trim()).filter(Boolean) : []);
+  const topSellers = d.top_sellers_list && d.top_sellers_list.length ? d.top_sellers_list : (d.top_sellers ? d.top_sellers.split(',').map(s => s.trim()).filter(Boolean) : []);
+  const bandarAvg = d.bandar_avg_buy || (d.broker_analysis ? d.broker_analysis.bandar_avg : null);
+  const isRetailTrap = Boolean(d.retail_trap || (d.broker_analysis && d.broker_analysis.retail_trap));
+  const hasBrokData = Boolean(d.has_real_broker_summary || topBuyers.length > 0 || topSellers.length > 0 || bdr !== null);
+
+  if (!hasBrokData) {
+    container.innerHTML = `
+      <div class="p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-white/10 flex items-center justify-between gap-2">
+        <div class="text-[11px] text-slate-600 dark:text-slate-400">
+          <span class="font-semibold text-slate-900 dark:text-white">Broker Summary:</span> Belum diambil untuk ${escHtml(d.ticker)}
+        </div>
+        <button id="btnFetchSingleBroksum" onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}')" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95 transition shadow-sm">
+          Ambil Broksum
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  // Status Badge
+  let statusBadgeHtml = '';
+  if (isRetailTrap) {
+    statusBadgeHtml = `<span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">DISTRIBUSI / RITEL TRAP</span>`;
+  } else if (bdr !== null && bdr >= 25.0) {
+    statusBadgeHtml = `<span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">AKUMULASI BESAR (+${bdr.toFixed(1)}%)</span>`;
+  } else if (bdr !== null && bdr >= 10.0) {
+    statusBadgeHtml = `<span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">AKUMULASI (+${bdr.toFixed(1)}%)</span>`;
+  } else if (bdr !== null && bdr <= -15.0) {
+    statusBadgeHtml = `<span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">DISTRIBUSI (${bdr.toFixed(1)}%)</span>`;
+  } else {
+    const bdrText = bdr !== null ? `${bdr >= 0 ? '+' : ''}${bdr.toFixed(1)}%` : '-';
+    statusBadgeHtml = `<span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">NETRAL (${bdrText})</span>`;
+  }
+
+  const INST_BROKERS = new Set(["AK", "BK", "ZP", "KZ", "RX", "YU", "CC", "CS", "MG", "DX", "LG", "OD"]);
+  const RETAIL_BROKERS = new Set(["YP", "PD", "XC", "XL", "KK", "NI", "SQ", "BQ"]);
+
+  const buyersPillsHtml = topBuyers.length
+    ? topBuyers.map(code => {
+        const c = String(code).toUpperCase().trim();
+        const isInst = INST_BROKERS.has(c);
+        const isRtl = RETAIL_BROKERS.has(c);
+        const tag = isInst ? '<span class="text-[8px] opacity-75 font-normal">Inst</span>' : isRtl ? '<span class="text-[8px] opacity-75 font-normal">Rtl</span>' : '';
+        return `<span class="px-1.5 py-0.5 rounded font-mono font-bold text-[11px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 inline-flex items-center gap-1">${escHtml(c)}${tag}</span>`;
+      }).join(' ')
+    : '<span class="text-slate-400 text-[10px]">-</span>';
+
+  const sellersPillsHtml = topSellers.length
+    ? topSellers.map(code => {
+        const c = String(code).toUpperCase().trim();
+        const isInst = INST_BROKERS.has(c);
+        const isRtl = RETAIL_BROKERS.has(c);
+        const tag = isInst ? '<span class="text-[8px] opacity-75 font-normal">Inst</span>' : isRtl ? '<span class="text-[8px] opacity-75 font-normal">Rtl</span>' : '';
+        return `<span class="px-1.5 py-0.5 rounded font-mono font-bold text-[11px] bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25 inline-flex items-center gap-1">${escHtml(c)}${tag}</span>`;
+      }).join(' ')
+    : '<span class="text-slate-400 text-[10px]">-</span>';
+
+  // Distance from Bandar Avg
+  let bandarDiffHtml = '';
+  if (bandarAvg && d.close) {
+    const diff = Number(((d.close - bandarAvg) / bandarAvg * 100).toFixed(1));
+    const isDisc = diff < 0;
+    bandarDiffHtml = `<span class="text-[10px] font-mono ${isDisc ? 'text-teal-600 dark:text-teal-400' : 'text-emerald-600 dark:text-emerald-400'} font-semibold">(${diff >= 0 ? '+' : ''}${diff}% vs Close)</span>`;
+  }
+
+  // Verdict note
+  let verdictNote = '';
+  if (isRetailTrap) {
+    verdictNote = 'Awas Ritel Trap: Sekuritas ritel menampung jualan institusi/asing. Hindari spekulasi atau tunggu konfirmasi bantalan support.';
+  } else if (bdr !== null && bdr >= 15.0) {
+    verdictNote = 'Smart money institusi mengakumulasi bersih secara masif. Katalis kuat yang mengonfirmasi zona antre support.';
+  } else if (bdr !== null && bdr >= 5.0) {
+    verdictNote = 'Terdeteksi akumulasi awal broker institusi. Disiplin antre di harga support rencana eksekusi.';
+  } else {
+    verdictNote = 'Aktivitas broker seimbang. Keputusan tetap disiplin mengacu pada harga support dan batasan risiko trading plan.';
+  }
+
+  container.innerHTML = `
+    <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-white/[0.08] space-y-2">
+      <!-- Header Broksum -->
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[11px] font-bold text-slate-900 dark:text-white tracking-wide">Broker Summary (Bandarmology)</span>
+          <span class="text-[9px] font-mono px-1.5 py-0.2 rounded text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-white/5">Top 3</span>
+        </div>
+        ${statusBadgeHtml}
+      </div>
+
+      <!-- Top 3 Buyer vs Seller Grid -->
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div class="p-2 rounded-lg bg-white dark:bg-slate-900/50 border border-emerald-500/20">
+          <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mb-1 flex items-center justify-between">
+            <span>Top 3 Buyer</span>
+            <span class="font-mono text-[9px] text-emerald-500/70">Akumulasi</span>
+          </div>
+          <div class="flex items-center gap-1 flex-wrap">
+            ${buyersPillsHtml}
+          </div>
+        </div>
+
+        <div class="p-2 rounded-lg bg-white dark:bg-slate-900/50 border border-rose-500/20">
+          <div class="text-[10px] text-rose-600 dark:text-rose-400 font-semibold mb-1 flex items-center justify-between">
+            <span>Top 3 Seller</span>
+            <span class="font-mono text-[9px] text-rose-500/70">Distribusi</span>
+          </div>
+          <div class="flex items-center gap-1 flex-wrap">
+            ${sellersPillsHtml}
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Bandar & BDR Ratio Row -->
+      <div class="flex items-center justify-between text-[11px] px-0.5 text-slate-600 dark:text-slate-300">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <span class="text-slate-400 text-[10px]">Modal Bandar:</span>
+          <span class="font-mono font-bold text-slate-900 dark:text-white">${bandarAvg ? 'Rp ' + fmtPrice(bandarAvg) : '-'}</span>
+          ${bandarDiffHtml}
+        </div>
+        <div class="font-mono font-semibold text-[10px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
+          BDR: <span class="${bdr !== null && bdr >= 10 ? 'text-emerald-500 font-bold' : bdr !== null && bdr <= -10 ? 'text-rose-500 font-bold' : 'text-slate-300'}">${bdr !== null ? (bdr >= 0 ? '+' : '') + bdr.toFixed(1) + '%' : '-'}</span>
+        </div>
+      </div>
+
+      <p class="text-[10px] text-slate-500 dark:text-slate-400 leading-tight pt-0.5 border-t border-slate-200/50 dark:border-white/[0.04]">
+        ${escHtml(verdictNote)}
+      </p>
+    </div>
+  `;
+}
+
+window.fetchBrokerSummaryForSelected = async function(ticker) {
+  const btn = document.getElementById('btnFetchSingleBroksum');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Mengambil...';
+  }
+  try {
+    const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}/fetch-broker`, { method: 'POST' });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Gagal mengambil data broker');
+    }
+    const updated = await res.json();
+    selectedStockDetail = updated;
+    renderInspectorPanel(updated);
+    renderStockBroksum(updated);
+    showToast(`Broker summary #${ticker} berhasil diperbarui!`, 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Ambil Broksum';
+    }
+  }
+};
 
 async function selectStock(ticker, isUserClick = false, scrollToTradingPlan = false) {
   selectedTicker = ticker;
@@ -2517,6 +2699,7 @@ function renderInspectorPanel(d) {
   }
 
   renderInspectorChart(d);
+  renderStockBroksum(d);
 }
 
 function switchChartTab(tabName) {
@@ -3646,6 +3829,11 @@ function renderTrackerTable(rows) {
               <span>${safeTriggerLabel}</span>
               <span class="font-mono font-extrabold text-slate-900 dark:text-white">${escHtml(r.score ?? '-')}</span>
             </span>
+            ${(r.bdr_pct != null || r.top_buyers) ? `
+              <div class="mt-1 flex items-center gap-1.5 text-[9px] font-mono text-slate-500 dark:text-slate-400">
+                <span class="px-1.5 py-0.2 rounded font-bold ${r.bdr_pct >= 10 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' : r.bdr_pct <= -10 ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30' : 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border border-slate-400/20'}">BDR ${r.bdr_pct != null ? (r.bdr_pct >= 0 ? '+' : '') + Number(r.bdr_pct).toFixed(1) + '%' : ''}</span>
+                ${r.top_buyers ? `<span class="truncate max-w-[120px] font-semibold text-emerald-600 dark:text-emerald-400">Buyer: ${escHtml(r.top_buyers)}</span>` : ''}
+              </div>` : ''}
           </td>
 
           <!-- Tanggal & Waktu Sinyal -->
@@ -3783,6 +3971,16 @@ function renderTrackerTable(rows) {
                 ${safeSignalDate} · ${escHtml(formatSignalTime(r.created_at))}
               </span>
             </div>
+
+            <!-- Broksum Metrics on Mobile if Available -->
+            ${(r.bdr_pct != null || r.top_buyers) ? `
+              <div class="flex items-center justify-between text-[10px] font-mono px-0.5">
+                <span class="inline-flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                  <span class="text-slate-400 text-[9px]">BDR:</span>
+                  <strong class="${r.bdr_pct >= 10 ? 'text-emerald-600 dark:text-emerald-400' : r.bdr_pct <= -10 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}">${(r.bdr_pct >= 0 ? '+' : '') + Number(r.bdr_pct).toFixed(1)}%</strong>
+                </span>
+                ${r.top_buyers ? `<span class="truncate max-w-[150px] text-slate-500 dark:text-slate-400">Buyer: <strong class="text-emerald-600 dark:text-emerald-400">${escHtml(r.top_buyers)}</strong></span>` : ''}
+              </div>` : ''}
 
             <!-- Bottom Line: Price Matrix (3 columns) -->
             <div class="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 dark:border-white/[0.06] text-center">

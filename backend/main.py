@@ -43,6 +43,7 @@ from broker_summary_fetcher import (
     save_broker_api_config,
     filter_stage1_funnel_candidates,
     run_stage2_broker_enrichment,
+    enrich_candidates_and_watchlist,
     test_broker_connection,
     enrich_single_stock_broker,
 )
@@ -80,6 +81,7 @@ STATE: dict = {
 TRACKER = SignalTracker(BASE_DIR / "data" / "tracker.db")
 PORTFOLIO = PortfolioTracker(BASE_DIR / "data" / "tracker.db")
 LAST_CLOSE_SYNC_DATE: str | None = None
+LAST_BROKSUM_EOD_DATE: str | None = None
 
 
 def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> None:
@@ -260,7 +262,15 @@ def _run_sync_job_blocking() -> dict:
 
     latest_dt = analysis["kpis"]["latest_date"]
 
+    # Pre-select Pilihan Saham Hari Ini awal agar masuk prioritas X-Ray Broksum
+    try:
+        raw_picks = select_today_candidates(analysis.get("stocks", []))
+        analysis["today_candidates"] = raw_picks
+    except Exception as exc:
+        print(f"[Sync] Warning pre-select today candidates: {exc}")
+
     # Stage 2: Broker Summary API Fetcher via Two-Stage Smart Funneling
+    # (Pilihan Saham Hari Ini + Watchlist Aktif + Stage 1 Funneling)
     broker_cfg = load_broker_api_config()
     has_api_cred = bool(
         broker_cfg.get("invezgo_api_key") or
@@ -268,17 +278,13 @@ def _run_sync_job_blocking() -> dict:
         broker_cfg.get("stockbit_token")
     )
     if has_api_cred:
-        stage1_candidates = filter_stage1_funnel_candidates(
-            analysis.get("stocks", []),
-            max_candidates=broker_cfg.get("max_candidates", 30),
+        enrich_candidates_and_watchlist(
+            analysis,
+            str(latest_dt),
+            tracker=TRACKER,
+            cfg=broker_cfg,
+            max_total_candidates=broker_cfg.get("max_candidates", 35),
         )
-        if stage1_candidates:
-            run_stage2_broker_enrichment(
-                stage1_candidates,
-                str(latest_dt),
-                broker_cfg,
-                details_map=analysis.get("details"),
-            )
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["source_name"] = f"Live IDX ({latest_dt})"
@@ -420,9 +426,11 @@ async def _background_market_session_worker() -> None:
     - Selama jam bursa aktif (09:00 - 16:05 WIB, Senin-Jumat): Otomatis menyinkronkan setiap 15 menit.
     - Tepat setelah penutupan pasar (>= 16:10 WIB): Menjalankan sinkronisasi final EOD wajib agar
       candle penutupan hari ini tersimpan dan dievaluasi oleh SignalTracker.
+    - Setiap jam 18:00 WIB (Senin-Jumat): Otomatis menarik broker summary resmi final (Invezgo/provider)
+      untuk seluruh kandidat hari ini dan watchlist aktif.
     """
     print("[MarketWorker] Background Market Session Worker aktif.")
-    global LAST_CLOSE_SYNC_DATE
+    global LAST_CLOSE_SYNC_DATE, LAST_BROKSUM_EOD_DATE
     loop_count = 0
     last_sync_attempt_ts = 0.0
     import time
@@ -441,10 +449,17 @@ async def _background_market_session_worker() -> None:
                 and dtime(16, 8) <= now_wib.time() <= dtime(17, 30)
                 and LAST_CLOSE_SYNC_DATE != today_str
             )
+            needs_eod_broksum_sync = (
+                is_trading_day
+                and dtime(18, 0) <= now_wib.time() <= dtime(23, 59)
+                and LAST_BROKSUM_EOD_DATE != today_str
+            )
 
             should_sync = False
             if not STATE["is_syncing"] and not get_sync_lock().locked():
-                if needs_post_close_sync:
+                if needs_eod_broksum_sync:
+                    should_sync = True
+                elif needs_post_close_sync:
                     should_sync = True
                 elif market_open and (now_ts - last_sync_attempt_ts >= 900):
                     should_sync = True
@@ -456,12 +471,16 @@ async def _background_market_session_worker() -> None:
             if should_sync:
                 print(
                     f"[MarketWorker] Menjalankan sinkronisasi background "
-                    f"(market_open={market_open}, cache_stale={cache_stale}, post_close={needs_post_close_sync})..."
+                    f"(market_open={market_open}, cache_stale={cache_stale}, post_close={needs_post_close_sync}, eod_broksum_18wib={needs_eod_broksum_sync})..."
                 )
                 last_sync_attempt_ts = now_ts
                 synced_ok = await trigger_safe_sync()
-                if synced_ok and needs_post_close_sync:
-                    LAST_CLOSE_SYNC_DATE = today_str
+                if synced_ok:
+                    if needs_post_close_sync:
+                        LAST_CLOSE_SYNC_DATE = today_str
+                    if needs_eod_broksum_sync:
+                        LAST_BROKSUM_EOD_DATE = today_str
+                        print(f"[MarketWorker] EOD Broker Summary 18:00 WIB untuk tanggal {today_str} berhasil diperbarui.")
         except Exception as exc:
             print(f"[MarketWorker] Error: {exc}")
 
@@ -878,7 +897,7 @@ def get_stock_detail(ticker: str) -> dict:
     # Auto-fetch Broker Summary on-demand jika belum ada kode broker sah dan token tersedia
     if not _has_real_broker_codes(item):
         cfg = load_broker_api_config()
-        if cfg.get("stockbit_token") or cfg.get("goapi_key"):
+        if cfg.get("invezgo_api_key") or cfg.get("stockbit_token") or cfg.get("goapi_key"):
             try:
                 latest_dt = str(item.get("date") or STATE["analysis"]["kpis"].get("latest_date") or "")
                 enrich_single_stock_broker(item, latest_dt, cfg)
@@ -910,10 +929,10 @@ def fetch_single_stock_broker_endpoint(ticker: str) -> dict:
         raise HTTPException(status_code=404, detail=f"Saham '{key}' tidak ditemukan pada dataset aktif.")
 
     cfg = load_broker_api_config()
-    if not cfg.get("stockbit_token") and not cfg.get("goapi_key"):
+    if not cfg.get("invezgo_api_key") and not cfg.get("stockbit_token") and not cfg.get("goapi_key"):
         raise HTTPException(
             status_code=400,
-            detail="Token Stockbit belum diatur. Silakan buka menu Pengaturan (Alat ⚙️) dan simpan Bearer Token Stockbit Anda.",
+            detail="Token Invezgo / Stockbit belum diatur. Silakan periksa file .env atau Pengaturan.",
         )
 
     item = details_map[key]
@@ -936,7 +955,7 @@ def fetch_single_stock_broker_endpoint(ticker: str) -> dict:
     if not _has_real_broker_codes(item):
         raise HTTPException(
             status_code=502,
-            detail=f"Tidak ada data broker summary yang diterima untuk #{key}. Pastikan token Stockbit Anda masih aktif dan belum expired.",
+            detail=f"Tidak ada data broker summary yang diterima untuk #{key}. Pastikan token Invezgo / provider Anda valid dan bursa memiliki data.",
         )
 
     return item
@@ -1306,6 +1325,26 @@ def tracker_signals(
         rows = TRACKER.get_priority_watchlist_candidates(limit=3)
     else:
         rows = TRACKER.list_signals(status=status, sort_by=sort_by)
+
+    # Memperkaya data sinyal dengan metrik broker summary terkini dari memori/analisis
+    details_map = STATE.get("analysis", {}).get("details", {}) if STATE.get("analysis") else {}
+    if details_map and rows:
+        enriched_rows = []
+        for r in rows:
+            r_dict = dict(r)
+            t_up = str(r.get("ticker", "")).upper()
+            if t_up in details_map:
+                d = details_map[t_up]
+                for fld in (
+                    "bdr_pct", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list",
+                    "bandar_avg_buy", "diff_bandar_avg_pct", "retail_trap", "has_real_broker_summary",
+                    "broker_analysis"
+                ):
+                    if fld in d and d[fld] is not None:
+                        r_dict[fld] = d[fld]
+            enriched_rows.append(r_dict)
+        rows = enriched_rows
+
     return {"count": len(rows), "signals": rows}
 
 
@@ -1730,6 +1769,23 @@ def test_broker_api_endpoint(req: BrokerTestRequest) -> dict:
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("error", "Koneksi ke Broker API gagal."))
     return res
+
+
+@app.post("/api/broker/sync-eod")
+async def manual_broker_sync_eod() -> dict:
+    """Trigger manual sinkronisasi Broker Summary EOD (Pilihan Hari Ini + Watchlist) on-demand."""
+    global LAST_BROKSUM_EOD_DATE
+    if STATE["analysis"] is None:
+        init_default_state()
+    synced = await trigger_safe_sync()
+    now_wib = _get_now_wib()
+    today_str = now_wib.strftime("%Y-%m-%d")
+    LAST_BROKSUM_EOD_DATE = today_str
+    return {
+        "status": "success" if synced else "error",
+        "message": f"Sinkronisasi Broker Summary EOD ({today_str}) selesai.",
+        "date": today_str,
+    }
 
 
 # ===================== PROGRESSIVE WEB APP (PWA) =====================

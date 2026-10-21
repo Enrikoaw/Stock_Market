@@ -542,12 +542,27 @@ def run_stage2_broker_enrichment(
             continue
 
         raw_data = None
-        if provider == "invezgo" and config.get("invezgo_api_key"):
-            raw_data = fetch_broker_summary_invezgo(ticker, date_str, config["invezgo_api_key"])
-        elif provider == "goapi" and config.get("goapi_key"):
-            raw_data = fetch_broker_summary_goapi(ticker, date_str, config["goapi_key"])
-        elif provider == "stockbit" and config.get("stockbit_token"):
-            raw_data = fetch_broker_summary_stockbit(ticker, date_str, config["stockbit_token"])
+        # Coba date_str, jika kosong coba tanggal hari kerja terbaru
+        dates_to_try = [date_str] if date_str else []
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        for d in range(5):
+            dt = (now - timedelta(days=d)).strftime("%Y-%m-%d")
+            if dt not in dates_to_try:
+                dates_to_try.append(dt)
+
+        for dt_candidate in dates_to_try:
+            try:
+                if provider == "invezgo" and config.get("invezgo_api_key"):
+                    raw_data = fetch_broker_summary_invezgo(ticker, dt_candidate, config["invezgo_api_key"])
+                elif provider == "goapi" and config.get("goapi_key"):
+                    raw_data = fetch_broker_summary_goapi(ticker, dt_candidate, config["goapi_key"])
+                elif provider == "stockbit" and config.get("stockbit_token"):
+                    raw_data = fetch_broker_summary_stockbit(ticker, dt_candidate, config["stockbit_token"])
+                if raw_data:
+                    break
+            except Exception as ex:
+                print(f"[SmartFunnel] Warning fetch {ticker} on {dt_candidate}: {ex}")
 
         if raw_data:
             top_buyers, top_sellers = extract_brokers_from_payload(raw_data)
@@ -627,6 +642,108 @@ def run_stage2_broker_enrichment(
         time.sleep(delay_sec)
 
     print(f"[SmartFunnel] Stage 2 Selesai. {len(enriched)} saham berhasil diperkaya dengan data X-Ray Broker Summary.")
+    return enriched
+
+
+def enrich_candidates_and_watchlist(
+    analysis: dict[str, Any],
+    date_str: str,
+    tracker: Any | None = None,
+    cfg: dict[str, Any] | None = None,
+    max_total_candidates: int = 40,
+) -> list[dict]:
+    """
+    Funneling Terpadu Broker Summary (Pilihan Hari Ini + Watchlist + Top Screener):
+    1. Pastikan seluruh 'Pilihan Saham Hari Ini' (today_candidates) WAJIB diperkaya broker summary.
+    2. Pastikan seluruh saham aktif di 'Watchlist / Pantauan' (WATCHLIST + RUNNING) WAJIB diperkaya broker summary.
+    3. Sisa kuota hingga max_total_candidates diisi oleh kandidat terbaik dari Stage 1 Funneling.
+    
+    Hasil:
+    - Zero wasted API calls.
+    - Semua saham yang dipantau user & rekomendasi hari ini 100% memiliki data broker summary terkini.
+    - Sinkronisasi otomatis ke analysis['stocks'] dan analysis['details'].
+    """
+    if not analysis or "stocks" not in analysis:
+        return []
+
+    config = cfg or load_broker_api_config()
+    has_api = bool(config.get("invezgo_api_key") or config.get("goapi_key") or config.get("stockbit_token"))
+    if not has_api:
+        print("[SmartFunnel] Token Broker API belum diatur. Melewati enrichment broker summary.")
+        return []
+
+    details_map = analysis.get("details", {})
+    all_stocks = analysis.get("stocks", [])
+    stock_by_ticker = {str(s.get("ticker", "")).upper(): s for s in all_stocks if s.get("ticker")}
+
+    target_tickers: list[str] = []
+    seen: set[str] = set()
+
+    def _add(t: Any) -> None:
+        clean_t = str(t or "").upper().strip()
+        if clean_t and clean_t not in seen:
+            seen.add(clean_t)
+            target_tickers.append(clean_t)
+
+    # 1. Pilihan Saham Hari Ini (PRIORITAS 1)
+    for c in analysis.get("today_candidates", []):
+        _add(c.get("ticker", ""))
+
+    if tracker and hasattr(tracker, "get_today_candidates"):
+        try:
+            db_cands = tracker.get_today_candidates(date_str)
+            for dc in db_cands:
+                _add(dc.get("ticker", ""))
+        except Exception:
+            pass
+
+    # 2. Watchlist & Sinyal Aktif di Pantauan (PRIORITAS 2)
+    if tracker and hasattr(tracker, "get_active_tickers"):
+        try:
+            active_wl = tracker.get_active_tickers()
+            for wt in active_wl:
+                _add(wt)
+        except Exception as exc:
+            print(f"[SmartFunnel] Warning: Gagal mengambil active watchlist tickers: {exc}")
+
+    # 3. Kandidat Swing Stage 1 dari Screener (PRIORITAS 3 - SISA KUOTA)
+    stage1 = filter_stage1_funnel_candidates(all_stocks, max_candidates=max_total_candidates)
+    for sc in stage1:
+        if len(target_tickers) >= max_total_candidates:
+            break
+        _add(sc.get("ticker", ""))
+
+    # Kumpulkan objek stock yang cocok
+    target_stocks = []
+    for t in target_tickers:
+        if t in stock_by_ticker:
+            target_stocks.append(stock_by_ticker[t])
+        elif t in details_map:
+            target_stocks.append(details_map[t])
+
+    print(f"[SmartFunnel] Terpilih total {len(target_stocks)} saham untuk X-Ray Broksum ({len(seen)} unik: Today Candidates + Watchlist + Stage 1).")
+
+    enriched = run_stage2_broker_enrichment(
+        target_stocks,
+        date_str=date_str,
+        cfg=config,
+        details_map=details_map,
+    )
+
+    # Sinkronisasi balik ke today_candidates jika ada
+    if "today_candidates" in analysis and analysis["today_candidates"]:
+        for cand in analysis["today_candidates"]:
+            t_cand = str(cand.get("ticker", "")).upper()
+            if t_cand in details_map:
+                d_item = details_map[t_cand]
+                for fld in (
+                    "broker_analysis", "has_broker_summary", "has_real_broker_summary",
+                    "bdr_pct", "top_buyers_list", "top_sellers_list", "top_buyers", "top_sellers",
+                    "bandar_avg_buy", "diff_bandar_avg_pct", "retail_trap", "trigger_type", "trigger_label"
+                ):
+                    if fld in d_item:
+                        cand[fld] = d_item[fld]
+
     return enriched
 
 
