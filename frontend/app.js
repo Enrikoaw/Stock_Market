@@ -940,18 +940,22 @@ function renderNewsError(errorMsg) {
 
 function renderTrackerError(errorMsg) {
   const tbody = document.getElementById('trackerTableBody');
-  if (!tbody) return;
-  tbody.innerHTML = `
-    <tr>
-      <td colspan="7" class="py-10 text-center space-y-2.5">
-        <div class="text-rose-400 font-bold text-xs">⚠️ Gagal Memuat Data Uji Sinyal</div>
-        <p class="text-[10px] text-slate-400">${escHtml(errorMsg || 'Koneksi database tracker terputus.')}</p>
-        <button onclick="loadTracker()" class="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition cursor-pointer">
-          🔄 Muat Ulang
-        </button>
-      </td>
-    </tr>
+  const mobileList = document.getElementById('trackerMobileList');
+  const content = `
+    <div class="py-10 text-center space-y-2.5">
+      <div class="text-rose-400 font-bold text-xs">Gagal Memuat Data Pantauan Sinyal</div>
+      <p class="text-[10px] text-slate-400">${escHtml(errorMsg || 'Koneksi database tracker terputus.')}</p>
+      <button onclick="loadTracker()" class="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition cursor-pointer">
+        Muat Ulang
+      </button>
+    </div>
   `;
+  if (tbody) {
+    tbody.innerHTML = `<tr><td colspan="10">${content}</td></tr>`;
+  }
+  if (mobileList) {
+    mobileList.innerHTML = content;
+  }
 }
 
 function renderPortfolioError(errorMsg) {
@@ -3503,9 +3507,20 @@ function renderTrackerStats(data) {
     EXPIRED: s.expired,
     TIMEOUT: s.timeout,
   };
+  const TAB_LABELS = {
+    PRIORITY: 'Top 3 Siap Beli',
+    ALL: 'Semua Sinyal',
+    WATCHLIST: 'Menunggu',
+    RUNNING: 'Berjalan',
+    WIN: 'Target Win',
+    LOSS: 'Batas Rugi',
+    CLOSED_OTHER: 'Selesai Lainnya',
+    EXPIRED: 'Expired',
+    TIMEOUT: 'Timeout',
+  };
   document.querySelectorAll('#trackerTabs .tracker-tab').forEach((btn) => {
     const tab = btn.dataset.tab;
-    const label = btn.textContent.replace(/\s*\d+$/, '').trim();
+    const label = TAB_LABELS[tab] || btn.dataset.tab;
     btn.innerHTML = `${escHtml(label)}<span class="tab-count ml-1 px-1.5 py-0.2 rounded bg-white/10 text-[10px]">${counts[tab] ?? 0}</span>`;
     btn.classList.toggle('active', tab === trackerTab);
   });
@@ -3524,155 +3539,271 @@ function formatSignalTime(dateStr) {
 
 function renderTrackerTable(rows) {
   const tbody = document.getElementById('trackerTableBody');
-  if (!tbody) return;
+  const mobileList = document.getElementById('trackerMobileList');
+  if (!tbody && !mobileList) return;
 
   if (!rows.length) {
     const emptyMsg = trackerTab === 'PRIORITY'
       ? 'Belum ada saham antrean yang memenuhi kriteria Top 3 Siap Beli saat ini. Pantau tab Menunggu.'
       : 'Belum ada sinyal pada kategori ini. Sinyal akumulasi dengan score tinggi akan otomatis tercatat setelah sinkronisasi data real.';
-    tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">${emptyMsg}</td></tr>`;
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">${emptyMsg}</td></tr>`;
+    }
+    if (mobileList) {
+      mobileList.innerHTML = `<div class="py-8 text-center text-xs text-slate-400 bg-white/5 dark:bg-slate-900/40 rounded-xl p-4 border border-white/5">${emptyMsg}</div>`;
+    }
     return;
   }
 
-  tbody.innerHTML = rows
-    .map((r) => {
-      const safeTicker = escHtml(r.ticker);
-      const safeSector = escHtml(r.sector || (r.source === 'AUTO' ? 'Auto Sinyal' : 'Manual'));
-      const safeTriggerLabel = escHtml(r.trigger_label || '-');
-      const safeSignalDate = escHtml(r.signal_date || '');
-      const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' || r.status === 'CANCELLED' ? null : r.pnl_pct;
-      const isRunningLoss = r.status === 'RUNNING' && pnl !== null && pnl < 0;
+  // 1. Render Desktop Table Rows
+  if (tbody) {
+    tbody.innerHTML = rows
+      .map((r) => {
+        const safeTicker = escHtml(r.ticker);
+        const safeSector = escHtml(r.sector || (r.source === 'AUTO' ? 'Auto Sinyal' : 'Manual'));
+        const safeTriggerLabel = escHtml(r.trigger_label || '-');
+        const safeSignalDate = escHtml(r.signal_date || '');
+        const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' || r.status === 'CANCELLED' ? null : r.pnl_pct;
+        const isRunningLoss = r.status === 'RUNNING' && pnl !== null && pnl < 0;
 
-      let statusCls = TRACKER_STATUS_STYLE[r.status] || TRACKER_STATUS_STYLE.EXPIRED;
-      if (isRunningLoss) {
-        statusCls = 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50';
-      }
-
-      const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT', 'CANCELLED'].includes(r.status);
-      const exitOrLast = isClosed && r.exit_price
-        ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.exit_date || '')}</div>`
-        : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">last</div>`;
-
-      let entryCell = '<span class="text-slate-400 dark:text-slate-500">-</span>';
-      if (r.entry_price) {
-        entryCell = `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.entry_date || '')}</div>`;
-      } else if (r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined && r.dist_to_entry_pct !== null) {
-        const distNum = Number(r.dist_to_entry_pct);
-        const absDist = Math.abs(distNum);
-        const distStr = fmtPctOrDash(distNum);
-        if (absDist <= 1.0) {
-          entryCell = `
-            <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40">
-              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>🟢 Siap Beli (${distStr})</span>
-            </div>
-            <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">Dekat Entry Support</div>`;
-        } else if (absDist <= 2.5) {
-          entryCell = `
-            <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40">
-              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-              <span>🟡 Mendekati (${distStr})</span>
-            </div>
-            <div class="text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">Pantau Ketat</div>`;
-        } else {
-          entryCell = `
-            <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
-              <span>⚪ Masih Jauh (${distStr})</span>
-            </div>
-            <div class="text-[10px] text-slate-500 font-medium dark:text-slate-400 mt-0.5">Menunggu Retrace</div>`;
+        let statusCls = TRACKER_STATUS_STYLE[r.status] || TRACKER_STATUS_STYLE.EXPIRED;
+        if (isRunningLoss) {
+          statusCls = 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50';
         }
-      }
 
-      let isHighFlyer = false;
-      if (r.status === 'RUNNING' && pnl !== null && pnl >= 2.0) {
-        isHighFlyer = true;
-      }
+        const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT', 'CANCELLED'].includes(r.status);
+        const exitOrLast = isClosed && r.exit_price
+          ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.exit_date || '')}</div>`
+          : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">last</div>`;
 
-      const noteText = String(r.note || '');
-      const safeNote = escHtml(noteText);
-      const hasDistWarning = noteText.startsWith('⚠️');
-
-      const rowHighlight = hasDistWarning
-        ? 'hover:bg-rose-500/10 bg-rose-500/[0.06] border-l-4 border-rose-500 transition-colors'
-        : isRunningLoss
-          ? 'hover:bg-rose-500/10 bg-rose-500/[0.04] border-l-4 border-rose-400/80 transition-colors'
-          : isHighFlyer
-            ? 'hover:bg-white/[0.06] bg-emerald-500/[0.06] border-l-4 border-emerald-400 transition-colors'
-            : 'hover:bg-white/[0.05] transition-colors';
-
-      return `
-      <tr class="${rowHighlight}">
-        <!-- Saham -->
-        <td class="py-3.5 pl-4 pr-2">
-          <div class="flex items-center gap-3 cursor-pointer group" onclick="selectStockAndGoToInspector('${safeTicker}')" title="Klik untuk membuka detail ${safeTicker}">
-            ${getStockLogoImg(r.ticker, 'w-8 h-8')}
-            <div>
-              <div class="font-sans font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 flex items-center gap-1.5 transition">
-                <span>${safeTicker}</span>
-                ${trackerTab === 'PRIORITY' ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500/25 text-amber-300 border border-amber-400/40 tracking-wider">⭐ TOP 3</span>' : ''}
-                ${isHighFlyer ? '<span class="text-xs" title="Terbang Tinggi">🚀</span>' : ''}
-                ${hasDistWarning ? `<span class="text-xs animate-pulse" title="${safeNote}">⚠️</span>` : ''}
+        let entryCell = '<span class="text-slate-400 dark:text-slate-500">-</span>';
+        if (r.entry_price) {
+          entryCell = `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.entry_date || '')}</div>`;
+        } else if (r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined && r.dist_to_entry_pct !== null) {
+          const distNum = Number(r.dist_to_entry_pct);
+          const absDist = Math.abs(distNum);
+          const distStr = fmtPctOrDash(distNum);
+          if (absDist <= 1.0) {
+            entryCell = `
+              <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Siap Beli (${distStr})</span>
               </div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 truncate max-w-[150px] mt-0.5">${safeSector}</div>
+              <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">Dekat Entry Support</div>`;
+          } else if (absDist <= 2.5) {
+            entryCell = `
+              <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                <span>Mendekati (${distStr})</span>
+              </div>
+              <div class="text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">Pantau Ketat</div>`;
+          } else {
+            entryCell = `
+              <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                <span>Masih Jauh (${distStr})</span>
+              </div>
+              <div class="text-[10px] text-slate-500 font-medium dark:text-slate-400 mt-0.5">Menunggu Retrace</div>`;
+          }
+        }
+
+        let isHighFlyer = false;
+        if (r.status === 'RUNNING' && pnl !== null && pnl >= 2.0) {
+          isHighFlyer = true;
+        }
+
+        const noteText = String(r.note || '');
+        const safeNote = escHtml(noteText);
+        const hasDistWarning = noteText.includes('DISTRIBUSI') || noteText.includes('Awas Distribusi') || noteText.startsWith('⚠️');
+
+        const rowHighlight = hasDistWarning
+          ? 'hover:bg-rose-500/10 bg-rose-500/[0.06] border-l-4 border-rose-500 transition-colors'
+          : isRunningLoss
+            ? 'hover:bg-rose-500/10 bg-rose-500/[0.04] border-l-4 border-rose-400/80 transition-colors'
+            : isHighFlyer
+              ? 'hover:bg-white/[0.06] bg-emerald-500/[0.06] border-l-4 border-emerald-400 transition-colors'
+              : 'hover:bg-white/[0.05] transition-colors';
+
+        return `
+        <tr class="${rowHighlight}">
+          <!-- Saham -->
+          <td class="py-3.5 pl-4 pr-2">
+            <div class="flex items-center gap-3 cursor-pointer group" onclick="selectStockAndGoToInspector('${safeTicker}')" title="Klik untuk membuka detail ${safeTicker}">
+              ${getStockLogoImg(r.ticker, 'w-8 h-8')}
+              <div>
+                <div class="font-sans font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 flex items-center gap-1.5 transition">
+                  <span>${safeTicker}</span>
+                  ${trackerTab === 'PRIORITY' ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/25 text-amber-300 border border-amber-400/40 tracking-wider">TOP 3</span>' : ''}
+                </div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 truncate max-w-[150px] mt-0.5">${safeSector}</div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Trigger & Score -->
+          <td class="py-3.5 px-3">
+            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">
+              <span>${safeTriggerLabel}</span>
+              <span class="font-mono font-extrabold text-slate-900 dark:text-white">${escHtml(r.score ?? '-')}</span>
+            </span>
+          </td>
+
+          <!-- Tanggal & Waktu Sinyal -->
+          <td class="py-3.5 px-3 font-sans font-medium text-slate-800 dark:text-slate-200 text-xs">
+            <div>${safeSignalDate}</div>
+            <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 mt-0.5" title="Waktu terdeteksi">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
+              ${escHtml(formatSignalTime(r.created_at))}
+            </div>
+          </td>
+
+          <!-- Harga Beli -->
+          <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-bold text-xs">${fmtPrice(r.entry_high || r.entry_low || r.entry_price)}</td>
+
+          <!-- SL / TP -->
+          <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-semibold text-xs">
+            ${fmtNumber(r.stop_loss)} / ${fmtNumber(r.target)}
+          </td>
+
+          <!-- Status Simulasi -->
+          <td class="py-3.5 px-3 text-center">
+            <span class="inline-block min-w-[82px] text-center px-3.5 py-1 rounded-full border text-xs font-bold tracking-wide ${statusCls}" title="${safeNote}">
+              ${r.status === 'RUNNING' ? (isRunningLoss ? 'Running Loss' : 'Running') : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : escHtml(r.status)}
+            </span>
+            ${hasDistWarning ? `<div class="mt-1 text-[9px] font-bold text-rose-800 bg-rose-100 border border-rose-200 dark:text-rose-300 dark:bg-rose-500/20 dark:border-rose-500/40 rounded px-1.5 py-0.5" title="${safeNote}">Awas Distribusi</div>` : ''}
+          </td>
+
+          <!-- Harga Masuk -->
+          <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-semibold text-xs">${entryCell}</td>
+
+          <!-- Harga Terkini -->
+          <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-semibold text-xs">${exitOrLast}</td>
+
+          <!-- Hasil (P/L) -->
+          <td class="py-3.5 px-3 text-right font-mono">
+            ${pnl !== null ? `
+              <span class="inline-block min-w-[66px] text-center px-3 py-1 rounded-full text-xs font-extrabold font-mono ${pnl >= 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/70 shadow-[0_0_16px_rgba(16,185,129,0.1)]' : 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-400/70 shadow-[0_0_16px_rgba(244,63,94,0.1)]'}">
+                ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%
+              </span>
+            ` : '<span class="text-slate-400 dark:text-slate-500">-</span>'}
+          </td>
+
+          <!-- Action / Delete -->
+          <td class="py-3.5 pl-1 pr-3 text-right">
+            <button onclick="deleteSignal(${Number(r.id)})" class="text-slate-500 hover:text-rose-400 text-base font-bold transition px-1" title="Hapus sinyal">&times;</button>
+          </td>
+        </tr>`;
+      })
+      .join('');
+  }
+
+  // 2. Render Mobile Card List View
+  if (mobileList) {
+    mobileList.innerHTML = rows
+      .map((r) => {
+        const safeTicker = escHtml(r.ticker);
+        const safeSector = escHtml(r.sector || (r.source === 'AUTO' ? 'Auto Sinyal' : 'Manual'));
+        const safeTriggerLabel = escHtml(r.trigger_label || '-');
+        const safeSignalDate = escHtml(r.signal_date || '');
+        const pnl = r.status === 'WATCHLIST' || r.status === 'EXPIRED' || r.status === 'CANCELLED' ? null : r.pnl_pct;
+        const isRunningLoss = r.status === 'RUNNING' && pnl !== null && pnl < 0;
+        const isHighFlyer = r.status === 'RUNNING' && pnl !== null && pnl >= 2.0;
+
+        const noteText = String(r.note || '');
+        const safeNote = escHtml(noteText);
+        const hasDistWarning = noteText.includes('DISTRIBUSI') || noteText.includes('Awas Distribusi') || noteText.startsWith('⚠️');
+
+        const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT', 'CANCELLED'].includes(r.status);
+        const exitOrLast = isClosed && r.exit_price ? r.exit_price : r.last_close;
+        const exitOrLastLabel = isClosed && r.exit_price ? 'Exit' : 'Terkini';
+
+        // Readiness or Status Badge for Mobile
+        let statusBadge = '';
+        if (r.status === 'WATCHLIST') {
+          if (r.dist_to_entry_pct !== undefined && r.dist_to_entry_pct !== null) {
+            const distNum = Number(r.dist_to_entry_pct);
+            const absDist = Math.abs(distNum);
+            const distStr = fmtPctOrDash(distNum);
+            if (absDist <= 1.0) {
+              statusBadge = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Siap Beli (${distStr})</span>`;
+            } else if (absDist <= 2.5) {
+              statusBadge = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Mendekati (${distStr})</span>`;
+            } else {
+              statusBadge = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>Masih Jauh (${distStr})</span>`;
+            }
+          } else {
+            statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">Menunggu</span>`;
+          }
+        } else if (r.status === 'RUNNING') {
+          statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${isRunningLoss ? 'bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/40' : 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40'}"><span class="w-1.5 h-1.5 rounded-full ${isRunningLoss ? 'bg-rose-500' : 'bg-emerald-500'}"></span>Running ${pnl !== null ? (pnl >= 0 ? '+' : '') + pnl.toFixed(1) + '%' : ''}</span>`;
+        } else if (r.status === 'WIN') {
+          statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40">Win ${pnl !== null ? '+' + pnl.toFixed(1) + '%' : ''}</span>`;
+        } else if (r.status === 'LOSS') {
+          statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/40">Loss ${pnl !== null ? pnl.toFixed(1) + '%' : ''}</span>`;
+        } else {
+          statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">${escHtml(r.status)}</span>`;
+        }
+
+        const cardHighlight = hasDistWarning
+          ? 'border-l-4 border-l-rose-500 bg-rose-500/[0.04]'
+          : isRunningLoss
+            ? 'border-l-4 border-l-rose-400 bg-rose-500/[0.03]'
+            : isHighFlyer
+              ? 'border-l-4 border-l-emerald-400 bg-emerald-500/[0.03]'
+              : '';
+
+        return `
+          <div onclick="selectStockAndGoToInspector('${safeTicker}')" class="p-3 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200/80 dark:border-white/[0.08] shadow-sm hover:border-slate-300 dark:hover:border-white/20 transition cursor-pointer active:scale-[0.99] space-y-2.5 ${cardHighlight}">
+            <!-- Top Line: Logo, Ticker, Badges, Status & Delete -->
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2.5 min-w-0">
+                ${getStockLogoImg(r.ticker, 'w-7 h-7 flex-shrink-0')}
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="font-sans font-black text-sm text-slate-900 dark:text-white leading-tight">${safeTicker}</span>
+                    ${trackerTab === 'PRIORITY' ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/30">TOP 3</span>' : ''}
+                    ${hasDistWarning ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-400/30">Awas Distribusi</span>' : ''}
+                  </div>
+                  <div class="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[140px] leading-tight mt-0.5">${safeSector}</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5 flex-shrink-0">
+                ${statusBadge}
+                <button onclick="event.stopPropagation(); deleteSignal(${Number(r.id)})" class="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-sm font-bold" title="Hapus sinyal">&times;</button>
+              </div>
+            </div>
+
+            <!-- Middle Line: Trigger Badge & Signal Date/Time -->
+            <div class="flex items-center justify-between gap-2 text-xs">
+              <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">
+                <span>${safeTriggerLabel}</span>
+                <span class="font-mono font-bold text-slate-900 dark:text-white">${escHtml(r.score ?? '-')}</span>
+              </span>
+              <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                ${safeSignalDate} · ${escHtml(formatSignalTime(r.created_at))}
+              </span>
+            </div>
+
+            <!-- Bottom Line: Price Matrix (3 columns) -->
+            <div class="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 dark:border-white/[0.06] text-center">
+              <div class="bg-slate-50 dark:bg-slate-800/60 rounded-lg py-1 px-1.5">
+                <div class="text-[9px] text-slate-500 dark:text-slate-400 font-medium">Beli (Entry)</div>
+                <div class="font-mono font-bold text-xs text-slate-900 dark:text-white mt-0.5">${fmtPrice(r.entry_high || r.entry_low || r.entry_price)}</div>
+              </div>
+              <div class="bg-slate-50 dark:bg-slate-800/60 rounded-lg py-1 px-1.5">
+                <div class="text-[9px] text-slate-500 dark:text-slate-400 font-medium">SL / TP</div>
+                <div class="font-mono font-semibold text-xs text-slate-900 dark:text-white mt-0.5">${fmtNumber(r.stop_loss)} / ${fmtNumber(r.target)}</div>
+              </div>
+              <div class="bg-slate-50 dark:bg-slate-800/60 rounded-lg py-1 px-1.5">
+                <div class="text-[9px] text-slate-500 dark:text-slate-400 font-medium">${exitOrLastLabel}</div>
+                <div class="font-mono font-bold text-xs text-slate-900 dark:text-white mt-0.5">${fmtNumber(exitOrLast)}</div>
+              </div>
             </div>
           </div>
-        </td>
-
-        <!-- Trigger & Score -->
-        <td class="py-3.5 px-3">
-          <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-semibold ${getTriggerBadgeClass(r.trigger_type)}">
-            <span>${safeTriggerLabel}</span>
-            <span class="font-mono font-extrabold text-slate-900 dark:text-white">${escHtml(r.score ?? '-')}</span>
-          </span>
-        </td>
-
-        <!-- Tanggal & Waktu Sinyal -->
-        <td class="py-3.5 px-3 font-sans font-medium text-slate-800 dark:text-slate-200 text-xs">
-          <div>${safeSignalDate}</div>
-          <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 mt-0.5" title="Waktu terdeteksi">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
-            ${escHtml(formatSignalTime(r.created_at))}
-          </div>
-        </td>
-
-        <!-- Harga Beli -->
-        <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-bold text-xs">${fmtPrice(r.entry_high || r.entry_low || r.entry_price)}</td>
-
-        <!-- SL / TP -->
-        <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-semibold text-xs">
-          ${fmtNumber(r.stop_loss)} / ${fmtNumber(r.target)}
-        </td>
-
-        <!-- Status Simulasi -->
-        <td class="py-3.5 px-3 text-center">
-          <span class="inline-block min-w-[82px] text-center px-3.5 py-1 rounded-full border text-xs font-bold tracking-wide ${statusCls}" title="${safeNote}">
-            ${r.status === 'RUNNING' ? (isRunningLoss ? 'Running Loss' : 'Running') : r.status === 'WIN' ? 'Win' : r.status === 'WATCHLIST' ? 'Watchlist' : r.status === 'LOSS' ? 'Loss' : escHtml(r.status)}
-          </span>
-          ${hasDistWarning ? `<div class="mt-1 text-[9px] font-extrabold text-rose-800 bg-rose-100 border border-rose-200 dark:text-rose-300 dark:bg-rose-500/20 dark:border-rose-500/40 rounded px-1.5 py-0.5 animate-pulse" title="${safeNote}">⚠️ AWAS DISTRIBUSI</div>` : ''}
-        </td>
-
-        <!-- Harga Masuk -->
-        <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-semibold text-xs">${entryCell}</td>
-
-        <!-- Harga Terkini -->
-        <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-semibold text-xs">${exitOrLast}</td>
-
-        <!-- Hasil (P/L) -->
-        <td class="py-3.5 px-3 text-right font-mono">
-          ${pnl !== null ? `
-            <span class="inline-block min-w-[66px] text-center px-3 py-1 rounded-full text-xs font-extrabold font-mono ${pnl >= 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/70 shadow-[0_0_16px_rgba(16,185,129,0.1)]' : 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-400/70 shadow-[0_0_16px_rgba(244,63,94,0.1)]'}">
-              ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%
-            </span>
-          ` : '<span class="text-slate-400 dark:text-slate-500">-</span>'}
-        </td>
-
-        <!-- Action / Delete -->
-        <td class="py-3.5 pl-1 pr-3 text-right">
-          <button onclick="deleteSignal(${Number(r.id)})" class="text-slate-500 hover:text-rose-400 text-base font-bold transition px-1" title="Hapus sinyal">&times;</button>
-        </td>
-      </tr>`;
-    })
-    .join('');
+        `;
+      })
+      .join('');
+  }
 }
 
 function setTrackerTab(tab) {

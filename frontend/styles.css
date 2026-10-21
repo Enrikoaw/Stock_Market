@@ -450,9 +450,10 @@ html.light .mobile-nav-btn.text-slate-400 {
     min-width: 680px;
   }
 
-  #trackerTableBody table,
-  #trackerSection table {
-    min-width: 820px;
+  .tracker-tab {
+    padding: 5px 12px !important;
+    font-size: 11px !important;
+    white-space: nowrap !important;
   }
 
   .kpi-card {

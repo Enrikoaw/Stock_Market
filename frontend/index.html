@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=92.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=93.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -1264,27 +1264,27 @@
 
         <!-- Tracker Toolbar: Tabs, Search & Sort -->
         <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
-          <div class="flex flex-wrap items-center gap-1.5" id="trackerTabs">
-            <button data-tab="PRIORITY" onclick="setTrackerTab('PRIORITY')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-400/30 flex items-center gap-1">⭐ Top 3 Siap Beli</button>
-            <button data-tab="ALL" onclick="setTrackerTab('ALL')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-semibold">Semua Sinyal</button>
-            <button data-tab="WATCHLIST" onclick="setTrackerTab('WATCHLIST')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300">Menunggu</button>
-            <button data-tab="RUNNING" onclick="setTrackerTab('RUNNING')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300">Berjalan</button>
-            <button data-tab="WIN" onclick="setTrackerTab('WIN')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300">Target Win</button>
-            <button data-tab="LOSS" onclick="setTrackerTab('LOSS')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300">Batas Rugi</button>
-            <button data-tab="CLOSED_OTHER" onclick="setTrackerTab('CLOSED_OTHER')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300">Selesai Lainnya</button>
+          <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap sm:overflow-visible" id="trackerTabs">
+            <button data-tab="PRIORITY" onclick="setTrackerTab('PRIORITY')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-400/30 flex items-center gap-1 flex-shrink-0 whitespace-nowrap">Top 3 Siap Beli</button>
+            <button data-tab="ALL" onclick="setTrackerTab('ALL')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0 whitespace-nowrap">Semua Sinyal</button>
+            <button data-tab="WATCHLIST" onclick="setTrackerTab('WATCHLIST')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 flex-shrink-0 whitespace-nowrap">Menunggu</button>
+            <button data-tab="RUNNING" onclick="setTrackerTab('RUNNING')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 flex-shrink-0 whitespace-nowrap">Berjalan</button>
+            <button data-tab="WIN" onclick="setTrackerTab('WIN')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 flex-shrink-0 whitespace-nowrap">Target Win</button>
+            <button data-tab="LOSS" onclick="setTrackerTab('LOSS')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 flex-shrink-0 whitespace-nowrap">Batas Rugi</button>
+            <button data-tab="CLOSED_OTHER" onclick="setTrackerTab('CLOSED_OTHER')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 flex-shrink-0 whitespace-nowrap">Selesai Lainnya</button>
             <button data-tab="EXPIRED" onclick="setTrackerTab('EXPIRED')" class="hidden">Expired</button>
             <button data-tab="TIMEOUT" onclick="setTrackerTab('TIMEOUT')" class="hidden">Timeout</button>
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
             <input
               id="trackerSearchInput"
               type="text"
-              placeholder="Cari kode saham di uji sinyal..."
+              placeholder="Cari kode saham..."
               oninput="filterTrackerRows()"
-              class="px-3 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400"
+              class="flex-1 min-w-[130px] px-3 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400"
             />
-            <select id="trackerSortSelect" onchange="changeTrackerSort(this.value)" class="px-3 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200">
+            <select id="trackerSortSelect" onchange="changeTrackerSort(this.value)" class="px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200">
               <option value="pnl_desc">Urutkan: Profit Tertinggi</option>
               <option value="pnl_asc">Urutkan: Drawdown / Terendah</option>
               <option value="distance_asc">Urutkan: Jarak Entry Terdekat</option>
@@ -1294,26 +1294,27 @@
             <button
               id="btnEvalTracker"
               onclick="evaluateTracker()"
-              class="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
+              class="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition flex items-center gap-1 active:scale-95 flex-shrink-0 whitespace-nowrap"
               title="Evaluasi status sinyal simulasi sekarang"
             >
-              <span>⚡</span>
-              <span>Evaluasi Sekarang</span>
+              <span>Evaluasi</span>
             </button>
             <button
               id="btnCleanupStaleTracker"
               onclick="cleanupStaleWatchlist()"
-              class="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-400/30 text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
+              class="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-400/30 text-xs font-semibold transition flex items-center gap-1 active:scale-95 flex-shrink-0 whitespace-nowrap"
               title="Bersihkan antrean saham yang sudah kedaluwarsa (> 3 hari bursa tanpa menyentuh zona beli)"
             >
-              <span>🧹</span>
               <span>Bersihkan Basi</span>
             </button>
           </div>
         </div>
 
-        <!-- Tracker Table -->
-        <div class="overflow-x-auto">
+        <!-- Tracker Mobile Card List View (sm:hidden) -->
+        <div id="trackerMobileList" class="sm:hidden space-y-2.5"></div>
+
+        <!-- Tracker Desktop Table View (hidden sm:block) -->
+        <div class="hidden sm:block overflow-x-auto">
           <table class="w-full text-left border-collapse text-xs">
             <thead>
               <tr class="bg-slate-900/80 border-y border-white/[0.08] text-slate-300 font-semibold select-none">
@@ -2239,6 +2240,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=92.0"></script>
+  <script src="/static/app.js?v=93.0"></script>
 </body>
 </html>
