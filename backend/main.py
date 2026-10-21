@@ -41,6 +41,7 @@ from live_idx_fetcher import fetch_real_idx_market_data
 from broker_summary_fetcher import (
     load_broker_api_config,
     save_broker_api_config,
+    filter_stage1_funnel_candidates,
     run_stage2_broker_enrichment,
     test_broker_connection,
     enrich_single_stock_broker,
@@ -259,15 +260,25 @@ def _run_sync_job_blocking() -> dict:
 
     latest_dt = analysis["kpis"]["latest_date"]
 
-    # Stage 2: Broker Summary API Fetcher (Jika API Key/Token tersedia)
+    # Stage 2: Broker Summary API Fetcher via Two-Stage Smart Funneling
     broker_cfg = load_broker_api_config()
-    if broker_cfg.get("goapi_key") or broker_cfg.get("stockbit_token"):
-        stage1_candidates = [
-            s for s in analysis.get("stocks", [])
-            if float(s.get("value_b_idr", 0)) >= 1.0 and int(s.get("smart_money_score", 0)) >= 50
-        ]
+    has_api_cred = bool(
+        broker_cfg.get("invezgo_api_key") or
+        broker_cfg.get("goapi_key") or
+        broker_cfg.get("stockbit_token")
+    )
+    if has_api_cred:
+        stage1_candidates = filter_stage1_funnel_candidates(
+            analysis.get("stocks", []),
+            max_candidates=broker_cfg.get("max_candidates", 30),
+        )
         if stage1_candidates:
-            run_stage2_broker_enrichment(stage1_candidates, str(latest_dt), broker_cfg, details_map=analysis.get("details"))
+            run_stage2_broker_enrichment(
+                stage1_candidates,
+                str(latest_dt),
+                broker_cfg,
+                details_map=analysis.get("details"),
+            )
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["source_name"] = f"Live IDX ({latest_dt})"
@@ -1644,25 +1655,30 @@ def portfolio_delete(trade_id: int) -> dict:
 
 
 class BrokerApiConfigRequest(BaseModel):
-    provider: Optional[str] = "goapi"
+    provider: Optional[str] = "invezgo"
+    invezgo_api_key: Optional[str] = None
     goapi_key: Optional[str] = None
     stockbit_token: Optional[str] = None
-    delay_ms: Optional[int] = 1000
-    max_candidates: Optional[int] = 60
+    delay_ms: Optional[int] = 300
+    max_candidates: Optional[int] = 30
 
 
 @app.get("/api/broker/config")
 def get_broker_api_config_endpoint() -> dict:
     cfg = load_broker_api_config()
+    inv_key = cfg.get("invezgo_api_key", "")
+    masked_inv = f"{inv_key[:4]}...{inv_key[-4:]}" if len(inv_key) > 8 else ("***" if inv_key else "")
     go_key = cfg.get("goapi_key", "")
-    masked_key = f"{go_key[:4]}...{go_key[-4:]}" if len(go_key) > 8 else ("***" if go_key else "")
+    masked_go = f"{go_key[:4]}...{go_key[-4:]}" if len(go_key) > 8 else ("***" if go_key else "")
     return {
-        "provider": cfg.get("provider", "goapi"),
+        "provider": cfg.get("provider", "invezgo"),
+        "has_invezgo_key": bool(inv_key),
+        "masked_invezgo_key": masked_inv,
         "has_goapi_key": bool(go_key),
-        "masked_goapi_key": masked_key,
+        "masked_goapi_key": masked_go,
         "has_stockbit_token": bool(cfg.get("stockbit_token")),
-        "delay_ms": cfg.get("delay_ms", 1000),
-        "max_candidates": cfg.get("max_candidates", 60),
+        "delay_ms": cfg.get("delay_ms", 300),
+        "max_candidates": cfg.get("max_candidates", 30),
     }
 
 
@@ -1671,14 +1687,16 @@ def save_broker_api_config_endpoint(req: BrokerApiConfigRequest) -> dict:
     cfg = load_broker_api_config()
     if req.provider:
         cfg["provider"] = req.provider.strip().lower()
+    if req.invezgo_api_key is not None:
+        cfg["invezgo_api_key"] = req.invezgo_api_key.strip()
     if req.goapi_key is not None:
         cfg["goapi_key"] = req.goapi_key.strip()
     if req.stockbit_token is not None:
         cfg["stockbit_token"] = req.stockbit_token.strip()
     if req.delay_ms is not None:
-        cfg["delay_ms"] = max(200, req.delay_ms)
+        cfg["delay_ms"] = max(100, req.delay_ms)
     if req.max_candidates is not None:
-        cfg["max_candidates"] = max(10, req.max_candidates)
+        cfg["max_candidates"] = max(5, min(100, req.max_candidates))
     ok = save_broker_api_config(cfg)
     if not ok:
         raise HTTPException(status_code=500, detail="Gagal menyimpan konfigurasi Broker API.")
@@ -1694,16 +1712,18 @@ class BrokerTestRequest(BaseModel):
 @app.post("/api/broker/test")
 def test_broker_api_endpoint(req: BrokerTestRequest) -> dict:
     cfg = load_broker_api_config()
-    provider = (req.provider or cfg.get("provider", "stockbit")).strip().lower()
+    provider = (req.provider or cfg.get("provider", "invezgo")).strip().lower()
     token_or_key = (req.token_or_key or "").strip()
     if not token_or_key:
-        if provider == "stockbit":
+        if provider == "invezgo":
+            token_or_key = cfg.get("invezgo_api_key", "")
+        elif provider == "stockbit":
             token_or_key = cfg.get("stockbit_token", "")
         else:
             token_or_key = cfg.get("goapi_key", "")
 
     if not token_or_key:
-        raise HTTPException(status_code=400, detail=f"Token {provider.upper()} belum diisi. Silakan masukkan token terlebih dahulu.")
+        raise HTTPException(status_code=400, detail=f"Token/API Key {provider.upper()} belum diisi. Silakan masukkan token di file .env atau pengaturan.")
 
     ticker = (req.ticker or "BBCA").strip().upper()
     res = test_broker_connection(provider=provider, token_or_key=token_or_key, ticker=ticker)

@@ -58,9 +58,52 @@ def main() -> None:
     latest_dt = analysis.get("kpis", {}).get("latest_date", "-")
     print(f"[AutoMarketSync] Tanggal Bursa Terbaru: {latest_dt} | Total Emiten: {len(analysis.get('stocks', []))}")
 
+    # Two-Stage Smart Funneling X-Ray (jika token Invezgo / provider tersedia)
+    try:
+        from broker_summary_fetcher import (
+            load_broker_api_config,
+            filter_stage1_funnel_candidates,
+            run_stage2_broker_enrichment,
+        )
+        broker_cfg = load_broker_api_config()
+        has_api_cred = bool(
+            broker_cfg.get("invezgo_api_key") or
+            broker_cfg.get("goapi_key") or
+            broker_cfg.get("stockbit_token")
+        )
+        if has_api_cred:
+            stage1_cands = filter_stage1_funnel_candidates(
+                analysis.get("stocks", []),
+                max_candidates=broker_cfg.get("max_candidates", 30),
+            )
+            if stage1_cands:
+                run_stage2_broker_enrichment(
+                    stage1_cands,
+                    str(latest_dt),
+                    broker_cfg,
+                    details_map=analysis.get("details"),
+                )
+    except Exception as exc:
+        print(f"[AutoMarketSync] Warning: Gagal enrichment broker summary: {exc}")
+
     tracker = SignalTracker(TRACKER_DB_PATH)
     eval_res = tracker.evaluate(analysis["details"])
     added_count = tracker.auto_track(analysis)
+
+    # Sinkronisasi Pilihan Saham Hari Ini
+    try:
+        from screener_engine import select_today_candidates
+        raw_picks = select_today_candidates(analysis["stocks"])
+        today_cands = tracker.sync_today_candidates(
+            raw_picks,
+            str(latest_dt),
+            session_label="Auto Sync EOD",
+        )
+        analysis["today_candidates"] = today_cands
+        print(f"[AutoMarketSync] Pilihan Saham Hari Ini: {len(today_cands)} saham disinkronkan.")
+    except Exception as exc:
+        print(f"[AutoMarketSync] Warning: Gagal sinkronisasi today candidates: {exc}")
+
     tracker.engine.dispose()
 
     print(f"[AutoMarketSync] Evaluasi Tracker Selesai: {eval_res} | Sinyal Baru Ditambahkan: {added_count}")

@@ -25,14 +25,52 @@ INST_FOREIGN_BROKERS = {"AK", "BK", "ZP", "KZ", "RX", "YU", "CC", "CS", "MG", "D
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "broker_api_config.json"
 
 
+def load_env_file() -> None:
+    """Memuat variabel dari file .env di root proyek ke os.environ jika belum disetel."""
+    try:
+        from dotenv import load_dotenv
+        env_file = Path(__file__).resolve().parent.parent / ".env"
+        if env_file.exists():
+            load_dotenv(dotenv_path=env_file)
+            return
+    except Exception:
+        pass
+
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = val
+        except Exception:
+            pass
+
+
 def load_broker_api_config() -> dict[str, Any]:
-    """Memuat konfigurasi API broker dari file data/broker_api_config.json atau environment variables."""
+    """Memuat konfigurasi API broker dari .env atau file data/broker_api_config.json."""
+    load_env_file()
+
+    invezgo_key = (
+        os.environ.get("INVEZGO_API_KEY", "").strip() or
+        os.environ.get("INVEZGO_TOKEN", "").strip() or
+        os.environ.get("INVESTGO_API_KEY", "").strip() or
+        os.environ.get("INVESTGO_TOKEN", "").strip()
+    )
+
     cfg = {
-        "provider": os.environ.get("BROKER_API_PROVIDER", "stockbit").strip().lower(),  # stockbit / goapi / mock
+        "provider": os.environ.get("BROKER_API_PROVIDER", "").strip().lower(),  # invezgo / stockbit / goapi / mock
+        "invezgo_api_key": invezgo_key,
         "goapi_key": os.environ.get("GOAPI_KEY", "").strip(),
         "stockbit_token": os.environ.get("STOCKBIT_BEARER_TOKEN", "").strip(),
-        "delay_ms": int(os.environ.get("BROKER_FETCH_DELAY_MS", "1000")),
-        "max_candidates": int(os.environ.get("BROKER_MAX_CANDIDATES", "60")),
+        "delay_ms": int(os.environ.get("BROKER_FETCH_DELAY_MS", "300")),
+        "max_candidates": int(os.environ.get("BROKER_MAX_CANDIDATES", "30")),
     }
     if CONFIG_PATH.exists():
         try:
@@ -43,11 +81,16 @@ def load_broker_api_config() -> dict[str, Any]:
         except Exception:
             pass
 
-    # Otomatis pilih provider yang memiliki kredensial aktif
-    if cfg.get("stockbit_token") and not cfg.get("goapi_key"):
-        cfg["provider"] = "stockbit"
-    elif cfg.get("goapi_key") and not cfg.get("stockbit_token"):
-        cfg["provider"] = "goapi"
+    # Otomatis pilih provider aktif jika belum disetel secara eksplisit
+    if not cfg.get("provider"):
+        if cfg.get("invezgo_api_key"):
+            cfg["provider"] = "invezgo"
+        elif cfg.get("stockbit_token"):
+            cfg["provider"] = "stockbit"
+        elif cfg.get("goapi_key"):
+            cfg["provider"] = "goapi"
+        else:
+            cfg["provider"] = "invezgo"
 
     return cfg
 
@@ -143,7 +186,7 @@ def analyze_broker_summary(top_buyers: list[dict], top_sellers: list[dict]) -> d
 
 
 def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
-    """Mengekstrak list buyer & seller dari berbagai format API (GoAPI, Stockbit, IPOT)."""
+    """Mengekstrak list buyer & seller dari berbagai format API (Invezgo, GoAPI, Stockbit, IPOT)."""
     if not isinstance(payload, dict):
         return [], []
 
@@ -181,6 +224,25 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
         buyers = bd["top3"].get("buyer") or bd["top3"].get("buyers") or []
         sellers = bd["top3"].get("seller") or bd["top3"].get("sellers") or []
 
+    # Format Invezgo summary array (seluruh broker dengan net_value, buy_avg, sell_avg)
+    if not buyers and isinstance(d.get("summary"), list):
+        summary_list = d["summary"]
+        b_list = []
+        s_list = []
+        for item in summary_list:
+            if not isinstance(item, dict):
+                continue
+            nv = float(item.get("net_value") or item.get("net_val") or 0.0)
+            t = str(item.get("type") or "").lower()
+            if nv > 0 or t == "buyer":
+                b_list.append(item)
+            elif nv < 0 or t == "seller":
+                s_list.append(item)
+        b_list.sort(key=lambda x: abs(float(x.get("net_value") or x.get("net_val") or x.get("buy_value") or 0.0)), reverse=True)
+        s_list.sort(key=lambda x: abs(float(x.get("net_value") or x.get("net_val") or x.get("sell_value") or 0.0)), reverse=True)
+        buyers = b_list
+        sellers = s_list
+
     def _extract_code(item: dict) -> str:
         for k in ("broker_code", "broker", "code", "brokerCode", "b_code", "symbol"):
             c = str(item.get(k) or "").strip().upper()
@@ -191,6 +253,7 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
     def _norm(item: dict, is_buyer: bool) -> dict:
         code = _extract_code(item)
         val = abs(float(
+            item.get("net_value") or
             item.get("net_val") or
             item.get("nval") or
             (item.get("buy_value") if is_buyer else item.get("sell_value")) or
@@ -199,6 +262,7 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
             0.0
         ))
         price = float(
+            (item.get("buy_avg") if is_buyer else item.get("sell_avg")) or
             item.get("avg_price") or
             item.get("bavg" if is_buyer else "savg") or
             (item.get("buy_avg_price") if is_buyer else item.get("sell_avg_price")) or
@@ -211,6 +275,35 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
     norm_buyers = [_norm(b, True) for b in buyers if isinstance(b, dict) and _extract_code(b)]
     norm_sellers = [_norm(s, False) for s in sellers if isinstance(s, dict) and _extract_code(s)]
     return norm_buyers, norm_sellers
+
+
+def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str) -> dict[str, Any] | None:
+    """
+    Mengambil data broker summary via API resmi Invezgo:
+    GET https://api.invezgo.com/analysis/summary/stock/{code}?from_date={date_str}&to_date={date_str}&investor=all&market=RG
+    """
+    if not api_key:
+        return None
+
+    clean_key = api_key.replace("Bearer ", "").strip()
+    clean_ticker = ticker.upper().strip()
+    url = f"https://api.invezgo.com/analysis/summary/stock/{clean_ticker}?from_date={date_str}&to_date={date_str}&investor=all&market=RG"
+    headers = {
+        "Authorization": f"Bearer {clean_key}",
+        "User-Agent": "SmartFlowIDX/93.0",
+        "Accept": "application/json",
+    }
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("status") in ("success", 200, True) or "data" in data:
+                return data.get("data", data)
+    except urllib.error.HTTPError as ex:
+        print(f"[InvezgoAPI] HTTP {ex.code} fetch {clean_ticker} ({date_str}): {ex.reason}")
+    except Exception as ex:
+        print(f"[InvezgoAPI] Error fetch {clean_ticker}: {ex}")
+    return None
 
 
 def fetch_broker_summary_goapi(ticker: str, date_str: str, api_key: str) -> dict[str, Any] | None:
@@ -250,7 +343,7 @@ def fetch_broker_summary_stockbit(ticker: str, date_str: str, bearer_token: str)
 
 
 def test_broker_connection(provider: str, token_or_key: str, ticker: str = "BBCA") -> dict[str, Any]:
-    """Menguji koneksi ke endpoint Broker API (Stockbit / GoAPI) dengan 1 ticker tes."""
+    """Menguji koneksi ke endpoint Broker API (Invezgo / Stockbit / GoAPI) dengan 1 ticker tes."""
     from datetime import datetime, timedelta
 
     dates_to_try = []
@@ -260,14 +353,16 @@ def test_broker_connection(provider: str, token_or_key: str, ticker: str = "BBCA
         if dt.weekday() < 5:
             dates_to_try.append(dt.strftime("%Y-%m-%d"))
 
-    provider_clean = (provider or "stockbit").strip().lower()
+    provider_clean = (provider or "invezgo").strip().lower()
     raw = None
     last_err = ""
     used_date = ""
 
     for dt_str in dates_to_try:
         try:
-            if provider_clean == "stockbit":
+            if provider_clean == "invezgo":
+                raw = fetch_broker_summary_invezgo(ticker, dt_str, token_or_key)
+            elif provider_clean == "stockbit":
                 raw = fetch_broker_summary_stockbit(ticker, dt_str, token_or_key)
             else:
                 raw = fetch_broker_summary_goapi(ticker, dt_str, token_or_key)
@@ -280,7 +375,7 @@ def test_broker_connection(provider: str, token_or_key: str, ticker: str = "BBCA
     if not raw:
         return {
             "success": False,
-            "error": last_err or f"Tidak ada data broker yang diterima untuk {ticker}. Pastikan Token/API Key valid dan belum kedaluwarsa.",
+            "error": last_err or f"Tidak ada data broker yang diterima untuk {ticker}. Pastikan Token/API Key {provider_clean.upper()} valid dan bursa memiliki data pada tanggal pengujian.",
         }
 
     buyers, sellers = extract_brokers_from_payload(raw)
@@ -296,6 +391,68 @@ def test_broker_connection(provider: str, token_or_key: str, ticker: str = "BBCA
     }
 
 
+def filter_stage1_funnel_candidates(stocks: list[dict[str, Any]], max_candidates: int = 30) -> list[dict[str, Any]]:
+    """
+    Stage 1 Funneling (Screening Awal Lokal Bebas Biaya API / 0 Kuota):
+    Menyaring ~900 emiten bursa secara lokal untuk memilih 25 - 30 kandidat swing paling potensial
+    yang layak diuji X-Ray Broker Summary di Stage 2.
+
+    Kriteria Saringan Stage 1:
+    1. Likuiditas & Keamanan: Transaksi >= Rp 1.0 Miliar, Harga >= 70, bukan papan akselerasi/khusus, fundamental & tape aman.
+    2. Karakter Swing: Tidak sedang terbang pucuk (pct_change <= 5.0%), dalam area koreksi/retrace sehat atau konsolidasi.
+    3. Volume Wajar: vol_ratio <= 1.80 atau ada letupan akumulasi awal.
+    """
+    if not stocks:
+        return []
+
+    candidates = []
+    for s in stocks:
+        c = float(s.get("close") or 0)
+        val_b = float(s.get("value_b_idr") or (float(s.get("value_idr") or 0) / 1e9))
+        sec = str(s.get("sector") or "").lower()
+        if c < 70 or val_b < 1.0:
+            continue
+        if "pemantauan khusus" in sec or "akselerasi" in sec:
+            continue
+
+        fs = s.get("fundamental_safety")
+        if isinstance(fs, dict) and fs.get("is_safe") is False:
+            continue
+
+        tq = s.get("tape_quality")
+        if isinstance(tq, dict) and tq.get("is_organic") is False:
+            continue
+
+        pct = float(s.get("pct_change") or 0)
+        vr = float(s.get("vol_ratio") or 1.0)
+        score = int(s.get("smart_money_score") or 0)
+
+        # Eliminasi saham yang terbang liar di pucuk
+        if pct > 5.0:
+            continue
+
+        # Prioritaskan saham yang retrace sehat (-4.0% s/d +2.5%) atau konsolidasi akumulasi awal
+        is_swing_pullback = (-4.0 <= pct <= 2.5) and (vr <= 1.80)
+        is_early_setup = (score >= 60)
+
+        if is_swing_pullback or is_early_setup:
+            candidates.append(s)
+
+    # Urutkan berdasarkan skor awal, likuiditas transaksi, dan kestabilan harga
+    candidates.sort(
+        key=lambda x: (
+            int(x.get("smart_money_score") or 0),
+            float(x.get("value_b_idr") or 0),
+            -abs(float(x.get("pct_change") or 0))
+        ),
+        reverse=True
+    )
+
+    selected = candidates[:max_candidates]
+    print(f"[SmartFunnel] Stage 1 Selesai: {len(selected)} kandidat swing terbaik disaring dari {len(stocks)} emiten untuk uji X-Ray Broksum.")
+    return selected
+
+
 def run_stage2_broker_enrichment(
     candidates: list[dict],
     date_str: str,
@@ -303,19 +460,19 @@ def run_stage2_broker_enrichment(
     details_map: dict[str, Any] | None = None,
 ) -> list[dict]:
     """
-    Stage 2 Pipeline:
-    Hanya memanggil API Broker Summary untuk saham potensial hasil Stage 1 (Skor >= 50 & Nilai Transaksi >= 1M).
-    Menerapkan jeda (delay) antar-request agar aman dari rate limit/blokir.
+    Stage 2 Pipeline (Uji X-Ray Broker Summary via Invezgo / API):
+    Hanya memanggil API Broker Summary untuk saham potensial hasil Stage 1 Funneling (~25-30 saham).
+    Sangat menghemat limit API (hanya memakan ~25-30 request dari 250 req/menit).
     """
     config = cfg or load_broker_api_config()
-    provider = config.get("provider", "stockbit")
-    delay_sec = max(0.2, config.get("delay_ms", 1000) / 1000.0)
-    max_cands = config.get("max_candidates", 60)
+    provider = config.get("provider", "invezgo")
+    delay_sec = max(0.1, config.get("delay_ms", 300) / 1000.0)
+    max_cands = config.get("max_candidates", 30)
 
     filtered_cands = candidates[:max_cands]
     enriched = []
 
-    print(f"[BrokerPipeline] Memulai Stage 2 Fetcher untuk {len(filtered_cands)} saham terpilih (Provider: {provider})...")
+    print(f"[SmartFunnel] Memulai Stage 2 X-Ray Broksum untuk {len(filtered_cands)} saham terpilih (Provider: {provider.upper()}, Delay: {delay_sec}s)...")
 
     for idx, s in enumerate(filtered_cands, start=1):
         ticker = s.get("ticker", "").upper()
@@ -323,7 +480,9 @@ def run_stage2_broker_enrichment(
             continue
 
         raw_data = None
-        if provider == "goapi" and config.get("goapi_key"):
+        if provider == "invezgo" and config.get("invezgo_api_key"):
+            raw_data = fetch_broker_summary_invezgo(ticker, date_str, config["invezgo_api_key"])
+        elif provider == "goapi" and config.get("goapi_key"):
             raw_data = fetch_broker_summary_goapi(ticker, date_str, config["goapi_key"])
         elif provider == "stockbit" and config.get("stockbit_token"):
             raw_data = fetch_broker_summary_stockbit(ticker, date_str, config["stockbit_token"])
@@ -333,6 +492,7 @@ def run_stage2_broker_enrichment(
             metrics = analyze_broker_summary(top_buyers, top_sellers)
             s["broker_analysis"] = metrics
             s["has_broker_summary"] = True
+            s["has_real_broker_summary"] = bool(metrics.get("top_buyers_list") or metrics.get("top_sellers_list"))
             s["bdr_pct"] = metrics["bdr"]
             s["top_buyers_list"] = metrics.get("top_buyers_list", [b["code"] for b in top_buyers[:3]])
             s["top_sellers_list"] = metrics.get("top_sellers_list", [sel["code"] for sel in top_sellers[:3]])
@@ -351,12 +511,19 @@ def run_stage2_broker_enrichment(
                 s["retail_trap"] = True
                 s["trigger_type"] = "DISTRIBUTION_WARNING"
                 s["trigger_label"] = "Distribusi (Ritel Trap)"
+                print(f"[SmartFunnel] X-Ray Warning [{idx}/{len(filtered_cands)}]: {ticker} terdeteksi RETAIL TRAP (Buyer: {s['top_buyers']}, Seller: {s['top_sellers']})! Dieliminasi dari rekomendasi.")
+            elif metrics.get("status") == "BIG_ACCUMULATION":
+                s["trigger_type"] = "BIG_ACCUMULATION"
+                s["trigger_label"] = "Akumulasi Broker"
+                print(f"[SmartFunnel] X-Ray Lolos [{idx}/{len(filtered_cands)}]: {ticker} AKUMULASI BESAR SMART MONEY (BDR: +{metrics['bdr']}%, Buyer: {s['top_buyers']}, Avg: {metrics.get('bandar_avg')}).")
+            else:
+                print(f"[SmartFunnel] X-Ray Selesai [{idx}/{len(filtered_cands)}]: {ticker} (BDR: {metrics['bdr']}%, Buyer: {s['top_buyers']}, Seller: {s['top_sellers']}).")
 
             if metrics.get("bandar_avg") and s.get("trading_plan"):
                 s["trading_plan"]["bandar_avg_buy"] = metrics["bandar_avg"]
                 b_avg = float(metrics["bandar_avg"])
                 c_val = float(s.get("close") or 0)
-                if 0 < c_val * 0.915 <= b_avg < c_val * 0.992:
+                if 0 < c_val * 0.915 <= b_avg < c_val * 1.01:
                     rev_ep = int(round(b_avg))
                     s["trading_plan"]["entry_price"] = rev_ep
                     s["trading_plan"]["entry_low"] = rev_ep
@@ -368,6 +535,7 @@ def run_stage2_broker_enrichment(
                 detail = details_map[ticker]
                 detail["broker_analysis"] = metrics
                 detail["has_broker_summary"] = True
+                detail["has_real_broker_summary"] = s["has_real_broker_summary"]
                 detail["bdr_pct"] = s["bdr_pct"]
                 detail["top_buyers_list"] = s["top_buyers_list"]
                 detail["top_sellers_list"] = s["top_sellers_list"]
@@ -385,16 +553,18 @@ def run_stage2_broker_enrichment(
                     detail["trigger_label"] = "Distribusi (Ritel Trap)"
                 if metrics.get("bandar_avg") and detail.get("trading_plan"):
                     detail["trading_plan"]["bandar_avg_buy"] = metrics["bandar_avg"]
-                    detail["trading_plan"]["entry_price"] = s["trading_plan"]["entry_price"]
-                    detail["trading_plan"]["entry_low"] = s["trading_plan"]["entry_low"]
-                    detail["trading_plan"]["entry_high"] = s["trading_plan"]["entry_high"]
+                    if "entry_price" in s.get("trading_plan", {}):
+                        detail["trading_plan"]["entry_price"] = s["trading_plan"]["entry_price"]
+                        detail["trading_plan"]["entry_low"] = s["trading_plan"]["entry_low"]
+                        detail["trading_plan"]["entry_high"] = s["trading_plan"]["entry_high"]
+                        detail["trading_plan"]["support_label"] = s["trading_plan"].get("support_label", "Support Avg Bandar")
         else:
             s["has_broker_summary"] = False
 
         enriched.append(s)
         time.sleep(delay_sec)
 
-    print(f"[BrokerPipeline] Stage 2 Selesai. {len(enriched)} saham berhasil diperkaya dengan data Broker Summary.")
+    print(f"[SmartFunnel] Stage 2 Selesai. {len(enriched)} saham berhasil diperkaya dengan data X-Ray Broker Summary.")
     return enriched
 
 
@@ -403,7 +573,7 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
     from datetime import datetime, timedelta
 
     config = cfg or load_broker_api_config()
-    provider = config.get("provider", "stockbit")
+    provider = config.get("provider", "invezgo")
     ticker = str(s.get("ticker", "")).upper().strip()
     if not ticker:
         return s
@@ -418,7 +588,9 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
 
     for dt_candidate in dates_to_try:
         try:
-            if provider == "stockbit" and config.get("stockbit_token"):
+            if provider == "invezgo" and config.get("invezgo_api_key"):
+                raw_data = fetch_broker_summary_invezgo(ticker, dt_candidate, config["invezgo_api_key"])
+            elif provider == "stockbit" and config.get("stockbit_token"):
                 raw_data = fetch_broker_summary_stockbit(ticker, dt_candidate, config["stockbit_token"])
             elif provider == "goapi" and config.get("goapi_key"):
                 raw_data = fetch_broker_summary_goapi(ticker, dt_candidate, config["goapi_key"])
