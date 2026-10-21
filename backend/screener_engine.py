@@ -2121,7 +2121,7 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
     }
 
 
-def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 6) -> list[dict[str, Any]]:
+def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 15) -> list[dict[str, Any]]:
     """
     Menyaring dan memilih saham terbaik untuk menu 'Pilihan Saham Hari Ini'.
     Strategi Swing Trading: Buy on Pullback / Koreksi Sehat + Akumulasi Broker Nyata.
@@ -2175,19 +2175,20 @@ def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 6) ->
         reverse=True,
     )
 
-    # Batasan Korelasi Sektor: Maksimal 1 saham per kategori sektor
+    # Batasan Korelasi Sektor: Maksimal 2 saham per kategori sektor jika kapasitas banyak
     chosen: list[dict[str, Any]] = []
-    seen_sectors = set()
+    seen_sectors: dict[str, int] = {}
+    max_per_sector = 2 if max_picks > 8 else 1
     for s in primary_list:
         sec_cat = str(s.get("sector_category") or s.get("sector") or "General")
-        if sec_cat not in seen_sectors:
-            seen_sectors.add(sec_cat)
+        if seen_sectors.get(sec_cat, 0) < max_per_sector:
+            seen_sectors[sec_cat] = seen_sectors.get(sec_cat, 0) + 1
             chosen.append(s)
         if len(chosen) >= max_picks:
             break
 
-    # Fallback 1: Jika kandidat kurang dari 3, ambil dari saham akumulasi tertinggi yang aman
-    if len(chosen) < 3:
+    # Fallback 1: Jika kandidat kurang dari 5, ambil dari saham akumulasi tertinggi yang aman
+    if len(chosen) < 5:
         fallback_list = [
             s for s in stocks
             if float(s.get("close") or 0) >= 70
@@ -2210,8 +2211,8 @@ def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 6) ->
             if any(c["ticker"] == s["ticker"] for c in chosen):
                 continue
             sec_cat = str(s.get("sector_category") or s.get("sector") or "General")
-            if sec_cat not in seen_sectors:
-                seen_sectors.add(sec_cat)
+            if seen_sectors.get(sec_cat, 0) < max_per_sector:
+                seen_sectors[sec_cat] = seen_sectors.get(sec_cat, 0) + 1
                 chosen.append(s)
             if len(chosen) >= max_picks:
                 break

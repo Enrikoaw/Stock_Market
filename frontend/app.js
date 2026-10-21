@@ -577,17 +577,17 @@ function renderTodayCandidates(stocks) {
       return (bdrB - bdrA) || (b.smart_money_score - a.smart_money_score) || ((a.diff_bandar_avg_pct || 0) - (b.diff_bandar_avg_pct || 0));
     });
 
-    const seenSectors = new Set();
+    const seenSectors = {};
     for (const s of rawCandidates) {
       const secCat = s.sector_category || s.sector || 'General';
-      if (!seenSectors.has(secCat)) {
-        seenSectors.add(secCat);
+      if ((seenSectors[secCat] || 0) < 2) {
+        seenSectors[secCat] = (seenSectors[secCat] || 0) + 1;
         candidates.push(s);
       }
-      if (candidates.length >= 6) break;
+      if (candidates.length >= 15) break;
     }
 
-    if (candidates.length < 3) {
+    if (candidates.length < 5) {
       const fallbackList = stocks
         .filter(s =>
           (s.close || 0) >= 70 &&
@@ -609,11 +609,11 @@ function renderTodayCandidates(stocks) {
 
       for (const s of fallbackList) {
         const secCat = s.sector_category || s.sector || 'General';
-        if (!seenSectors.has(secCat)) {
-          seenSectors.add(secCat);
+        if ((seenSectors[secCat] || 0) < 2) {
+          seenSectors[secCat] = (seenSectors[secCat] || 0) + 1;
           candidates.push(s);
         }
-        if (candidates.length >= 6) break;
+        if (candidates.length >= 15) break;
       }
     }
 
@@ -621,86 +621,73 @@ function renderTodayCandidates(stocks) {
       candidates = stocks
         .filter(s => (s.close || 0) >= 70 && !String(s.sector || '').toLowerCase().includes('pemantauan khusus'))
         .sort((a, b) => (b.smart_money_score || 0) - (a.smart_money_score || 0))
-        .slice(0, 3);
+        .slice(0, 5);
     }
   }
 
-  const tableRows = candidates.map((s) => {
+  const tableRows = candidates.map((s, idx) => {
     const safeTicker = escHtml(s.ticker);
-    const safeSector = escHtml(s.sector);
-    const safeSecCat = escHtml(s.sector_category || 'Sektor');
-    const starActive = isFavorite(s.ticker);
+    const safeSecCat = escHtml(s.sector_category || s.sector || 'General');
     const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
 
     const sessionBadge = s.session_label
-      ? `<span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-300 border border-sky-400/30">${escHtml(s.session_label)}</span>`
+      ? `<span class="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60">${escHtml(s.session_label)}</span>`
       : '';
 
     const reasons = getWhyCandidateReason(s);
     const reasonsHtml = reasons.map((r) => `
-      <div class="flex flex-col gap-0.5">
-        <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium ${r.color} border">
-          <span class="text-xs shrink-0">${r.icon}</span>
-          <span>${escHtml(r.text)}</span>
-        </div>
-        ${r.subtext ? `<div class="text-[10px] text-slate-400 italic truncate max-w-[280px] pl-1" title="${escHtml(r.subtext)}">"${escHtml(r.subtext)}"</div>` : ''}
-      </div>
+      <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-medium border ${r.color}">
+        ${escHtml(r.text)}
+      </span>
     `).join('');
 
     return `
-      <tr class="hover:bg-white/[0.04] transition-colors cursor-pointer group" onclick="selectStockAndGoToInspector('${safeTicker}')">
-        <!-- 1. Saham & Sektor -->
-        <td class="py-3 pl-3 sm:pl-4 pr-2">
-          <div class="flex items-center gap-2.5">
-            ${getStockLogoImg(s.ticker, 'w-8 h-8 rounded-lg shrink-0')}
-            <div>
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="font-sans font-black text-sm text-slate-900 dark:text-white group-hover:text-emerald-500 dark:group-hover:text-emerald-300 transition underline-offset-2 group-hover:underline">${safeTicker}</span>
-                ${sessionBadge}
-                <button
-                  onclick="event.stopPropagation(); toggleFavorite('${safeTicker}', event)"
-                  class="star-btn star-btn-${safeTicker} text-sm leading-none ${starActive ? 'text-amber-400' : 'text-slate-500 hover:text-amber-300'}"
-                  title="Simpan ke Favorit"
-                >★</button>
-              </div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[130px] sm:max-w-[170px]">${safeSecCat}</div>
-            </div>
+      <tr class="hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors cursor-pointer group" onclick="selectStockAndGoToInspector('${safeTicker}')">
+        <!-- Index -->
+        <td class="py-1.5 pl-3 pr-2 text-center font-mono text-[11px] text-slate-400 dark:text-slate-500">${idx + 1}</td>
+
+        <!-- Saham -->
+        <td class="py-1.5 px-2.5 whitespace-nowrap">
+          <div class="flex items-center gap-2">
+            ${getStockLogoImg(s.ticker, 'w-5 h-5 rounded shrink-0')}
+            <span class="font-mono font-bold text-xs text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition tracking-wide">${safeTicker}</span>
+            <span class="text-[10px] text-slate-500 dark:text-slate-400 font-sans">${safeSecCat}</span>
+            ${sessionBadge}
           </div>
         </td>
 
-        <!-- 2. Harga & % Perubahan -->
-        <td class="py-3 px-3 text-right whitespace-nowrap">
-          <div class="font-mono font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${fmtPrice(s.close)}</div>
-          <div class="font-mono text-[11px] font-semibold ${chgColor}">${(s.pct_change >= 0 ? '+' : '') + Number(s.pct_change || 0).toFixed(2)}%</div>
+        <!-- Harga -->
+        <td class="py-1.5 px-2.5 text-right font-mono font-semibold text-xs text-slate-900 dark:text-slate-100 whitespace-nowrap">
+          ${fmtPrice(s.close)}
         </td>
 
-        <!-- 3. Smart Money Metric -->
-        <td class="py-3 px-3 text-center whitespace-nowrap">
-          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40">
-            <span>Skor</span>
-            <span class="font-mono font-black">${s.smart_money_score}</span>
+        <!-- Chg -->
+        <td class="py-1.5 px-2.5 text-right font-mono font-bold text-[11px] ${chgColor} whitespace-nowrap">
+          ${(s.pct_change >= 0 ? '+' : '') + Number(s.pct_change || 0).toFixed(2)}%
+        </td>
+
+        <!-- Skor SM -->
+        <td class="py-1.5 px-2.5 text-center whitespace-nowrap">
+          <span class="font-mono font-bold text-xs ${s.smart_money_score >= 75 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}">
+            ${s.smart_money_score}
           </span>
-          <div class="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-            ${s.vol_ratio ? `Vol ${s.vol_ratio}x` : (s.top3_bsr ? `BSR ${s.top3_bsr}x` : 'Arus Masuk')}
-          </div>
         </td>
 
-        <!-- 4. Alasan Masuk Watchlist Hari Ini -->
-        <td class="py-3 px-4">
-          <div class="flex flex-col gap-1">
+        <!-- Katalis & Alasan Watchlist -->
+        <td class="py-1.5 px-3">
+          <div class="flex items-center gap-1.5 flex-wrap">
             ${reasonsHtml}
           </div>
         </td>
 
-        <!-- 5. Link Cepat ke Trading Plan -->
-        <td class="py-3 pr-3 sm:pr-4 pl-2 text-right whitespace-nowrap">
+        <!-- Aksi -->
+        <td class="py-1.5 pr-3 pl-2 text-right whitespace-nowrap">
           <button
             onclick="event.stopPropagation(); selectStockAndGoToInspector('${safeTicker}')"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition active:scale-95 group-hover:bg-emerald-500 group-hover:text-slate-950"
+            class="px-2.5 py-0.5 rounded text-[10px] font-bold transition text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 border border-emerald-300 dark:border-emerald-500/30"
             title="Buka Trading Plan ${safeTicker}"
           >
-            <span>Trading Plan</span>
-            <span class="text-xs">&rarr;</span>
+            Plan
           </button>
         </td>
       </tr>
@@ -709,30 +696,31 @@ function renderTodayCandidates(stocks) {
 
   container.innerHTML = `
     ${defensiveNoticeHtml}
-    <div class="glass-panel rounded-2xl p-3 sm:p-5 border border-white/[0.08] shadow-lg space-y-3">
-      <div class="flex items-center justify-between flex-wrap gap-2 pb-1 border-b border-white/[0.06]">
+    <div class="glass-panel rounded-2xl p-2.5 sm:p-4 border border-slate-200 dark:border-white/[0.08] shadow-sm space-y-2.5">
+      <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200 dark:border-white/[0.06]">
         <div class="flex items-center gap-2">
-          <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Daftar Pantauan Saham Pilihan Hari Ini</span>
-          <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">${candidates.length} Saham</span>
+          <span class="text-xs font-bold text-slate-800 dark:text-slate-200">Kandidat Saham Pilihan Hari Ini</span>
+          <span class="px-1.5 py-0.2 rounded font-mono text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">${candidates.length} Emiten</span>
         </div>
-        <div class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
-          <span class="text-emerald-500 dark:text-emerald-400">💡</span>
-          <span>Klik nama saham untuk langsung membuka Trading Plan lengkap</span>
+        <div class="text-[11px] text-slate-500 dark:text-slate-400">
+          Klik emiten untuk membuka Trading Plan
         </div>
       </div>
 
       <div class="overflow-x-auto -mx-1 sm:mx-0">
-        <table class="w-full text-left border-collapse text-xs min-w-[620px]">
+        <table class="w-full text-left border-collapse text-xs min-w-[580px]">
           <thead>
-            <tr class="bg-slate-900/80 border-y border-white/[0.08] text-slate-300 font-semibold select-none">
-              <th class="py-2.5 pl-3 sm:pl-4 pr-2">Saham</th>
-              <th class="py-2.5 px-3 text-right">Harga &amp; Chg</th>
-              <th class="py-2.5 px-3 text-center">Smart Money</th>
-              <th class="py-2.5 px-4">Alasan Masuk Watchlist Hari Ini</th>
-              <th class="py-2.5 pr-3 sm:pr-4 pl-2 text-right">Aksi</th>
+            <tr class="bg-slate-100 dark:bg-slate-900/90 border-y border-slate-200 dark:border-white/[0.08] text-slate-600 dark:text-slate-400 font-semibold select-none text-[11px]">
+              <th class="py-2 pl-3 pr-2 w-8 text-center text-slate-400">#</th>
+              <th class="py-2 px-2.5">Saham</th>
+              <th class="py-2 px-2.5 text-right">Harga</th>
+              <th class="py-2 px-2.5 text-right">Chg</th>
+              <th class="py-2 px-2.5 text-center">Skor SM</th>
+              <th class="py-2 px-3">Katalis &amp; Alasan Watchlist</th>
+              <th class="py-2 pr-3 pl-2 text-right w-20">Aksi</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-white/[0.06]">
+          <tbody class="divide-y divide-slate-100 dark:divide-white/[0.04]">
             ${tableRows}
           </tbody>
         </table>
@@ -748,10 +736,8 @@ function getWhyCandidateReason(s) {
   const cat = s.news_catalyst;
   if (cat && (cat.sentiment === 'POSITIVE' || cat.verdict === 'VALID_CATALYST' || cat.code === 'POSITIVE_CONFIRMED')) {
     reasons.push({
-      icon: '📰',
       text: 'Sentimen Berita Positif',
-      subtext: cat.title ? String(cat.title).slice(0, 70) : null,
-      color: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'
+      color: 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800/40'
     });
   }
 
@@ -760,17 +746,13 @@ function getWhyCandidateReason(s) {
   if (diffBdr !== null && Math.abs(diffBdr) <= 2.5) {
     const diffText = diffBdr >= 0 ? `+${diffBdr.toFixed(1)}%` : `${diffBdr.toFixed(1)}%`;
     reasons.push({
-      icon: '🛡️',
-      text: `Dijaga Bandar (${diffText} dari modal)`,
-      subtext: null,
-      color: 'bg-sky-500/15 text-sky-300 border-sky-400/30'
+      text: `Dijaga Bandar (${diffText})`,
+      color: 'text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-300 dark:bg-sky-950/40 dark:border-sky-800/40'
     });
   } else if (diffBdr !== null && diffBdr < -2.5) {
     reasons.push({
-      icon: '🏷️',
-      text: `Diskon di Bawah Modal Bandar (${Math.abs(diffBdr).toFixed(1)}%)`,
-      subtext: null,
-      color: 'bg-teal-500/15 text-teal-300 border-teal-400/30'
+      text: `Diskon Support (${Math.abs(diffBdr).toFixed(1)}%)`,
+      color: 'text-teal-700 bg-teal-50 border-teal-200 dark:text-teal-300 dark:bg-teal-950/40 dark:border-teal-800/40'
     });
   }
 
@@ -778,10 +760,8 @@ function getWhyCandidateReason(s) {
   const vr = s.vol_ratio != null ? Number(s.vol_ratio) : null;
   if (vr !== null && vr >= 1.4) {
     reasons.push({
-      icon: '⚡',
-      text: `Lonjakan Volume (${vr.toFixed(1)}x rata-rata)`,
-      subtext: null,
-      color: 'bg-amber-500/15 text-amber-300 border-amber-400/30'
+      text: `Vol Spike ${vr.toFixed(1)}x`,
+      color: 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/40 dark:border-amber-800/40'
     });
   }
 
@@ -793,24 +773,18 @@ function getWhyCandidateReason(s) {
 
   if (trig.includes('SILENT') || trigLabel.toLowerCase().includes('silent')) {
     reasons.push({
-      icon: '🤫',
-      text: 'Silent Accumulation (Akumulasi Senyap)',
-      subtext: null,
-      color: 'bg-purple-500/15 text-purple-300 border-purple-400/30'
+      text: 'Silent Accumulation',
+      color: 'text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-300 dark:bg-purple-950/40 dark:border-purple-800/40'
     });
   } else if (bsr !== null && bsr >= 1.25) {
     reasons.push({
-      icon: '🐋',
-      text: `Buyer Dominan Top 3 Broker (${bsr.toFixed(1)}x seller)`,
-      subtext: null,
-      color: 'bg-indigo-500/15 text-indigo-300 border-indigo-400/30'
+      text: `Buyer Dominan (${bsr.toFixed(1)}x)`,
+      color: 'text-indigo-700 bg-indigo-50 border-indigo-200 dark:text-indigo-300 dark:bg-indigo-950/40 dark:border-indigo-800/40'
     });
   } else if (bdr !== null && bdr >= 8.0) {
     reasons.push({
-      icon: '💰',
-      text: `Akumulasi Masif Bandar (+${bdr.toFixed(1)}%)`,
-      subtext: null,
-      color: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'
+      text: `Akumulasi Bandar (+${bdr.toFixed(1)}%)`,
+      color: 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800/40'
     });
   }
 
@@ -818,27 +792,21 @@ function getWhyCandidateReason(s) {
   const chg = Number(s.pct_change || 0);
   if (chg <= 0.5 && chg >= -3.5 && reasons.length < 2) {
     reasons.push({
-      icon: '🎯',
-      text: 'Koreksi Sehat Dekat Support (Diskon Swing)',
-      subtext: null,
-      color: 'bg-blue-500/15 text-blue-300 border-blue-400/30'
+      text: 'Koreksi Sehat (Swing)',
+      color: 'text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-300 dark:bg-blue-950/40 dark:border-blue-800/40'
     });
   } else if ((trig.includes('BREAKOUT') || trigLabel.toLowerCase().includes('breakout')) && reasons.length < 2) {
     reasons.push({
-      icon: '🚀',
-      text: 'Breakout Resistance Terkonfirmasi',
-      subtext: null,
-      color: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'
+      text: 'Breakout Resistance',
+      color: 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800/40'
     });
   }
 
   // Fallback
   if (reasons.length === 0) {
     reasons.push({
-      icon: '💎',
-      text: s.trigger_label || `Akumulasi Smart Money (Skor ${s.smart_money_score || 70})`,
-      subtext: null,
-      color: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'
+      text: s.trigger_label || `Akumulasi (Skor ${s.smart_money_score || 70})`,
+      color: 'text-slate-700 bg-slate-100 border-slate-200 dark:text-slate-300 dark:bg-slate-800/80 dark:border-slate-700/60'
     });
   }
 
