@@ -805,6 +805,8 @@ function selectStockAndGoToInspector(ticker) {
 let cachedNewsItems = [];
 let activeNewsCategory = 'ALL';
 let isNewsLoading = false;
+let isNewsExpanded = false;
+const NEWS_COLLAPSED_LIMIT = 10;
 
 
 // Fetch dengan batas waktu timeout 9 detik (Temuan K6 - penanganan gagal terukur)
@@ -934,6 +936,7 @@ async function loadMarketNews(forceRefresh = false) {
 
 function setNewsCategoryFilter(cat) {
   activeNewsCategory = cat;
+  isNewsExpanded = false;
   const tabs = ['ALL', 'PICKS', 'POSITIVE', 'NEGATIVE'];
   tabs.forEach((t) => {
     const btn = document.getElementById(`newsTab-${t}`);
@@ -949,6 +952,9 @@ function setNewsCategoryFilter(cat) {
 
 function renderMarketNewsFeed(items) {
   const listEl = document.getElementById('marketNewsList');
+  const expandContainer = document.getElementById('newsExpandContainer');
+  const expandBtnText = document.getElementById('newsExpandText');
+  const expandBtnIcon = document.getElementById('newsExpandIcon');
   if (!listEl) return;
 
   if (!items || items.length === 0) {
@@ -957,6 +963,7 @@ function renderMarketNewsFeed(items) {
         Tidak ada berita pada kategori ini saat ini.
       </div>
     `;
+    if (expandContainer) expandContainer.classList.add('hidden');
     return;
   }
 
@@ -964,7 +971,14 @@ function renderMarketNewsFeed(items) {
   const sortedItems = [...items].sort((a, b) => (b.published_ts || 0) - (a.published_ts || 0));
   cachedNewsItems = sortedItems;
 
-  listEl.innerHTML = sortedItems.map((n, idx) => {
+  const totalCount = sortedItems.length;
+  const shouldLimit = totalCount > NEWS_COLLAPSED_LIMIT;
+  const displayedItems = (!isNewsExpanded && shouldLimit)
+    ? sortedItems.slice(0, NEWS_COLLAPSED_LIMIT)
+    : sortedItems;
+
+  listEl.innerHTML = displayedItems.map((n) => {
+    const origIdx = sortedItems.indexOf(n);
     const isPos = n.sentiment === 'POSITIVE';
     const isNeg = n.sentiment === 'NEGATIVE';
     const sentColor = isPos
@@ -983,7 +997,7 @@ function renderMarketNewsFeed(items) {
 
     return `
       <div
-        onclick="inspectNewsCorrelation(${idx})"
+        onclick="inspectNewsCorrelation(${origIdx >= 0 ? origIdx : 0})"
         class="p-4 rounded-xl bg-slate-900/60 hover:bg-slate-900/90 border border-white/[0.06] hover:border-emerald-400/35 transition cursor-pointer flex flex-col justify-between gap-3 group"
       >
         <div class="space-y-2">
@@ -1019,6 +1033,34 @@ function renderMarketNewsFeed(items) {
       </div>
     `;
   }).join('');
+
+  if (expandContainer) {
+    if (shouldLimit) {
+      expandContainer.classList.remove('hidden');
+      if (!isNewsExpanded) {
+        const remaining = totalCount - NEWS_COLLAPSED_LIMIT;
+        if (expandBtnText) expandBtnText.textContent = `Lihat Selengkapnya (${remaining} Berita Lainnya)`;
+        if (expandBtnIcon) expandBtnIcon.innerHTML = '&darr;';
+      } else {
+        if (expandBtnText) expandBtnText.textContent = 'Tampilkan Lebih Sedikit (10 Berita Teratas)';
+        if (expandBtnIcon) expandBtnIcon.innerHTML = '&uarr;';
+      }
+    } else {
+      expandContainer.classList.add('hidden');
+    }
+  }
+}
+
+function toggleNewsExpand() {
+  isNewsExpanded = !isNewsExpanded;
+  renderMarketNewsFeed(cachedNewsItems);
+
+  if (!isNewsExpanded) {
+    const target = document.getElementById('sectionMarketNews');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
 }
 
 function inspectNewsCorrelation(idx) {
