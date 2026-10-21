@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="SmartFlow IDX" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
-  <link rel="stylesheet" href="/static/styles.css?v=89.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=90.0" />
   <style>
     .glass-panel {
       background: rgba(15, 23, 42, 0.45);
@@ -438,62 +438,16 @@
         </div>
       </div>
 
-      <!-- Grid 3-5 Kartu Kandidat Saham Hari Ini -->
-      <div id="todayCandidatesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <!-- Tabel Ringkas Kandidat Saham Pilihan Hari Ini (Mobile-Optimized) -->
+      <div id="todayCandidatesGrid" class="space-y-3">
         <!-- Skeleton Loader Bar Berkedip (Temuan K6) -->
-        <div class="p-5 rounded-2xl glass-panel animate-pulse space-y-4">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-slate-800/80"></div>
-              <div class="space-y-1.5">
-                <div class="h-4 bg-slate-800 rounded w-16"></div>
-                <div class="h-3 bg-slate-800/60 rounded w-24"></div>
-              </div>
-            </div>
-            <div class="h-5 bg-slate-800 rounded w-16"></div>
+        <div class="glass-panel rounded-2xl p-4 sm:p-5 space-y-3">
+          <div class="h-4 bg-slate-800 rounded w-48 animate-pulse"></div>
+          <div class="space-y-2">
+            <div class="h-12 bg-slate-800/60 rounded-xl animate-pulse"></div>
+            <div class="h-12 bg-slate-800/50 rounded-xl animate-pulse"></div>
+            <div class="h-12 bg-slate-800/40 rounded-xl animate-pulse"></div>
           </div>
-          <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-900/40 border border-white/[0.04]">
-            <div class="h-8 bg-slate-800/60 rounded"></div>
-            <div class="h-8 bg-slate-800/60 rounded"></div>
-            <div class="h-8 bg-slate-800/60 rounded"></div>
-          </div>
-          <div class="h-14 bg-slate-800/50 rounded-xl"></div>
-        </div>
-        <div class="p-5 rounded-2xl glass-panel animate-pulse space-y-4 hidden md:block">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-slate-800/80"></div>
-              <div class="space-y-1.5">
-                <div class="h-4 bg-slate-800 rounded w-16"></div>
-                <div class="h-3 bg-slate-800/60 rounded w-24"></div>
-              </div>
-            </div>
-            <div class="h-5 bg-slate-800 rounded w-16"></div>
-          </div>
-          <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-900/40 border border-white/[0.04]">
-            <div class="h-8 bg-slate-800/60 rounded"></div>
-            <div class="h-8 bg-slate-800/60 rounded"></div>
-            <div class="h-8 bg-slate-800/60 rounded"></div>
-          </div>
-          <div class="h-14 bg-slate-800/50 rounded-xl"></div>
-        </div>
-        <div class="p-5 rounded-2xl glass-panel animate-pulse space-y-4 hidden lg:block">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-slate-800/80"></div>
-              <div class="space-y-1.5">
-                <div class="h-4 bg-slate-800 rounded w-16"></div>
-                <div class="h-3 bg-slate-800/60 rounded w-24"></div>
-              </div>
-            </div>
-            <div class="h-5 bg-slate-800 rounded w-16"></div>
-          </div>
-          <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-900/40 border border-white/[0.04]">
-            <div class="h-8 bg-slate-800/60 rounded"></div>
-            <div class="h-8 bg-slate-800/60 rounded"></div>
-            <div class="h-8 bg-slate-800/60 rounded"></div>
-          </div>
-          <div class="h-14 bg-slate-800/50 rounded-xl"></div>
         </div>
       </div>
 
@@ -2286,6 +2240,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=89.0"></script>
+  <script src="/static/app.js?v=90.0"></script>
 </body>
 </html>
