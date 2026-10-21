@@ -965,8 +965,8 @@ def fetch_single_stock_broker_endpoint(ticker: str) -> dict:
 
     if not _has_real_broker_codes(item):
         raise HTTPException(
-            status_code=502,
-            detail=f"Tidak ada data broker summary yang diterima untuk #{key}. Pastikan token Invezgo / provider Anda valid dan bursa memiliki data.",
+            status_code=422,
+            detail=f"Data broker summary #{key} belum terbit di Invezgo untuk tanggal {latest_dt}. Data broker harian resmi IDX biasanya diperbarui Invezgo setelah jam 18:00 WIB.",
         )
 
     return item

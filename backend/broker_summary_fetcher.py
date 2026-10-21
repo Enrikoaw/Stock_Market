@@ -31,6 +31,9 @@ def load_env_file() -> None:
     possible_paths = [
         root_dir / ".env",
         Path.cwd() / ".env",
+        Path("/home/ubuntu/Stock_Market/.env"),
+        Path("/home/ubuntu/Stock_Market/backend/.env"),
+        Path("/root/Stock_Market/.env"),
         root_dir / ".env.example",  # Fallback jika user mengedit .env.example langsung
         Path.cwd() / ".env.example",
     ]
@@ -52,13 +55,24 @@ def load_env_file() -> None:
                     if "#" in val and not (val.startswith('"') or val.startswith("'")):
                         val = val.split("#", 1)[0]
                     val = val.strip().strip('"').strip("'")
+                    if val.startswith("Bearer "):
+                        val = val[7:].strip()
                     # Abaikan teks placeholder bawaan template
                     if "your_invezgo" in val.lower() or "your_api_key" in val.lower():
                         continue
-                    if key and (key not in os.environ or not os.environ[key].strip()):
-                        os.environ[key] = val
-        except Exception:
-            pass
+                    if not val:
+                        continue
+
+                    # Deteksi otomatis token Invezgo (format resmi awalan invz_ atau nama variabel varian)
+                    k_upper = key.upper()
+                    if val.startswith("invz_") or any(x in k_upper for x in ("INVEZGO", "INVESTGO", "BROKSUM")):
+                        os.environ["INVEZGO_API_KEY"] = val
+                        os.environ["BROKER_API_PROVIDER"] = "invezgo"
+
+                    # Selalu sinkronkan ke os.environ
+                    os.environ[key] = val
+        except Exception as e:
+            print(f"[EnvLoader] Warning membaca {p}: {e}")
 
 
 def load_broker_api_config() -> dict[str, Any]:
@@ -75,14 +89,30 @@ def load_broker_api_config() -> dict[str, Any]:
         "INVESTGO_KEY",
         "BROKER_API_KEY",
         "BROKER_TOKEN",
+        "BROKSUM_API_KEY",
+        "BROKSUM_TOKEN",
+        "INVEZGO_SECRET",
+        "INVESTGO_SECRET",
     ):
-        v = os.environ.get(k, "").strip()
+        v = os.environ.get(k, "").strip().strip('"').strip("'")
         if v and "your_invezgo" not in v.lower() and "your_api_key" not in v.lower():
             invezgo_key = v
             break
 
+    # Jika belum ditemukan, periksa apakah ada environment variable yang nilainya berawalan invz_
+    if not invezgo_key:
+        for k, v in os.environ.items():
+            clean_v = str(v).strip().strip('"').strip("'")
+            if clean_v.startswith("invz_"):
+                invezgo_key = clean_v
+                break
+
+    provider = os.environ.get("BROKER_API_PROVIDER", "").strip().lower()
+    if invezgo_key:
+        provider = "invezgo"
+
     cfg = {
-        "provider": os.environ.get("BROKER_API_PROVIDER", "").strip().lower(),  # invezgo / stockbit / goapi / mock
+        "provider": provider or "invezgo",  # invezgo / stockbit / goapi / mock
         "invezgo_api_key": invezgo_key,
         "goapi_key": os.environ.get("GOAPI_KEY", "").strip(),
         "stockbit_token": os.environ.get("STOCKBIT_BEARER_TOKEN", "").strip(),
@@ -97,14 +127,17 @@ def load_broker_api_config() -> dict[str, Any]:
                     cfg.update({k: v for k, v in saved.items() if v is not None})
                     if not invezgo_key and saved.get("invezgo_api_key"):
                         cfg["invezgo_api_key"] = saved["invezgo_api_key"].strip()
+                    if invezgo_key:
+                        cfg["invezgo_api_key"] = invezgo_key
+                        cfg["provider"] = "invezgo"
         except Exception:
             pass
 
-    # Otomatis pilih provider aktif jika belum disetel secara eksplisit
-    if not cfg.get("provider"):
-        if cfg.get("invezgo_api_key"):
-            cfg["provider"] = "invezgo"
-        elif cfg.get("stockbit_token"):
+    # Otomatis pastikan invezgo aktif jika API key tersedia
+    if cfg.get("invezgo_api_key"):
+        cfg["provider"] = "invezgo"
+    elif not cfg.get("provider"):
+        if cfg.get("stockbit_token"):
             cfg["provider"] = "stockbit"
         elif cfg.get("goapi_key"):
             cfg["provider"] = "goapi"
@@ -553,7 +586,7 @@ def run_stage2_broker_enrichment(
 
         for dt_candidate in dates_to_try:
             try:
-                if provider == "invezgo" and config.get("invezgo_api_key"):
+                if config.get("invezgo_api_key"):
                     raw_data = fetch_broker_summary_invezgo(ticker, dt_candidate, config["invezgo_api_key"])
                 elif provider == "goapi" and config.get("goapi_key"):
                     raw_data = fetch_broker_summary_goapi(ticker, dt_candidate, config["goapi_key"])
@@ -777,7 +810,7 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
 
     for dt_candidate in dates_to_try:
         try:
-            if provider == "invezgo" and config.get("invezgo_api_key"):
+            if config.get("invezgo_api_key"):
                 raw_data = fetch_broker_summary_invezgo(ticker, dt_candidate, config["invezgo_api_key"])
             elif provider == "stockbit" and config.get("stockbit_token"):
                 raw_data = fetch_broker_summary_stockbit(ticker, dt_candidate, config["stockbit_token"])
@@ -900,7 +933,7 @@ def filter_and_purge_watchlist_by_smart_money(
             raw_data = None
             for dt_c in dates_to_try:
                 try:
-                    if provider == "invezgo" and config.get("invezgo_api_key"):
+                    if config.get("invezgo_api_key"):
                         raw_data = fetch_broker_summary_invezgo(ticker, dt_c, config["invezgo_api_key"])
                     elif provider == "stockbit" and config.get("stockbit_token"):
                         raw_data = fetch_broker_summary_stockbit(ticker, dt_c, config["stockbit_token"])
