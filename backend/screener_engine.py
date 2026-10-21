@@ -2187,7 +2187,7 @@ def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 15) -
         if len(chosen) >= max_picks:
             break
 
-    # Fallback 1: Jika kandidat kurang dari 5, ambil dari saham akumulasi tertinggi yang aman
+    # Fallback 1: Jika kandidat kurang dari 5, ambil dari saham akumulasi terbaik yang belum jauh dari modal bandar
     if len(chosen) < 5:
         fallback_list = [
             s for s in stocks
@@ -2199,9 +2199,12 @@ def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 15) -
             and s.get("trigger_type") != "DISTRIBUTION_WARNING"
             and not s.get("retail_trap")
             and s.get("tracker_status") not in ("WIN", "LOSS")
+            and float(s.get("pct_change") or 0) <= 4.0
+            and (-4.5 <= float(s.get("diff_bandar_avg_pct") or 0) <= 3.5)
         ]
         fallback_list.sort(
             key=lambda x: (
+                -abs(float(x.get("diff_bandar_avg_pct") or 0)),
                 float(x.get("bdr_pct") or 0),
                 int(x.get("smart_money_score") or 0),
             ),
@@ -2217,12 +2220,14 @@ def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 15) -
             if len(chosen) >= max_picks:
                 break
 
-    # Fallback 2: Jaminan minimal 3 saham jika data sangat terbatas
+    # Fallback 2: Jaminan minimal 3 saham jika data sangat terbatas (tetap tolak saham pucuk terbang)
     if len(chosen) < 3:
         for s in stocks:
-            if float(s.get("close") or 0) >= 70 and not any(c["ticker"] == s["ticker"] for c in chosen):
+            c_val = float(s.get("close") or 0)
+            pct_val = float(s.get("pct_change") or 0)
+            if c_val >= 70 and pct_val <= 4.0 and not any(c["ticker"] == s["ticker"] for c in chosen):
                 chosen.append(s)
             if len(chosen) >= 3:
                 break
 
-    return chosen
+    return chosen[:max_picks]

@@ -545,85 +545,70 @@ function renderTodayCandidates(stocks) {
     return;
   }
 
-  // Jika input adalah kandidat konsisten dari backend (memiliki session_label atau dipasok dari today_candidates),
-  // gunakan langsung agar konsisten antar sesi (siang & sore)!
-  let candidates = [];
-  const hasPreselected = stocks.some(s => s.session_label != null);
-  if (hasPreselected) {
-    candidates = stocks;
-  } else {
-    // Saring saham untuk strategi Swing Trading "Buy on Pullback / Koreksi Sehat + Akumulasi Broker"
-    const rawCandidates = stocks.filter(s =>
-      (s.close || 0) >= 70 &&
-      (s.value_b_idr || 0) >= 1.0 &&
-      !String(s.sector || '').toLowerCase().includes('pemantauan khusus') &&
-      !String(s.sector || '').toLowerCase().includes('akselerasi') &&
-      (s.fundamental_safety == null || s.fundamental_safety.is_safe !== false) &&
-      (s.tape_quality == null || s.tape_quality.is_organic !== false) &&
-      s.trigger_type !== 'DISTRIBUTION_WARNING' &&
-      !s.retail_trap &&
-      s.tracker_status !== 'WIN' &&
-      s.tracker_status !== 'LOSS' &&
-      s.pct_change >= -3.5 &&
-      s.pct_change <= 2.0 &&
-      (s.vol_ratio == null || s.vol_ratio <= 1.40) &&
-      (s.diff_bandar_avg_pct == null || (s.diff_bandar_avg_pct >= -3.0 && s.diff_bandar_avg_pct <= 2.5)) &&
-      (s.bdr_pct >= 5.0 || s.top3_bsr >= 1.15 || (s.smart_money_score || 0) >= 70)
-    );
+  // Saring ketat kandidat: HANYA saham yang diakum Smart Money & BELUM JAUH DARI MODAL BANDAR
+  const pool = Array.isArray(stocks) ? stocks : [];
+  let validPool = pool.filter(s => {
+    const pct = Number(s.pct_change || 0);
+    const diffBdr = s.diff_bandar_avg_pct != null ? Number(s.diff_bandar_avg_pct) : 0;
+    const bdr = s.bdr_pct != null ? Number(s.bdr_pct) : 0;
 
-    rawCandidates.sort((a, b) => {
-      const bdrA = a.bdr_pct != null ? a.bdr_pct : 0;
-      const bdrB = b.bdr_pct != null ? b.bdr_pct : 0;
-      return (bdrB - bdrA) || (b.smart_money_score - a.smart_money_score) || ((a.diff_bandar_avg_pct || 0) - (b.diff_bandar_avg_pct || 0));
+    // 1. Tolak mutlak saham pucuk yang sudah terbang tinggi (> +4.5%)
+    if (pct > 4.5) return false;
+
+    // 2. Tolak saham jebakan ritel / distribusi
+    if (s.retail_trap || s.trigger_type === 'DISTRIBUTION_WARNING') return false;
+
+    // 3. Syarat Utama: Belum jauh dari Average Modal Bandar (-4.5% s/d +3.5%)
+    if (s.diff_bandar_avg_pct != null && (diffBdr < -4.5 || diffBdr > 3.5)) return false;
+
+    // 4. Diakumulasi Smart Money (BDR positif >= 5% atau pembeli dominan dengan skor tinggi)
+    const isAccum = (bdr >= 5.0) || (s.top3_bsr >= 1.15 && (s.smart_money_score || 0) >= 60);
+    return isAccum;
+  });
+
+  // Jika hasil filter terlalu sedikit (< 4), ambil saham terdekat dari modal bandar yang aman
+  if (validPool.length < 4) {
+    validPool = pool.filter(s => {
+      const pct = Number(s.pct_change || 0);
+      const diffBdr = s.diff_bandar_avg_pct != null ? Number(s.diff_bandar_avg_pct) : 0;
+      if (pct > 4.5) return false;
+      if (s.retail_trap || s.trigger_type === 'DISTRIBUTION_WARNING') return false;
+      return (s.diff_bandar_avg_pct == null || (diffBdr >= -5.0 && diffBdr <= 4.0));
     });
+  }
 
-    const seenSectors = {};
-    for (const s of rawCandidates) {
-      const secCat = s.sector_category || s.sector || 'General';
-      if ((seenSectors[secCat] || 0) < 2) {
-        seenSectors[secCat] = (seenSectors[secCat] || 0) + 1;
-        candidates.push(s);
-      }
-      if (candidates.length >= 15) break;
+  // Urutkan: 1. Paling dekat dengan Modal Bandar -> 2. BDR Akumulasi Tertinggi -> 3. Skor Smart Money
+  validPool.sort((a, b) => {
+    const diffA = Math.abs(a.diff_bandar_avg_pct != null ? a.diff_bandar_avg_pct : 0);
+    const diffB = Math.abs(b.diff_bandar_avg_pct != null ? b.diff_bandar_avg_pct : 0);
+    const bdrA = a.bdr_pct != null ? a.bdr_pct : 0;
+    const bdrB = b.bdr_pct != null ? b.bdr_pct : 0;
+    return (diffA - diffB) || (bdrB - bdrA) || ((b.smart_money_score || 0) - (a.smart_money_score || 0));
+  });
+
+  // Diversifikasi Sektor: Maksimal 1 saham per sektor agar portofolio tersebar sehat
+  const chosenCandidates = [];
+  const seenSectors = {};
+  for (const s of validPool) {
+    const sec = s.sector_category || s.sector || 'General';
+    if (!seenSectors[sec]) {
+      seenSectors[sec] = true;
+      chosenCandidates.push(s);
     }
+    if (chosenCandidates.length >= 8) break;
+  }
 
-    if (candidates.length < 5) {
-      const fallbackList = stocks
-        .filter(s =>
-          (s.close || 0) >= 70 &&
-          (s.value_b_idr || 0) >= 1.0 &&
-          !String(s.sector || '').toLowerCase().includes('pemantauan khusus') &&
-          !String(s.sector || '').toLowerCase().includes('akselerasi') &&
-          (s.fundamental_safety == null || s.fundamental_safety.is_safe !== false) &&
-          (s.tape_quality == null || s.tape_quality.is_organic !== false) &&
-          s.trigger_type !== 'DISTRIBUTION_WARNING' &&
-          !s.retail_trap &&
-          s.tracker_status !== 'WIN' &&
-          s.tracker_status !== 'LOSS'
-        )
-        .sort((a, b) => {
-          const bdrA = a.bdr_pct != null ? a.bdr_pct : 0;
-          const bdrB = b.bdr_pct != null ? b.bdr_pct : 0;
-          return (bdrB - bdrA) || (b.smart_money_score - a.smart_money_score);
-        });
-
-      for (const s of fallbackList) {
-        const secCat = s.sector_category || s.sector || 'General';
-        if ((seenSectors[secCat] || 0) < 2) {
-          seenSectors[secCat] = (seenSectors[secCat] || 0) + 1;
-          candidates.push(s);
-        }
-        if (candidates.length >= 15) break;
+  // Jika masih di bawah 5, tambahkan tanpa limit sektor
+  if (chosenCandidates.length < 5) {
+    for (const s of validPool) {
+      if (!chosenCandidates.some(c => c.ticker === s.ticker)) {
+        chosenCandidates.push(s);
       }
-    }
-
-    if (candidates.length === 0) {
-      candidates = stocks
-        .filter(s => (s.close || 0) >= 70 && !String(s.sector || '').toLowerCase().includes('pemantauan khusus'))
-        .sort((a, b) => (b.smart_money_score || 0) - (a.smart_money_score || 0))
-        .slice(0, 5);
+      if (chosenCandidates.length >= 8) break;
     }
   }
+
+  const candidates = chosenCandidates.length > 0 ? chosenCandidates : pool.slice(0, 5);
 
   const mobileRows = candidates.map((s, idx) => {
     const safeTicker = escHtml(s.ticker);
@@ -2277,11 +2262,15 @@ function renderStockBroksum(d) {
   }
 
   const bdr = d.bdr_pct != null ? Number(d.bdr_pct) : (d.broker_analysis && d.broker_analysis.bdr != null ? Number(d.broker_analysis.bdr) : null);
-  const topBuyers = d.top_buyers_list && d.top_buyers_list.length ? d.top_buyers_list : (d.top_buyers ? d.top_buyers.split(',').map(s => s.trim()).filter(Boolean) : []);
-  const topSellers = d.top_sellers_list && d.top_sellers_list.length ? d.top_sellers_list : (d.top_sellers ? d.top_sellers.split(',').map(s => s.trim()).filter(Boolean) : []);
+  const rawBuyers = d.top_buyers_list && d.top_buyers_list.length ? d.top_buyers_list : (d.top_buyers ? d.top_buyers.split(',').map(s => s.trim()).filter(Boolean) : []);
+  const topBuyers = rawBuyers.map(s => String(s).trim().toUpperCase()).filter(s => /^[A-Z]{2}$/.test(s));
+
+  const rawSellers = d.top_sellers_list && d.top_sellers_list.length ? d.top_sellers_list : (d.top_sellers ? d.top_sellers.split(',').map(s => s.trim()).filter(Boolean) : []);
+  const topSellers = rawSellers.map(s => String(s).trim().toUpperCase()).filter(s => /^[A-Z]{2}$/.test(s));
+
   const bandarAvg = d.bandar_avg_buy || (d.broker_analysis ? d.broker_analysis.bandar_avg : null);
   const isRetailTrap = Boolean(d.retail_trap || (d.broker_analysis && d.broker_analysis.retail_trap));
-  const hasBrokData = Boolean(d.has_real_broker_summary || topBuyers.length > 0 || topSellers.length > 0 || bdr !== null);
+  const hasBrokData = Boolean(d.has_real_broker_summary || topBuyers.length > 0 || topSellers.length > 0);
 
   if (!hasBrokData) {
     container.innerHTML = `
@@ -2393,7 +2382,7 @@ function renderStockBroksum(d) {
       <div class="flex items-center justify-between text-[11px] px-0.5 text-slate-600 dark:text-slate-300">
         <div class="flex items-center gap-1.5 flex-wrap">
           <span class="text-slate-400 text-[10px]">Modal Bandar:</span>
-          <span class="font-mono font-bold text-slate-900 dark:text-white">${bandarAvg ? 'Rp ' + fmtPrice(bandarAvg) : '-'}</span>
+          <span class="font-mono font-bold text-slate-900 dark:text-white">${bandarAvg ? fmtPrice(bandarAvg) : '-'}</span>
           ${bandarDiffHtml}
         </div>
         <div class="font-mono font-semibold text-[10px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
@@ -2612,6 +2601,62 @@ function renderInspectorPanel(d) {
     if (pr) {
       const rr = plan.risk_reward ? ` (R:R = ${plan.risk_reward})` : '';
       pr.textContent = `${plan.rationale || ''}${rr}`;
+    }
+
+    // Wire Jejak Broksum di Trading Plan
+    const planBroksumSec = document.getElementById('planBroksumSection');
+    const planTopBuyersEl = document.getElementById('planTopBuyers');
+    const planBandarAvgEl = document.getElementById('planBandarAvg');
+    const planBroksumBadge = document.getElementById('planBroksumBadge');
+
+    if (planBroksumSec && planTopBuyersEl && planBandarAvgEl && planBroksumBadge) {
+      const rawBuyers = d.top_buyers_list && d.top_buyers_list.length
+        ? d.top_buyers_list
+        : (d.top_buyers ? d.top_buyers.split(',').map(s => s.trim()).filter(Boolean) : []);
+      const validBuyers = rawBuyers.map(s => String(s).trim().toUpperCase()).filter(s => /^[A-Z]{2}$/.test(s));
+
+      const bandarAvg = d.bandar_avg_buy || (plan && plan.bandar_avg_buy) || (d.broker_analysis && d.broker_analysis.bandar_avg);
+      const bdr = d.bdr_pct != null ? Number(d.bdr_pct) : (d.broker_analysis && d.broker_analysis.bdr != null ? Number(d.broker_analysis.bdr) : null);
+      const isRetailTrap = Boolean(d.retail_trap || (d.broker_analysis && d.broker_analysis.retail_trap));
+
+      if (validBuyers.length > 0 || d.has_real_broker_summary) {
+        const INST_BROKERS = new Set(["AK", "BK", "ZP", "KZ", "RX", "YU", "CC", "CS", "MG", "DX", "LG", "OD"]);
+        const buyersFormatted = validBuyers.map(b => {
+          const isInst = INST_BROKERS.has(b);
+          return isInst
+            ? `<span class="px-1.5 py-0.5 rounded font-mono font-bold text-[11px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">${b}</span>`
+            : `<span class="px-1.5 py-0.5 rounded font-mono font-bold text-[11px] bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-white/10">${b}</span>`;
+        }).join(' ');
+
+        planTopBuyersEl.innerHTML = buyersFormatted || '-';
+
+        if (bandarAvg) {
+          const diff = d.close ? Number(((d.close - bandarAvg) / bandarAvg * 100).toFixed(1)) : null;
+          const diffText = diff !== null ? ` <span class="text-[10px] font-normal ${diff <= 0 ? 'text-teal-400' : 'text-emerald-400'}">(${diff >= 0 ? '+' : ''}${diff}%)</span>` : '';
+          planBandarAvgEl.innerHTML = `${fmtPrice(bandarAvg)}${diffText}`;
+        } else {
+          planBandarAvgEl.textContent = '-';
+        }
+
+        if (isRetailTrap) {
+          planBroksumBadge.textContent = 'RITEL TRAP';
+          planBroksumBadge.className = 'font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30';
+        } else if (bdr !== null && bdr >= 10) {
+          planBroksumBadge.textContent = `BDR +${bdr.toFixed(1)}% (AKUMULASI)`;
+          planBroksumBadge.className = 'font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30';
+        } else if (bdr !== null && bdr < 0) {
+          planBroksumBadge.textContent = `BDR ${bdr.toFixed(1)}% (DISTRIBUSI)`;
+          planBroksumBadge.className = 'font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30';
+        } else {
+          planBroksumBadge.textContent = bdr !== null ? `BDR +${bdr.toFixed(1)}%` : 'TERKONFIRMASI';
+          planBroksumBadge.className = 'font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30';
+        }
+      } else {
+        planTopBuyersEl.innerHTML = `<span class="text-slate-400 font-normal italic">Belum dimuat</span> <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}')" class="ml-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600/30">Cek Broksum</button>`;
+        planBandarAvgEl.textContent = bandarAvg ? fmtPrice(bandarAvg) : '-';
+        planBroksumBadge.textContent = 'DATA BELUM ADA';
+        planBroksumBadge.className = 'font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20';
+      }
     }
 
     if (btnWatch) {

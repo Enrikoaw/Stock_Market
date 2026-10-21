@@ -628,13 +628,23 @@ def run_stage2_broker_enrichment(
                     detail["retail_trap"] = True
                     detail["trigger_type"] = "DISTRIBUTION_WARNING"
                     detail["trigger_label"] = "Distribusi (Ritel Trap)"
-                if metrics.get("bandar_avg") and detail.get("trading_plan"):
-                    detail["trading_plan"]["bandar_avg_buy"] = metrics["bandar_avg"]
+                if detail.get("trading_plan"):
+                    if metrics.get("bandar_avg"):
+                        detail["trading_plan"]["bandar_avg_buy"] = metrics["bandar_avg"]
                     if "entry_price" in s.get("trading_plan", {}):
                         detail["trading_plan"]["entry_price"] = s["trading_plan"]["entry_price"]
                         detail["trading_plan"]["entry_low"] = s["trading_plan"]["entry_low"]
                         detail["trading_plan"]["entry_high"] = s["trading_plan"]["entry_high"]
                         detail["trading_plan"]["support_label"] = s["trading_plan"].get("support_label", "Support Avg Bandar")
+                    detail["trading_plan"]["top_buyers"] = s.get("top_buyers", "")
+                    detail["trading_plan"]["top_buyers_list"] = s.get("top_buyers_list", [])
+                    detail["trading_plan"]["bdr_pct"] = s.get("bdr_pct")
+                    detail["trading_plan"]["has_real_broker_summary"] = s.get("has_real_broker_summary", False)
+                if s.get("trading_plan"):
+                    s["trading_plan"]["top_buyers"] = s.get("top_buyers", "")
+                    s["trading_plan"]["top_buyers_list"] = s.get("top_buyers_list", [])
+                    s["trading_plan"]["bdr_pct"] = s.get("bdr_pct")
+                    s["trading_plan"]["has_real_broker_summary"] = s.get("has_real_broker_summary", False)
         else:
             s["has_broker_summary"] = False
 
@@ -814,6 +824,12 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
                 s["trading_plan"]["entry_low"] = rev_ep
                 s["trading_plan"]["entry_high"] = rev_ep
                 s["trading_plan"]["support_label"] = "Support Avg Bandar"
+
+        if s.get("trading_plan"):
+            s["trading_plan"]["top_buyers"] = s.get("top_buyers", "")
+            s["trading_plan"]["top_buyers_list"] = s.get("top_buyers_list", [])
+            s["trading_plan"]["bdr_pct"] = s.get("bdr_pct")
+            s["trading_plan"]["has_real_broker_summary"] = s.get("has_real_broker_summary", False)
 
     return s
 

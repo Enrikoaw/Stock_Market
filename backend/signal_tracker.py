@@ -1380,7 +1380,34 @@ class SignalTracker:
             self._ensure_candidate_in_watchlist(item, date_str, item["session_label"])
             merged_candidates.append(item)
 
-        return merged_candidates
+        # Filter ketat hasil kandidat hari ini:
+        # 1. Tolak saham pucuk yang sudah terbang tinggi (pct_change > 4.5%)
+        # 2. Tolak saham yang sudah terbang jauh dari modal bandar (diff_bandar_avg_pct > 3.5% atau < -4.5%)
+        # 3. Tolak saham distribusi / retail trap
+        # 4. Batasi maksimal 8-10 saham terbaik
+        strict_candidates = []
+        for item in merged_candidates:
+            pct = float(item.get("pct_change") or 0)
+            diff_bdr = float(item.get("diff_bandar_avg_pct") or 0)
+            if pct > 4.5:
+                continue
+            if item.get("retail_trap") or item.get("trigger_type") == "DISTRIBUTION_WARNING":
+                continue
+            if item.get("diff_bandar_avg_pct") is not None and (diff_bdr < -4.5 or diff_bdr > 3.5):
+                continue
+            strict_candidates.append(item)
+
+        strict_candidates.sort(
+            key=lambda x: (
+                -abs(float(x.get("diff_bandar_avg_pct") or 0)),
+                float(x.get("bdr_pct") or 0),
+                int(x.get("smart_money_score") or 0),
+            ),
+            reverse=True,
+        )
+
+        final_picks = strict_candidates[:10] if strict_candidates else merged_candidates[:6]
+        return final_picks
 
     def _ensure_candidate_in_watchlist(self, stock: dict, date_str: str, session_label: str) -> None:
         """Memastikan saham pilihan hari ini tercatat di Watchlist (signals_table)."""

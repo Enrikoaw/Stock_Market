@@ -153,8 +153,8 @@ def _process_ticker_sub(sub: pd.DataFrame, t_code: str, sector_map: dict[str, st
         f_buy_val = np.round(val_idr * f_buy_share).astype(np.int64)
         f_sell_val = np.round(val_idr * f_sell_share).astype(np.int64)
 
-        buyer_label = np.where(t3_buy >= t3_sell * 1.25, "Inst Demand (VSA)", "Mixed Buyer")
-        seller_label = np.where(t3_sell >= t3_buy * 1.25, "Supply Pressure", "Retail / Mixed")
+        buyer_label = ""
+        seller_label = ""
 
         return pd.DataFrame(
             {
