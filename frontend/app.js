@@ -625,14 +625,53 @@ function renderTodayCandidates(stocks) {
     }
   }
 
-  const tableRows = candidates.map((s, idx) => {
+  const mobileRows = candidates.map((s, idx) => {
     const safeTicker = escHtml(s.ticker);
     const safeSecCat = escHtml(s.sector_category || s.sector || 'General');
     const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
+    const reasons = getWhyCandidateReason(s);
+    const reasonsMobileHtml = reasons.map(r => `
+      <span class="inline-block px-1.5 py-0.2 rounded text-[9px] font-mono font-medium border ${r.color}">
+        ${escHtml(r.text)}
+      </span>
+    `).join('');
 
-    const sessionBadge = s.session_label
-      ? `<span class="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60">${escHtml(s.session_label)}</span>`
-      : '';
+    return `
+      <div class="py-2 px-1 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition cursor-pointer flex items-center justify-between gap-2" onclick="selectStockAndGoToInspector('${safeTicker}')">
+        <!-- Kiri: # + Logo + Ticker + Sektor + Katalis -->
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="font-mono text-[11px] text-slate-400 w-4 text-center shrink-0">${idx + 1}</span>
+          ${getStockLogoImg(s.ticker, 'w-6 h-6 rounded shrink-0')}
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 leading-tight">
+              <span class="font-mono font-black text-xs text-slate-900 dark:text-white tracking-wide">${safeTicker}</span>
+              <span class="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[110px]">${safeSecCat}</span>
+            </div>
+            <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+              ${reasonsMobileHtml}
+            </div>
+          </div>
+        </div>
+
+        <!-- Kanan: Harga + % Chg + Skor SM + Plan -->
+        <div class="text-right shrink-0 flex items-center gap-2.5">
+          <div class="leading-tight">
+            <div class="font-mono font-bold text-xs text-slate-900 dark:text-white">${fmtPrice(s.close)}</div>
+            <div class="font-mono text-[10px] font-bold ${chgColor}">${(s.pct_change >= 0 ? '+' : '') + Number(s.pct_change || 0).toFixed(2)}%</div>
+          </div>
+          <div class="flex flex-col items-end gap-0.5">
+            <span class="font-mono font-bold text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60">${s.smart_money_score}</span>
+            <span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">Plan &rarr;</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const desktopRows = candidates.map((s, idx) => {
+    const safeTicker = escHtml(s.ticker);
+    const safeSecCat = escHtml(s.sector_category || s.sector || 'General');
+    const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
 
     const reasons = getWhyCandidateReason(s);
     const reasonsHtml = reasons.map((r) => `
@@ -644,7 +683,7 @@ function renderTodayCandidates(stocks) {
     return `
       <tr class="hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors cursor-pointer group" onclick="selectStockAndGoToInspector('${safeTicker}')">
         <!-- Index -->
-        <td class="py-1.5 pl-3 pr-2 text-center font-mono text-[11px] text-slate-400 dark:text-slate-500">${idx + 1}</td>
+        <td class="py-1.5 pl-3 pr-2 text-center font-mono text-[11px] text-slate-400 dark:text-slate-500 w-8 whitespace-nowrap">${idx + 1}</td>
 
         <!-- Saham -->
         <td class="py-1.5 px-2.5 whitespace-nowrap">
@@ -652,7 +691,6 @@ function renderTodayCandidates(stocks) {
             ${getStockLogoImg(s.ticker, 'w-5 h-5 rounded shrink-0')}
             <span class="font-mono font-bold text-xs text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition tracking-wide">${safeTicker}</span>
             <span class="text-[10px] text-slate-500 dark:text-slate-400 font-sans">${safeSecCat}</span>
-            ${sessionBadge}
           </div>
         </td>
 
@@ -674,8 +712,8 @@ function renderTodayCandidates(stocks) {
         </td>
 
         <!-- Katalis & Alasan Watchlist -->
-        <td class="py-1.5 px-3">
-          <div class="flex items-center gap-1.5 flex-wrap">
+        <td class="py-1.5 px-3 whitespace-nowrap">
+          <div class="flex items-center gap-1.5">
             ${reasonsHtml}
           </div>
         </td>
@@ -696,7 +734,7 @@ function renderTodayCandidates(stocks) {
 
   container.innerHTML = `
     ${defensiveNoticeHtml}
-    <div class="glass-panel rounded-2xl p-2.5 sm:p-4 border border-slate-200 dark:border-white/[0.08] shadow-sm space-y-2.5">
+    <div class="glass-panel rounded-2xl p-2.5 sm:p-4 border border-slate-200 dark:border-white/[0.08] shadow-sm space-y-2">
       <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200 dark:border-white/[0.06]">
         <div class="flex items-center gap-2">
           <span class="text-xs font-bold text-slate-800 dark:text-slate-200">Kandidat Saham Pilihan Hari Ini</span>
@@ -707,21 +745,27 @@ function renderTodayCandidates(stocks) {
         </div>
       </div>
 
-      <div class="overflow-x-auto -mx-1 sm:mx-0">
-        <table class="w-full text-left border-collapse text-xs min-w-[580px]">
+      <!-- Tampilan Mobile: List Ramping, Padat, Rapi, Pas di Layar -->
+      <div class="sm:hidden divide-y divide-slate-100 dark:divide-white/[0.06]">
+        ${mobileRows}
+      </div>
+
+      <!-- Tampilan Desktop: Tabel Padat & Lengkap -->
+      <div class="hidden sm:block overflow-x-auto -mx-1 sm:mx-0">
+        <table class="w-full text-left border-collapse text-xs">
           <thead>
             <tr class="bg-slate-100 dark:bg-slate-900/90 border-y border-slate-200 dark:border-white/[0.08] text-slate-600 dark:text-slate-400 font-semibold select-none text-[11px]">
               <th class="py-2 pl-3 pr-2 w-8 text-center text-slate-400">#</th>
-              <th class="py-2 px-2.5">Saham</th>
-              <th class="py-2 px-2.5 text-right">Harga</th>
-              <th class="py-2 px-2.5 text-right">Chg</th>
-              <th class="py-2 px-2.5 text-center">Skor SM</th>
-              <th class="py-2 px-3">Katalis &amp; Alasan Watchlist</th>
-              <th class="py-2 pr-3 pl-2 text-right w-20">Aksi</th>
+              <th class="py-2 px-2.5 whitespace-nowrap">Saham</th>
+              <th class="py-2 px-2.5 text-right whitespace-nowrap">Harga</th>
+              <th class="py-2 px-2.5 text-right whitespace-nowrap">Chg</th>
+              <th class="py-2 px-2.5 text-center whitespace-nowrap">Skor SM</th>
+              <th class="py-2 px-3 whitespace-nowrap">Katalis &amp; Alasan Watchlist</th>
+              <th class="py-2 pr-3 pl-2 text-right w-20 whitespace-nowrap">Aksi</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 dark:divide-white/[0.04]">
-            ${tableRows}
+            ${desktopRows}
           </tbody>
         </table>
       </div>
@@ -2124,8 +2168,8 @@ function renderScreenerTable(stocks) {
             <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
               ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
             </span>
-            ${s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW' ? `<span class="block text-[8px] font-bold text-amber-800 bg-amber-100 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 mt-0.5 font-mono px-1 py-0.2 rounded" title="${escHtml(s.tape_quality.reason)}">⚠️ ${s.tape_quality.code === 'SUSPICIOUS_CROSSING' ? 'Crossing' : s.tape_quality.code === 'UPTHRUST_DISTRIBUTION' ? 'Upthrust' : 'Thin'}</span>` : ''}
-            ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">🏆 WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? ((s.tracker_pnl_pct || 0) < 0 ? `<span class="block text-[9px] font-bold text-rose-800 bg-rose-100 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50 mt-1 font-mono px-1 py-0.5 rounded">🔻 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : `<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">🚀 RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>`) : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-800 bg-blue-100 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50 mt-1 font-mono px-1 py-0.5 rounded">⏳ WATCHLIST</span>' : ''}
+            ${s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW' ? `<span class="block text-[8px] font-bold text-amber-800 bg-amber-100 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 mt-0.5 font-mono px-1 py-0.2 rounded" title="${escHtml(s.tape_quality.reason)}">${s.tape_quality.code === 'SUSPICIOUS_CROSSING' ? 'Crossing' : s.tape_quality.code === 'UPTHRUST_DISTRIBUTION' ? 'Upthrust' : 'Thin'}</span>` : ''}
+            ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? ((s.tracker_pnl_pct || 0) < 0 ? `<span class="block text-[9px] font-bold text-rose-800 bg-rose-100 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50 mt-1 font-mono px-1 py-0.5 rounded">RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : `<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>`) : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-800 bg-blue-100 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50 mt-1 font-mono px-1 py-0.5 rounded">WATCHLIST</span>' : ''}
           </td>
 
           <!-- Smart Money Score with Progress Bar -->
