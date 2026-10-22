@@ -43,6 +43,7 @@ from sqlalchemy import (
     Table,
     Text,
     and_,
+    or_,
     create_engine,
     delete,
     insert,
@@ -184,10 +185,96 @@ class SignalTracker:
             metadata.create_all(self.engine)
         self.db_backend = "PostgreSQL (permanen)" if url.startswith("postgresql") else "SQLite (file lokal)"
         try:
+            self.cleanup_duplicate_signals()
             self.repair_corrupted_loss_signals()
             self.repair_and_sync_watchlist_entries()
         except Exception as e:
             print(f"[Tracker] Error auto-repair corrupted signals: {e}")
+
+
+    def cleanup_duplicate_signals(self) -> int:
+        """
+        Deduplikasi & Pembersihan Sinyal Duplicate:
+        1. Jika saham sudah Take Profit (WIN) pada tanggal T:
+           DILARANG entry kembali pada hari yang sama (T).
+           Semua sinyal lain untuk emiten tersebut yang entry di hari yang sama T
+           atau berstatus aktif (WATCHLIST/RUNNING) / EXPIRED pada tanggal T dibatalkan (CANCELLED).
+        2. Jika terdapat lebih dari 1 sinyal aktif (RUNNING/WATCHLIST) untuk emiten yang sama:
+           Pertahankan sinyal pertama (ID terkecil / signal_date lebih awal) dan batalkan sinyal duplikatnya.
+        """
+        cancelled_count = 0
+        with self._lock, self.engine.begin() as conn:
+            rows = conn.execute(
+                select(signals_table).order_by(signals_table.c.id.asc())
+            ).mappings().all()
+
+            from collections import defaultdict
+            by_ticker = defaultdict(list)
+            for r in rows:
+                by_ticker[str(r["ticker"]).upper()].append(dict(r))
+
+            ids_to_cancel: list[tuple[int, str]] = []
+
+            for ticker, items in by_ticker.items():
+                if len(items) <= 1:
+                    continue
+
+                wins = [s for s in items if s["status"] == "WIN"]
+                runnings = [s for s in items if s["status"] == "RUNNING"]
+                watchlists = [s for s in items if s["status"] == "WATCHLIST"]
+
+                if wins:
+                    for w in wins:
+                        w_exit = str(w.get("exit_date") or w.get("signal_date") or "")
+                        for other in items:
+                            if other["id"] == w["id"] or other["status"] in ("CANCELLED",):
+                                continue
+                            o_ent = str(other.get("entry_date") or other.get("signal_date") or "")
+                            if (w_exit and o_ent == w_exit) or other["status"] in ("RUNNING", "WATCHLIST", "EXPIRED"):
+                                if other["status"] in ("RUNNING", "WATCHLIST"):
+                                    ids_to_cancel.append((
+                                        other["id"],
+                                        f"Dibatalkan: Saham sudah Take Profit (WIN ID:{w['id']}) di hari yang sama {w_exit}. Dilarang re-entry di hari yang sama."
+                                    ))
+                                elif other["status"] == "EXPIRED" and o_ent == w_exit:
+                                    ids_to_cancel.append((
+                                        other["id"],
+                                        f"Dibatalkan: Saham sudah Take Profit (WIN ID:{w['id']}) di hari yang sama {w_exit}."
+                                    ))
+
+                active_runs = [s for s in runnings if s["id"] not in [x[0] for x in ids_to_cancel]]
+                if len(active_runs) > 1:
+                    active_runs.sort(key=lambda x: x["id"])
+                    for dup in active_runs[1:]:
+                        ids_to_cancel.append((
+                            dup["id"],
+                            f"Dibatalkan: Duplikasi sinyal RUNNING dengan ID:{active_runs[0]['id']}."
+                        ))
+
+                active_wl = [s for s in watchlists if s["id"] not in [x[0] for x in ids_to_cancel]]
+                if active_runs and active_wl:
+                    for dup in active_wl:
+                        ids_to_cancel.append((
+                            dup["id"],
+                            f"Dibatalkan: Duplikasi antrean Watchlist saat emiten sudah RUNNING (ID:{active_runs[0]['id']})."
+                        ))
+
+            for sid, reason in ids_to_cancel:
+                conn.execute(
+                    update(signals_table)
+                    .where(signals_table.c.id == sid)
+                    .values(
+                        status="CANCELLED",
+                        exit_date=now_wib().strftime("%Y-%m-%d"),
+                        note=reason,
+                        updated_at=_now_str(),
+                    )
+                )
+                cancelled_count += 1
+
+        if cancelled_count > 0:
+            print(f"[SignalTracker] Berhasil membatalkan {cancelled_count} sinyal duplikat/re-entry ilegal!")
+        return cancelled_count
 
     def repair_corrupted_loss_signals(self) -> int:
         """
@@ -267,6 +354,28 @@ class SignalTracker:
 
                 clean_ep, clean_sl, clean_tp1, clean_tp2 = align_signal_prices(e_high, sl, tp1, tp2)
                 pri_tp = clean_tp2 if self.tp_level == 2 else clean_tp1
+
+                # Cek apakah emiten sudah pernah WIN hari ini atau sedang RUNNING di trade lain
+                prior_active = conn.execute(
+                    select(signals_table.c.id, signals_table.c.status).where(
+                        and_(
+                            signals_table.c.ticker == t_up,
+                            signals_table.c.id != r["id"],
+                            signals_table.c.status.in_(["WIN", "RUNNING"]),
+                        )
+                    )
+                ).first()
+                if prior_active:
+                    conn.execute(
+                        update(signals_table)
+                        .where(signals_table.c.id == r["id"])
+                        .values(
+                            status="CANCELLED",
+                            note=f"Dibatalkan: Emiten sudah berstatus {prior_active[1]} (ID:{prior_active[0]}). Dilarang duplicate.",
+                            updated_at=_now_str(),
+                        )
+                    )
+                    continue
 
                 # Cek apakah harga pasar sudah menyentuh harga antrean Entry limit
                 # (termasuk kasus VKTR pada 2026-10-22 yang Low Rp 336 menyentuh Entry Rp 340)
@@ -541,6 +650,22 @@ class SignalTracker:
             if dup:
                 return False, f"Sinyal {ticker} tanggal {signal_date} sudah pernah dicatat."
 
+            # Larangan keras: jika saham sudah pernah Take Profit (WIN) atau exit di tanggal yang sama:
+            # DILARANG entry kembali di hari yang sama! Harus menunggu hari ke-2.
+            prior_exit_today = conn.execute(
+                select(signals_table.c.id, signals_table.c.status).where(
+                    and_(
+                        signals_table.c.ticker == ticker,
+                        or_(
+                            signals_table.c.exit_date == signal_date,
+                            signals_table.c.signal_date == signal_date,
+                        ),
+                    )
+                )
+            ).first()
+            if prior_exit_today:
+                return False, f"{ticker}: Sudah memiliki riwayat sinyal / selesai ({prior_exit_today[1]}) pada tanggal {signal_date}. Dilarang re-entry di hari yang sama."
+
             # Cooldown 5 Hari: Jika ticker sudah punya riwayat sinyal apa pun (termasuk WIN, LOSS, EXPIRED)
             # dalam 5 hari terakhir, tolak untuk mencegah saham yang baru saja selesai dibeli lagi di pucuk.
             recent_sigs = conn.execute(
@@ -618,11 +743,23 @@ class SignalTracker:
 
         market_date = analysis.get("kpis", {}).get("latest_date")
         active_tickers = set(self.get_active_tickers())
+        with self.engine.connect() as conn:
+            closed_today_tickers = set(
+                conn.execute(
+                    select(signals_table.c.ticker).where(
+                        or_(
+                            signals_table.c.exit_date == market_date,
+                            signals_table.c.signal_date == market_date,
+                        )
+                    ).distinct()
+                ).scalars().all()
+            )
         added = 0
         candidates = [
             s for s in analysis.get("stocks", [])
             if str(s.get("ticker", "")).upper()
             and str(s.get("ticker", "")).upper() not in active_tickers
+            and str(s.get("ticker", "")).upper() not in closed_today_tickers
             and s.get("trigger_type") in TRACKABLE_TRIGGERS
             and int(s.get("smart_money_score", 0)) >= self.min_score
             and (not market_date or s.get("date") == market_date)
@@ -867,7 +1004,22 @@ class SignalTracker:
         today_str = now_wib().strftime("%Y-%m-%d")
         changes = {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "events": []}
 
+        # Bersihkan sinyal duplikat terlebih dahulu
+        self.cleanup_duplicate_signals()
+
         with self._lock, self.engine.begin() as conn:
+            from collections import defaultdict
+            win_tickers_by_date: dict[str, set[str]] = defaultdict(set)
+            win_rows = conn.execute(
+                select(signals_table.c.ticker, signals_table.c.exit_date, signals_table.c.signal_date).where(
+                    signals_table.c.status == "WIN"
+                )
+            ).all()
+            for wt, wext, wsig in win_rows:
+                if wext:
+                    win_tickers_by_date[str(wext)].add(str(wt).upper())
+                if wsig:
+                    win_tickers_by_date[str(wsig)].add(str(wt).upper())
             rows = conn.execute(
                 select(signals_table).where(signals_table.c.status.in_(ACTIVE_STATUSES))
             ).mappings().all()
@@ -903,7 +1055,7 @@ class SignalTracker:
                     if r["status"] == "RUNNING" and bar_date == since and not is_live_today and r.get("last_eval_date"):
                         continue
 
-                    self._step(r, bar, changes, is_live_today=is_live_today)
+                    self._step(r, bar, changes, is_live_today=is_live_today, win_tickers_by_date=win_tickers_by_date)
 
                     # Update last_eval_date jika bar sudah final atau trade sudah ditutup
                     if not is_live_today or r["status"] not in ACTIVE_STATUSES:
@@ -949,6 +1101,10 @@ class SignalTracker:
                     cur_c = float(hist[-1]["close"])
                     e_high = float(r.get("entry_high") or 0)
                     sl_val = float(r.get("stop_loss") or 0)
+
+                    # Jika saham sudah Take Profit (WIN) di hari ini, DILARANG entry kembali di hari yang sama!
+                    if win_tickers_by_date and r["ticker"].upper() in win_tickers_by_date.get(last_bar_date, set()):
+                        continue
 
                     if e_high > 0 and cur_l <= e_high and last_bar_date >= str(r.get("signal_date") or ""):
                         if cur_c <= sl_val or (sl_val > 0 and cur_l <= sl_val * 0.96):
@@ -1012,11 +1168,15 @@ class SignalTracker:
 
         return changes
 
-    def _step(self, r: dict, bar: dict, changes: dict, is_live_today: bool = False) -> None:
+    def _step(self, r: dict, bar: dict, changes: dict, is_live_today: bool = False, win_tickers_by_date: dict | None = None) -> None:
         o, h, l, c = (float(bar[k]) for k in ("open", "high", "low", "close"))
         date = str(bar["date"])
 
         if r["status"] == "WATCHLIST":
+            # Aturan Ketat: Jika saham sudah Take Profit (WIN) di hari yang sama (date),
+            # DILARANG entry kembali di hari yang sama! Harus menunggu hari berikutnya (hari ke-2).
+            if win_tickers_by_date and r["ticker"].upper() in win_tickers_by_date.get(date, set()):
+                return
             e_low, e_high, sl = r["entry_low"], r["entry_high"], r["stop_loss"]
 
             # 1. Proteksi gap down ekstrim: pembukaan di bawah Stop Loss langsung dibatalkan
@@ -1178,6 +1338,8 @@ class SignalTracker:
                 q = q.where(signals_table.c.status.in_(("EXPIRED", "TIMEOUT", "CANCELLED")))
             else:
                 q = q.where(signals_table.c.status == status.upper())
+        else:
+            q = q.where(signals_table.c.status != "CANCELLED")
 
         sort_by_clean = (sort_by or "date_desc").lower().strip()
         if sort_by_clean in ("pnl_desc", "pnl"):
@@ -1676,13 +1838,22 @@ class SignalTracker:
             trig_lbl = str(stock.get("trigger_label") or "Akumulasi Broker")
 
             if not existing:
-                closed_today = conn.execute(
+                # Cek apakah emiten sudah pernah Take Profit (WIN) atau exit hari ini / tanggal ini
+                # Sesuai aturan: jika saham sudah take profit di hari yang sama, DILARANG entry kembali!
+                prior_trade_today = conn.execute(
                     select(signals_table).where(
                         signals_table.c.ticker == ticker,
-                        signals_table.c.signal_date == date_str,
+                        or_(
+                            signals_table.c.signal_date == date_str,
+                            signals_table.c.exit_date == date_str,
+                        ),
                     )
                 ).mappings().first()
-                if closed_today:
+                if prior_trade_today:
+                    return
+
+                # Tolak jika skor di bawah minimum atau terdeteksi distribusi
+                if score < self.min_score or trig_type == "DISTRIBUTION_WARNING":
                     return
 
                 primary_tp = tp2 if self.tp_level == 2 else tp1

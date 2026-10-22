@@ -1466,22 +1466,27 @@ def tracker_signals(
 
 @app.post("/api/tracker/cleanup-stale")
 def tracker_cleanup_stale() -> dict:
+    cancelled = TRACKER.cleanup_duplicate_signals()
     analysis = STATE.get("analysis")
     ref_dt = analysis.get("kpis", {}).get("latest_date") if analysis else None
     removed = TRACKER.cleanup_stale_watchlist(max_days=3, latest_date=ref_dt)
-    return {"success": True, "cleaned": removed, "message": f"{removed} sinyal antrean kedaluwarsa berhasil dibersihkan."}
+    return {"success": True, "cleaned": removed, "cancelled_duplicates": cancelled, "message": f"{removed} sinyal antrean kedaluwarsa & {cancelled} sinyal duplikat berhasil dibersihkan."}
 
 
 @app.post("/api/tracker/repair")
 def tracker_repair() -> dict:
-    """Memulihkan sinyal yang salah ditutup sebagai LOSS akibat bug evaluasi tanggal lampau."""
+    """Memulihkan sinyal yang salah ditutup dan membatalkan duplicate sinyal."""
+    cancelled = TRACKER.cleanup_duplicate_signals()
     repaired = TRACKER.repair_corrupted_loss_signals()
+    sync_w = TRACKER.repair_and_sync_watchlist_entries()
     if STATE.get("analysis") and "details" in STATE["analysis"]:
         TRACKER.evaluate(STATE["analysis"]["details"])
     return {
         "success": True,
         "repaired_count": repaired,
-        "message": f"Berhasil memulihkan {repaired} sinyal ke status aktif!",
+        "cancelled_duplicates": cancelled,
+        "synced_watchlist": sync_w,
+        "message": f"Berhasil memulihkan {repaired} sinyal & membersihkan {cancelled} sinyal duplikat!",
     }
 
 
