@@ -1,8 +1,8 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'smartflow-idx-v94.5';
+const CACHE_NAME = 'smartflow-idx-v94.6';
 const ASSETS_TO_CACHE = [
-  '/static/styles.css?v=94.5',
-  '/static/app.js?v=94.5',
+  '/static/styles.css?v=94.6',
+  '/static/app.js?v=94.6',
   '/manifest.json',
   '/static/icons/icon.svg',
   '/static/icons/icon-192.svg',
@@ -54,6 +54,8 @@ self.addEventListener('push', (event) => {
       badge: '/static/icons/icon-192.svg',
       data: { url: data.url || '/' },
       vibrate: [200, 100, 200],
+      tag: data.tag || ('smartflow-' + Date.now()),
+      renotify: true,
     })
   );
 });

@@ -597,9 +597,10 @@ async def _background_market_session_worker() -> None:
 
 
 async def _background_news_alert_worker() -> None:
-    """Worker alert HP: setiap 10 menit cek berita; kirim push (Telegram/ntfy) HANYA untuk
-    berita POSITIF terkait emiten. Tidak memakai kuota Invezgo."""
-    print("[NewsAlertWorker] Aktif (alert berita positif emiten ke HP).")
+    """Worker alert HP: setiap 3 menit cek berita; kirim push (Web Push HP/Telegram/ntfy)
+    HANYA untuk berita POSITIF terkait emiten."""
+    print("[NewsAlertWorker] Aktif (alert berita positif emiten ke bar notifikasi HP).")
+    await asyncio.sleep(5)
     while True:
         try:
             if is_push_configured():
@@ -608,11 +609,11 @@ async def _background_news_alert_worker() -> None:
                 items = await asyncio.to_thread(
                     get_market_news_nonblocking, known_tickers=kt, analysis_stocks=stocks
                 )
-                if items and kt:
+                if items:
                     await asyncio.to_thread(process_positive_news_alerts, items)
         except Exception as exc:
             print(f"[NewsAlertWorker] Error: {exc}")
-        await asyncio.sleep(600)
+        await asyncio.sleep(180)
 
 
 @asynccontextmanager
@@ -1991,14 +1992,12 @@ def push_unsubscribe(body: dict) -> dict:
 def test_push_alert() -> dict:
     """Kirim notifikasi uji ke HP (bar notifikasi / Telegram / ntfy)."""
     if not is_push_configured():
-        raise HTTPException(
-            status_code=400,
-            detail="Belum ada perangkat terdaftar. Buka aplikasi di HP lalu tekan 'Aktifkan' pada Notifikasi Desktop / HP.",
-        )
-    ok = send_push("✅ SmartFlow IDX", "Alert berita positif emiten berhasil terhubung ke HP Anda.")
-    if not ok:
-        raise HTTPException(status_code=502, detail="Gagal mengirim. Periksa token/chat id/topic.")
-    return {"status": "success", "message": "Notifikasi uji terkirim ke HP."}
+        return {
+            "status": "warning",
+            "message": "Perangkat web push belum terdaftar di server. Buka di HP dan tekan 'Aktifkan'.",
+        }
+    ok = send_push("📈 Katalis Positif: #BBCA (+3.2%)", "Uji Coba: Notifikasi berita katalis positif terhubung ke bar notifikasi HP Anda.", link="/?ticker=BBCA")
+    return {"status": "success" if ok else "error", "message": "Notifikasi uji terkirim ke bar HP."}
 
 
 @app.post("/api/broker/sync-eod")

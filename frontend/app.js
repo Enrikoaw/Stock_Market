@@ -1004,6 +1004,7 @@ async function loadMarketNews(forceRefresh = false) {
     const data = await res.json();
     cachedNewsItems = (data.items || []).sort((a, b) => (b.published_ts || 0) - (a.published_ts || 0));
     renderMarketNewsFeed(cachedNewsItems);
+    triggerPositiveNewsBarNotification(cachedNewsItems);
   } catch (err) {
     if (listEl && (!cachedNewsItems || cachedNewsItems.length === 0)) {
       renderNewsError(err.message);
@@ -1587,6 +1588,153 @@ async function requestBrowserNotification() {
   }
 }
 
+function getAlertPreferences() {
+  try {
+    const raw = localStorage.getItem('smartflow_alert_prefs');
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return {
+    support: true,
+    tpSl: true,
+    volSpike: true,
+    news: true,
+  };
+}
+
+// Mengirim notifikasi sistem langsung ke bar notifikasi HP / Desktop via Service Worker
+async function sendSystemNotification(title, body, url = '/', tag = '') {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+  try {
+    const prefs = getAlertPreferences();
+    if (!prefs.news && tag.startsWith('news-')) return false;
+
+    // 1. Prioritas Utama: Service Worker showNotification (Muncul di bar notifikasi HP)
+    if ('serviceWorker' in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && reg.showNotification) {
+          await reg.showNotification(title, {
+            body: body,
+            icon: '/static/icons/icon-192.svg',
+            badge: '/static/icons/icon-192.svg',
+            data: { url: url },
+            vibrate: [200, 100, 200],
+            tag: tag || ('news-alert-' + Date.now()),
+            renotify: true,
+          });
+          return true;
+        }
+      } catch (swErr) {
+        console.warn('[Notification] SW showNotification fallback:', swErr);
+      }
+    }
+
+    // 2. Fallback: Window Notification
+    const n = new Notification(title, {
+      body: body,
+      icon: '/static/icons/icon-192.svg',
+      data: { url: url },
+      tag: tag || undefined,
+    });
+    n.onclick = function() {
+      window.focus();
+      if (url && url !== '/') {
+        const matchTicker = url.match(/ticker=([A-Z0-9]+)/);
+        if (matchTicker) selectStockAndGoToInspector(matchTicker[1]);
+      }
+      n.close();
+    };
+    return true;
+  } catch (err) {
+    console.error('[Notification] Error sendSystemNotification:', err);
+    return false;
+  }
+}
+
+// Uji coba kirim notifikasi berita katalis positif langsung ke bar notifikasi HP
+async function testPositiveNewsNotification() {
+  if (!('Notification' in window)) {
+    showToast('Peramban Anda tidak mendukung API Notifikasi.', 'error');
+    return;
+  }
+
+  if (Notification.permission !== 'granted') {
+    await requestBrowserNotification();
+    if (Notification.permission !== 'granted') return;
+  }
+
+  playAlertChime();
+
+  // 1. Kirim notifikasi lokal via Service Worker ke bar notifikasi HP
+  const sentLocal = await sendSystemNotification(
+    '📈 Katalis Positif: #BBCA (+3.2%)',
+    'Laba Bersih & Arus Dana Smart Money Terverifikasi • Berhasil terhubung ke Bar Notifikasi HP Anda!',
+    '/?ticker=BBCA',
+    'test-notif-' + Date.now()
+  );
+
+  // 2. Kirim juga tes push ke server
+  fetch('/api/alerts/test-push', { method: 'POST' })
+    .then(r => r.json())
+    .catch(() => ({}));
+
+  if (sentLocal) {
+    showToast('🔔 Notifikasi berita katalis terkirim ke bar notifikasi HP Anda!', 'success');
+  } else {
+    showToast('Notifikasi dikirim. Periksa izin notifikasi browser HP Anda.', 'info');
+  }
+}
+
+// Memeriksa dan memicu notifikasi bar HP untuk berita katalis positif baru
+async function triggerPositiveNewsBarNotification(items) {
+  if (!items || !items.length) return;
+  const prefs = getAlertPreferences();
+  if (!prefs.news) return;
+
+  const posItems = items.filter(n => n.sentiment === 'POSITIVE' && n.ticker && n.ticker !== 'IHSG');
+  if (!posItems.length) return;
+
+  let notifiedMap = {};
+  try {
+    notifiedMap = JSON.parse(localStorage.getItem('smartflow_notified_news') || '{}');
+  } catch (_) {
+    notifiedMap = {};
+  }
+
+  let newNotifCount = 0;
+  for (const n of posItems.slice(0, 3)) {
+    const key = String(n.title || '').trim().toLowerCase();
+    if (!key || notifiedMap[key]) continue;
+
+    notifiedMap[key] = Date.now();
+    newNotifCount++;
+
+    const corr = n.correlation || {};
+    let subDesc = n.title;
+    if (corr.close) {
+      subDesc += `\nHarga: ${fmtPrice(corr.close)}` + (corr.pct_change != null ? ` (${corr.pct_change >= 0 ? '+' : ''}${corr.pct_change}%)` : '');
+    }
+    subDesc += `\nSumber: ${n.source || 'BEI'} • Terverifikasi Katalis`;
+
+    await sendSystemNotification(
+      `📈 Katalis Positif #${n.ticker}`,
+      subDesc,
+      `/?ticker=${n.ticker}`,
+      `news-${n.ticker}`
+    );
+  }
+
+  if (newNotifCount > 0) {
+    playAlertChime();
+    const now = Date.now();
+    const cleaned = {};
+    for (const [k, ts] of Object.entries(notifiedMap)) {
+      if (now - ts < 3 * 86400 * 1000) cleaned[k] = ts;
+    }
+    localStorage.setItem('smartflow_notified_news', JSON.stringify(cleaned));
+  }
+}
+
 function saveAlertPreferences() {
   const prefs = {
     support: document.getElementById('prefAlertSupport')?.checked ?? true,
@@ -1630,14 +1778,31 @@ function generateAlertsFromMarketData(stocks) {
     });
   }
 
-  // 2. Alert Kandidat Saham Pilihan
+  // 2. Alert Katalis Berita Positif Emiten (Paling Relevan untuk Bar HP & Feed)
+  if (cachedNewsItems && cachedNewsItems.length > 0) {
+    const posNews = cachedNewsItems.filter(n => n.sentiment === 'POSITIVE' && n.ticker && n.ticker !== 'IHSG').slice(0, 4);
+    posNews.forEach(n => {
+      alerts.push({
+        id: 'news-' + n.ticker + '-' + (n.published_ts || n.title.slice(0, 10)),
+        ticker: n.ticker,
+        type: 'NEWS_CATALYST',
+        badge: 'KATALIS POSITIF',
+        badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
+        title: `${n.ticker} • Katalis Berita Terverifikasi`,
+        desc: `${n.title} (${n.source || 'BEI'} • ${n.relative_time || 'Baru'})`,
+        time: n.relative_time || 'Baru'
+      });
+    });
+  }
+
+  // 3. Alert Kandidat Saham Pilihan (Fix double Rp Rp)
   const topCandidates = stocks.filter(s =>
     (s.close || 0) >= 70 &&
     (s.value_b_idr || 0) >= 1.0 &&
     (s.tape_quality == null || s.tape_quality.is_organic !== false) &&
     !s.retail_trap &&
     (s.bdr_pct >= 5.0 || s.top3_bsr >= 1.15 || (s.smart_money_score || 0) >= 70)
-  ).slice(0, 5);
+  ).slice(0, 3);
 
   topCandidates.forEach(s => {
     const plan = s.trading_plan || {};
@@ -1649,17 +1814,17 @@ function generateAlertsFromMarketData(stocks) {
       type: 'SUPPORT_ENTRY',
       badge: 'BUY ON SUPPORT',
       badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
-      title: `${s.ticker} • Antre Support Rp ${fmtPrice(entryPrice)}`,
-      desc: `Area ${supportLabel} • Skor SM ${s.smart_money_score || '-'} • Target TP1 Rp ${fmtPrice(plan.target_1 || Math.round(s.close * 1.07))}`,
+      title: `${s.ticker} • Antre Support ${fmtPrice(entryPrice)}`,
+      desc: `Area ${supportLabel} • Skor SM ${s.smart_money_score || '-'} • Target TP1 ${fmtPrice(plan.target_1 || Math.round(s.close * 1.07))}`,
       time: 'Sesi Ini'
     });
   });
 
-  // 3. Alert Volume Spike Ekstrem (> 1.5x)
+  // 4. Alert Volume Spike Ekstrem (> 1.5x)
   const volSpikes = stocks
     .filter(s => (s.vol_ratio || 0) >= 1.5 && (s.value_b_idr || 0) >= 1.0 && (s.close || 0) >= 70)
     .sort((a, b) => (b.vol_ratio || 0) - (a.vol_ratio || 0))
-    .slice(0, 3);
+    .slice(0, 2);
 
   volSpikes.forEach(s => {
     if (!alerts.some(a => a.ticker === s.ticker)) {
@@ -1676,13 +1841,21 @@ function generateAlertsFromMarketData(stocks) {
     }
   });
 
-  activeAlertList = alerts;
+  // Filter alerts berdasarkan preferensi yang dicentang di modal
+  const prefs = getAlertPreferences();
+  activeAlertList = alerts.filter(a => {
+    if (a.type === 'NEWS_CATALYST' && !prefs.news) return false;
+    if (a.type === 'SUPPORT_ENTRY' && !prefs.support) return false;
+    if (a.type === 'VOL_SPIKE' && !prefs.volSpike) return false;
+    return true;
+  });
+
   renderAlertFeed();
 
   // Tampilkan indikator badge jika ada sinyal
-  if (alerts.length > 0) {
+  if (activeAlertList.length > 0) {
     hasUnreadAlerts = true;
-    updateAlertBadgeUI(true, alerts.length);
+    updateAlertBadgeUI(true, activeAlertList.length);
   }
 }
 

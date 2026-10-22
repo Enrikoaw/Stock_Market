@@ -1595,9 +1595,18 @@
           <div class="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-900/40 border border-white/[0.04]">
             <div>
               <div class="text-[11px] font-semibold text-white">Notifikasi Desktop / HP</div>
-              <div id="browserNotificationStatusText" class="text-[10px] text-slate-400">Peringatan muncul di layar saat browser di latar belakang</div>
+              <div id="browserNotificationStatusText" class="text-[10px] text-slate-400">Peringatan muncul di bar notifikasi HP Anda</div>
             </div>
-            <div class="shrink-0">
+            <div class="shrink-0 flex items-center gap-1.5">
+              <button
+                type="button"
+                id="btnTestNotification"
+                onclick="testPositiveNewsNotification()"
+                class="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold transition active:scale-95 cursor-pointer"
+                title="Kirim tes notifikasi berita katalis ke bar HP sekarang"
+              >
+                Tes Notif HP
+              </button>
               <button
                 type="button"
                 id="btnRequestNotification"
@@ -2306,6 +2315,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=94.5"></script>
+  <script src="/static/app.js?v=94.6"></script>
 </body>
 </html>

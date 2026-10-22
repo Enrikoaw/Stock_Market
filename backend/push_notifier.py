@@ -26,7 +26,7 @@ except ImportError:
     from broker_summary_fetcher import load_env_file
 
 SENT_PATH = Path(__file__).resolve().parent.parent / "data" / "news_alert_sent.json"
-MAX_AGE_SECONDS = 6 * 3600  # hanya berita <= 6 jam terakhir
+MAX_AGE_SECONDS = 12 * 3600  # hanya berita <= 12 jam terakhir
 MAX_PER_CYCLE = 5
 
 
@@ -126,12 +126,14 @@ def process_positive_news_alerts(news_items: list[dict[str, Any]]) -> int:
     candidates = [n for n in news_items if is_positive_emiten_news(n)]
 
     if not state.get("initialized"):
+        # Tandai berita yang sudah tua (> 12 jam) agar tidak membanjiri, tetapi biarkan berita hari ini terkirim
         for n in candidates:
-            sent[n["title"].lower()] = now
+            pub_ts = float(n.get("published_ts") or 0)
+            if now - pub_ts > 12 * 3600:
+                sent[n["title"].lower()] = now
         state["initialized"] = True
         _save_sent(state)
-        print(f"[PushNotifier] Inisialisasi: {len(candidates)} berita positif lama ditandai (tidak dikirim).")
-        return 0
+        print(f"[PushNotifier] Inisialisasi: Berita positif emiten siap dipantau untuk bar HP.")
 
     fresh = [
         n for n in candidates
@@ -150,7 +152,10 @@ def process_positive_news_alerts(news_items: list[dict[str, Any]]) -> int:
         if corr.get("action_eval"):
             lines.append(corr["action_eval"])
         lines.append(f"Sumber: {n.get('source', '-')} | {n.get('relative_time', '')}")
-        if send_push(f"📈 Berita Positif #{n['ticker']}", "\n".join(lines), n.get("link", ""), cfg):
+        title = f"📈 Katalis Positif: #{n['ticker']}"
+        body_text = "\n".join(lines)
+        target_link = f"/?ticker={n['ticker']}"
+        if send_push(title, body_text, target_link, cfg):
             sent[n["title"].lower()] = now
             count += 1
 
