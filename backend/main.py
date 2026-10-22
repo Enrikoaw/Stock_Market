@@ -1466,27 +1466,47 @@ def tracker_signals(
 
 @app.post("/api/tracker/cleanup-stale")
 def tracker_cleanup_stale() -> dict:
-    cancelled = TRACKER.cleanup_duplicate_signals()
+    deleted = TRACKER.cleanup_duplicate_signals(force_delete=True)
     analysis = STATE.get("analysis")
     ref_dt = analysis.get("kpis", {}).get("latest_date") if analysis else None
     removed = TRACKER.cleanup_stale_watchlist(max_days=3, latest_date=ref_dt)
-    return {"success": True, "cleaned": removed, "cancelled_duplicates": cancelled, "message": f"{removed} sinyal antrean kedaluwarsa & {cancelled} sinyal duplikat berhasil dibersihkan."}
+    if STATE.get("analysis") and "details" in STATE["analysis"]:
+        TRACKER.evaluate(STATE["analysis"]["details"])
+    return {
+        "success": True,
+        "cleaned": removed,
+        "deleted_duplicates": deleted,
+        "message": f"Berhasil menghapus paksa {deleted} sinyal duplikat & membersihkan {removed} antrean kedaluwarsa.",
+    }
 
 
 @app.post("/api/tracker/repair")
 def tracker_repair() -> dict:
-    """Memulihkan sinyal yang salah ditutup dan membatalkan duplicate sinyal."""
-    cancelled = TRACKER.cleanup_duplicate_signals()
+    """Hapus paksa duplicate sinyal, perbaiki sinyal aktif, dan perbarui data pasar."""
+    deleted = TRACKER.cleanup_duplicate_signals(force_delete=True)
     repaired = TRACKER.repair_corrupted_loss_signals()
     sync_w = TRACKER.repair_and_sync_watchlist_entries()
     if STATE.get("analysis") and "details" in STATE["analysis"]:
         TRACKER.evaluate(STATE["analysis"]["details"])
     return {
         "success": True,
+        "deleted_duplicates": deleted,
         "repaired_count": repaired,
-        "cancelled_duplicates": cancelled,
         "synced_watchlist": sync_w,
-        "message": f"Berhasil memulihkan {repaired} sinyal & membersihkan {cancelled} sinyal duplikat!",
+        "message": f"Berhasil menghapus paksa {deleted} sinyal duplikat dan memperbarui data pantauan!",
+    }
+
+
+@app.post("/api/tracker/purge-duplicates")
+def tracker_purge_duplicates() -> dict:
+    """Hapus paksa seluruh sinyal duplikat dari database dan perbarui data sinyal seketika."""
+    deleted = TRACKER.cleanup_duplicate_signals(force_delete=True)
+    if STATE.get("analysis") and "details" in STATE["analysis"]:
+        TRACKER.evaluate(STATE["analysis"]["details"])
+    return {
+        "success": True,
+        "deleted_duplicates": deleted,
+        "message": f"Berhasil menghapus paksa {deleted} sinyal duplikat dan memperbarui data pantauan!",
     }
 
 

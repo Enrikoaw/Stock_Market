@@ -192,17 +192,18 @@ class SignalTracker:
             print(f"[Tracker] Error auto-repair corrupted signals: {e}")
 
 
-    def cleanup_duplicate_signals(self) -> int:
+    def cleanup_duplicate_signals(self, force_delete: bool = True) -> int:
         """
-        Deduplikasi & Pembersihan Sinyal Duplicate:
+        Deduplikasi & Hapus Paksa Sinyal Duplicate:
         1. Jika saham sudah Take Profit (WIN) pada tanggal T:
            DILARANG entry kembali pada hari yang sama (T).
            Semua sinyal lain untuk emiten tersebut yang entry di hari yang sama T
-           atau berstatus aktif (WATCHLIST/RUNNING) / EXPIRED pada tanggal T dibatalkan (CANCELLED).
+           atau berstatus aktif (WATCHLIST/RUNNING) / EXPIRED / CANCELLED pada tanggal T DIHAPUS PAKSA (DELETE).
         2. Jika terdapat lebih dari 1 sinyal aktif (RUNNING/WATCHLIST) untuk emiten yang sama:
-           Pertahankan sinyal pertama (ID terkecil / signal_date lebih awal) dan batalkan sinyal duplikatnya.
+           Pertahankan sinyal pertama (ID terkecil / signal_date lebih awal) dan HAPUS PAKSA sinyal duplikatnya.
+        3. Hapus seluruh riwayat sinyal berstatus CANCELLED agar database bersih total.
         """
-        cancelled_count = 0
+        deleted_count = 0
         with self._lock, self.engine.begin() as conn:
             rows = conn.execute(
                 select(signals_table).order_by(signals_table.c.id.asc())
@@ -213,7 +214,7 @@ class SignalTracker:
             for r in rows:
                 by_ticker[str(r["ticker"]).upper()].append(dict(r))
 
-            ids_to_cancel: list[tuple[int, str]] = []
+            ids_to_delete: set[int] = set()
 
             for ticker, items in by_ticker.items():
                 if len(items) <= 1:
@@ -227,54 +228,39 @@ class SignalTracker:
                     for w in wins:
                         w_exit = str(w.get("exit_date") or w.get("signal_date") or "")
                         for other in items:
-                            if other["id"] == w["id"] or other["status"] in ("CANCELLED",):
+                            if other["id"] == w["id"]:
                                 continue
                             o_ent = str(other.get("entry_date") or other.get("signal_date") or "")
-                            if (w_exit and o_ent == w_exit) or other["status"] in ("RUNNING", "WATCHLIST", "EXPIRED"):
-                                if other["status"] in ("RUNNING", "WATCHLIST"):
-                                    ids_to_cancel.append((
-                                        other["id"],
-                                        f"Dibatalkan: Saham sudah Take Profit (WIN ID:{w['id']}) di hari yang sama {w_exit}. Dilarang re-entry di hari yang sama."
-                                    ))
-                                elif other["status"] == "EXPIRED" and o_ent == w_exit:
-                                    ids_to_cancel.append((
-                                        other["id"],
-                                        f"Dibatalkan: Saham sudah Take Profit (WIN ID:{w['id']}) di hari yang sama {w_exit}."
-                                    ))
+                            if (w_exit and o_ent == w_exit) or other["status"] in ("RUNNING", "WATCHLIST", "EXPIRED", "CANCELLED"):
+                                ids_to_delete.add(other["id"])
 
-                active_runs = [s for s in runnings if s["id"] not in [x[0] for x in ids_to_cancel]]
+                active_runs = [s for s in runnings if s["id"] not in ids_to_delete]
                 if len(active_runs) > 1:
                     active_runs.sort(key=lambda x: x["id"])
                     for dup in active_runs[1:]:
-                        ids_to_cancel.append((
-                            dup["id"],
-                            f"Dibatalkan: Duplikasi sinyal RUNNING dengan ID:{active_runs[0]['id']}."
-                        ))
+                        ids_to_delete.add(dup["id"])
 
-                active_wl = [s for s in watchlists if s["id"] not in [x[0] for x in ids_to_cancel]]
+                active_wl = [s for s in watchlists if s["id"] not in ids_to_delete]
                 if active_runs and active_wl:
                     for dup in active_wl:
-                        ids_to_cancel.append((
-                            dup["id"],
-                            f"Dibatalkan: Duplikasi antrean Watchlist saat emiten sudah RUNNING (ID:{active_runs[0]['id']})."
-                        ))
+                        ids_to_delete.add(dup["id"])
 
-            for sid, reason in ids_to_cancel:
+            # Bersihkan juga seluruh sinyal berstatus CANCELLED agar database bersih
+            cancelled_rows = conn.execute(
+                select(signals_table.c.id).where(signals_table.c.status == "CANCELLED")
+            ).scalars().all()
+            for cid in cancelled_rows:
+                ids_to_delete.add(cid)
+
+            if ids_to_delete:
                 conn.execute(
-                    update(signals_table)
-                    .where(signals_table.c.id == sid)
-                    .values(
-                        status="CANCELLED",
-                        exit_date=now_wib().strftime("%Y-%m-%d"),
-                        note=reason,
-                        updated_at=_now_str(),
-                    )
+                    delete(signals_table).where(signals_table.c.id.in_(list(ids_to_delete)))
                 )
-                cancelled_count += 1
+                deleted_count = len(ids_to_delete)
 
-        if cancelled_count > 0:
-            print(f"[SignalTracker] Berhasil membatalkan {cancelled_count} sinyal duplikat/re-entry ilegal!")
-        return cancelled_count
+        if deleted_count > 0:
+            print(f"[SignalTracker] Berhasil menghapus paksa {deleted_count} sinyal duplikat/invalid dari database!")
+        return deleted_count
 
     def repair_corrupted_loss_signals(self) -> int:
         """
@@ -367,13 +353,7 @@ class SignalTracker:
                 ).first()
                 if prior_active:
                     conn.execute(
-                        update(signals_table)
-                        .where(signals_table.c.id == r["id"])
-                        .values(
-                            status="CANCELLED",
-                            note=f"Dibatalkan: Emiten sudah berstatus {prior_active[1]} (ID:{prior_active[0]}). Dilarang duplicate.",
-                            updated_at=_now_str(),
-                        )
+                        delete(signals_table).where(signals_table.c.id == r["id"])
                     )
                     continue
 
