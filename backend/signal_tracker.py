@@ -732,14 +732,14 @@ class SignalTracker:
 
                 for bar in hist:
                     bar_date = str(bar["date"])
-                    # Bebas Look-Ahead Bias (T1): Sinyal baru hanya boleh dievaluasi pada hari bursa SETELAH signal_date
-                    if bar_date <= r["signal_date"]:
+                    # Bebas Look-Ahead Bias: Sinyal baru yang masih antre di WATCHLIST hanya boleh dievaluasi setelah signal_date
+                    if r["status"] == "WATCHLIST" and bar_date <= r["signal_date"]:
                         continue
 
                     is_live_today = False if force_final else (bar_date == today_str and now_wib().time() < MARKET_CLOSE_CUTOFF)
 
                     # Jika bar historis yang sudah pernah dievaluasi final dan bukan live today -> lewati
-                    if bar_date <= since and not is_live_today:
+                    if bar_date <= since and not is_live_today and r["status"] == "WATCHLIST":
                         continue
 
                     self._step(r, bar, changes, is_live_today=is_live_today)
@@ -752,6 +752,46 @@ class SignalTracker:
                         break
 
                 r["last_close"] = float(hist[-1]["close"])
+
+                # Proteksi Evaluasi Real-Time untuk Sinyal RUNNING:
+                # Jika harga pasar terkini (Close atau High hari ini) sudah melampaui / menyentuh Target Price, langsung tutup Take Profit sebagai WIN!
+                if r["status"] == "RUNNING" and r.get("entry_price"):
+                    cur_c = r["last_close"]
+                    cur_h = float(d.get("high") or cur_c)
+                    tp_val = float(r.get("target") or 0)
+                    sl_val = float(r.get("stop_loss") or 0)
+
+                    if tp_val > 0 and (cur_c >= tp_val or cur_h >= tp_val):
+                        exit_price = cur_c if cur_c > tp_val else tp_val
+                        self._close(
+                            r,
+                            today_str,
+                            exit_price,
+                            "WIN",
+                            f"Target Price (Rp {tp_val:,.0f}) tercapai! Harga terkini: Rp {cur_c:,.0f} (High Rp {cur_h:,.0f}).",
+                            changes,
+                        )
+                    elif sl_val > 0 and cur_c <= sl_val:
+                        self._close(
+                            r,
+                            today_str,
+                            cur_c,
+                            "LOSS",
+                            f"Stop Loss Closing Basis (Rp {sl_val:,.0f}) tertembus! Harga terkini: Rp {cur_c:,.0f}.",
+                            changes,
+                        )
+                    else:
+                        r["pnl_pct"] = round((cur_c - r["entry_price"]) / r["entry_price"] * 100.0, 2)
+                        # Pertahankan peringatan distribusi bila terdeteksi pada analisis terbaru
+                        if "smart_money_score" in d:
+                            c_score = int(d.get("smart_money_score") or 0)
+                            c_trig = str(d.get("trigger_type") or "")
+                            if c_score <= 35 or c_trig == "DISTRIBUTION_WARNING":
+                                r["note"] = (
+                                    f"⚠️ AWAS DISTRIBUSI BANDAR (Skor turun ke {c_score}) — "
+                                    f"Pertimbangkan Early Exit / Ketatkan Stop Loss! (P/L {r['pnl_pct']:+.2f}%)"
+                                )
+
                 if r["status"] == "WATCHLIST" and isinstance(d.get("trading_plan"), dict):
                     tp_live = d["trading_plan"]
                     new_ep = float(tp_live.get("entry_price") or tp_live.get("entry_high") or 0)
@@ -832,9 +872,21 @@ class SignalTracker:
                     )
                     return
 
+                # Evaluasi langsung jika di bar ini harga juga menyentuh atau melewati Target Price
+                tp_val = float(r.get("target") or 0)
+                if tp_val > 0 and (h >= tp_val or c >= tp_val):
+                    exit_p = tp_val if h >= tp_val else c
+                    self._close(
+                        r,
+                        date,
+                        exit_p,
+                        "WIN",
+                        f"Entry tereksekusi @ Rp {fill:,.0f} dan Target Price (Rp {tp_val:,.0f}) langsung tercapai (High Rp {h:,.0f} / Close Rp {c:,.0f}).",
+                        changes,
+                    )
+                    return
+
                 # Kondisi normal: Low menyentuh area antrean dan Close bertahan di atas SL -> Posisi masuk RUNNING.
-                # Konservatif (T1): Target Price (TP) tidak dievaluasi pada bar entry yang sama karena urutan High vs Low intraday tidak diketahui;
-                # evaluasi TP dimulai pada bar hari berikutnya.
                 r.update(
                     status="RUNNING",
                     entry_date=date,
@@ -868,10 +920,6 @@ class SignalTracker:
             return
 
         if r["status"] == "RUNNING":
-            # Entry Price & tanggal masuk sudah terkunci: jangan evaluasi ulang entry,
-            # dan abaikan candle pada atau sebelum tanggal entry.
-            if r.get("entry_date") and date <= str(r["entry_date"]):
-                return
             sl, tp = float(r["stop_loss"]), float(r["target"])
             entry_p = float(r["entry_price"])
 
@@ -883,10 +931,10 @@ class SignalTracker:
                 self._close(r, date, exit_p, "LOSS", note, changes)
                 return
 
-            # 2. Target Price tersentuh
-            if h >= tp:
+            # 2. Target Price tersentuh / terlampaui (High >= TP atau Close >= TP)
+            if h >= tp or c >= tp:
                 exit_p = o if o > tp else tp
-                self._close(r, date, exit_p, "WIN", f"Target Price (Rp {tp:,.0f}) tersentuh pada High Rp {h:,.0f}.", changes)
+                self._close(r, date, exit_p, "WIN", f"Target Price (Rp {tp:,.0f}) tersentuh pada High Rp {h:,.0f} (Close Rp {c:,.0f}).", changes)
                 return
 
             # Milestone Profit Alert untuk Orang Sibuk (Floating >= +4.5%):

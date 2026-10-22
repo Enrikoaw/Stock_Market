@@ -83,6 +83,8 @@ TRACKER = SignalTracker(BASE_DIR / "data" / "tracker.db")
 PORTFOLIO = PortfolioTracker(BASE_DIR / "data" / "tracker.db")
 LAST_CLOSE_SYNC_DATE: str | None = None
 LAST_BROKSUM_EOD_DATE: str | None = None
+LAST_BROKSUM_SESI1_DATE: str | None = None
+LAST_BROKSUM_SESI2_DATE: str | None = None
 
 
 def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> None:
@@ -442,7 +444,7 @@ async def _background_market_session_worker() -> None:
       untuk seluruh kandidat hari ini dan watchlist aktif.
     """
     print("[MarketWorker] Background Market Session Worker aktif.")
-    global LAST_CLOSE_SYNC_DATE, LAST_BROKSUM_EOD_DATE
+    global LAST_CLOSE_SYNC_DATE, LAST_BROKSUM_EOD_DATE, LAST_BROKSUM_SESI1_DATE, LAST_BROKSUM_SESI2_DATE
     loop_count = 0
     last_sync_attempt_ts = 0.0
     import time
@@ -456,20 +458,41 @@ async def _background_market_session_worker() -> None:
             now_wib = _get_now_wib()
             today_str = now_wib.strftime("%Y-%m-%d")
             is_trading_day = now_wib.weekday() < 5 and not _is_idx_holiday(now_wib.date())
-            needs_post_close_sync = (
+            is_jumat = (now_wib.weekday() == 4)
+
+            # 1. Jadwal Selesai Sesi 1 (Jumat 11:32 - 13:00 WIB, Senin-Kamis 12:02 - 13:00 WIB)
+            # Menarik broker summary Invezgo untuk menyaring kandidat Watchlist Hari Ini
+            needs_sesi1_broksum_sync = (
                 is_trading_day
-                and dtime(16, 8) <= now_wib.time() <= dtime(17, 30)
-                and LAST_CLOSE_SYNC_DATE != today_str
+                and (
+                    (is_jumat and dtime(11, 32) <= now_wib.time() <= dtime(13, 0))
+                    or (not is_jumat and dtime(12, 2) <= now_wib.time() <= dtime(13, 0))
+                )
+                and LAST_BROKSUM_SESI1_DATE != today_str
             )
+
+            # 2. Jadwal Selesai Sesi 2 / Penutupan Bursa (16:08 - 18:30 WIB)
+            # Menarik broker summary penutupan & evaluasi final status sinyal Take Profit / Stop Loss
+            needs_sesi2_broksum_sync = (
+                is_trading_day
+                and (dtime(16, 8) <= now_wib.time() <= dtime(18, 30))
+                and LAST_BROKSUM_SESI2_DATE != today_str
+            )
+
+            # 3. Jadwal EOD Broksum 18:00 WIB (update resmi EOD Invezgo harian)
             needs_eod_broksum_sync = (
                 is_trading_day
                 and dtime(18, 0) <= now_wib.time() <= dtime(23, 59)
                 and LAST_BROKSUM_EOD_DATE != today_str
             )
 
+            needs_post_close_sync = needs_sesi2_broksum_sync and LAST_CLOSE_SYNC_DATE != today_str
+
             should_sync = False
             if not STATE["is_syncing"] and not get_sync_lock().locked():
-                if needs_eod_broksum_sync:
+                if needs_sesi1_broksum_sync:
+                    should_sync = True
+                elif needs_sesi2_broksum_sync or needs_eod_broksum_sync:
                     should_sync = True
                 elif needs_post_close_sync:
                     should_sync = True
@@ -483,13 +506,18 @@ async def _background_market_session_worker() -> None:
             if should_sync:
                 print(
                     f"[MarketWorker] Menjalankan sinkronisasi background "
-                    f"(market_open={market_open}, cache_stale={cache_stale}, post_close={needs_post_close_sync}, eod_broksum_18wib={needs_eod_broksum_sync})..."
+                    f"(market_open={market_open}, cache_stale={cache_stale}, sesi1_done={needs_sesi1_broksum_sync}, sesi2_done={needs_sesi2_broksum_sync}, eod_18wib={needs_eod_broksum_sync})..."
                 )
                 last_sync_attempt_ts = now_ts
                 synced_ok = await trigger_safe_sync()
                 if synced_ok:
-                    if needs_post_close_sync:
+                    if needs_sesi1_broksum_sync:
+                        LAST_BROKSUM_SESI1_DATE = today_str
+                        print(f"[MarketWorker] Selesai Sesi 1 ({today_str}): Penarikan Broksum Invezgo & Filter Smart Money selesai.")
+                    if needs_sesi2_broksum_sync:
+                        LAST_BROKSUM_SESI2_DATE = today_str
                         LAST_CLOSE_SYNC_DATE = today_str
+                        print(f"[MarketWorker] Selesai Sesi 2 ({today_str}): Penarikan Broksum Invezgo & Evaluasi Take Profit selesai.")
                     if needs_eod_broksum_sync:
                         LAST_BROKSUM_EOD_DATE = today_str
                         print(f"[MarketWorker] EOD Broker Summary 18:00 WIB untuk tanggal {today_str} berhasil diperbarui.")
