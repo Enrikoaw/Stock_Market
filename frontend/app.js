@@ -2329,14 +2329,15 @@ function renderStockBroksum(d) {
 
   const bandarAvg = d.bandar_avg_buy || (d.broker_analysis ? d.broker_analysis.bandar_avg : null);
   const isRetailTrap = Boolean(d.retail_trap || (d.broker_analysis && d.broker_analysis.retail_trap));
-  const hasBrokData = Boolean(d.has_real_broker_summary || topBuyers.length > 0 || topSellers.length > 0);
+  const hasRealBrokerSummary = Boolean(d.has_real_broker_summary || d.has_broker_summary);
+  const hasBrokData = hasRealBrokerSummary && (topBuyers.length > 0 || topSellers.length > 0 || bdr !== null);
 
   if (!hasBrokData) {
     container.innerHTML = `
       <div class="p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-white/10 flex items-center justify-between gap-2">
         <div class="text-[11px] text-slate-600 dark:text-slate-400">
-          <span class="font-semibold text-slate-900 dark:text-white">Broker Summary:</span> Belum tersedia untuk ${escHtml(d.ticker)}
-          <div class="text-[10px] text-slate-500 mt-0.5">Sinkronisasi otomatis 2x sehari: Pasca Sesi 1 (11:30/12:00 WIB) & Pasca Sesi 2 (18:00 WIB)</div>
+          <span class="font-semibold text-slate-900 dark:text-white">Data broker aktual belum tersedia</span> untuk ${escHtml(d.ticker)}.
+          <div class="text-[10px] text-slate-500 mt-0.5">VWAP 5 hari dan indikator OHLCV adalah estimasi teknikal, bukan transaksi broker atau investor asing.</div>
         </div>
       </div>
     `;
@@ -2676,7 +2677,8 @@ function renderInspectorPanel(d) {
       const bdr = d.bdr_pct != null ? Number(d.bdr_pct) : (d.broker_analysis && d.broker_analysis.bdr != null ? Number(d.broker_analysis.bdr) : null);
       const isRetailTrap = Boolean(d.retail_trap || (d.broker_analysis && d.broker_analysis.retail_trap));
 
-      if (validBuyers.length > 0 || d.has_real_broker_summary) {
+      const hasRealBrokerSummary = Boolean(d.has_real_broker_summary || d.has_broker_summary);
+      if (hasRealBrokerSummary && (validBuyers.length > 0 || bdr !== null)) {
         const INST_BROKERS = new Set(["AK", "BK", "ZP", "KZ", "RX", "YU", "CC", "CS", "MG", "DX", "LG", "OD"]);
         const buyersFormatted = validBuyers.map(b => {
           const isInst = INST_BROKERS.has(b);
@@ -2710,7 +2712,7 @@ function renderInspectorPanel(d) {
         }
       } else {
         planTopBuyersEl.innerHTML = `<span class="text-slate-400 font-normal italic">Belum dimuat</span> <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}')" class="ml-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600/30">Cek Broksum</button>`;
-        planBandarAvgEl.textContent = bandarAvg ? fmtPrice(bandarAvg) : '-';
+        planBandarAvgEl.textContent = '-';
         planBroksumBadge.textContent = 'DATA BELUM ADA';
         planBroksumBadge.className = 'font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20';
       }
