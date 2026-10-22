@@ -279,7 +279,7 @@ class SignalTracker:
     def cleanup_stale_watchlist(self, max_days: int = 3, latest_date: str | None = None) -> int:
         """Membatalkan / meng-expire antrean WATCHLIST yang sudah melewati batas antre (default 3 hari bursa)."""
         removed = 0
-        ref_date = str(latest_date or self.last_final_session_date() or now_wib().strftime("%Y-%m-%d"))
+        ref_date = str(latest_date or last_final_session_date() or now_wib().strftime("%Y-%m-%d"))
         with self._lock, self.engine.begin() as conn:
             rows = conn.execute(
                 select(signals_table).where(signals_table.c.status == "WATCHLIST")
@@ -823,44 +823,46 @@ class SignalTracker:
 
                 r["last_close"] = float(hist[-1]["close"])
 
-                # Proteksi Evaluasi Real-Time untuk Sinyal RUNNING:
-                # Jika harga pasar terkini (Close atau High hari ini) sudah melampaui / menyentuh Target Price, langsung tutup Take Profit sebagai WIN!
-                if r["status"] == "RUNNING" and r.get("entry_price"):
+                # Proteksi Evaluasi Real-Time untuk Sinyal RUNNING (Hanya jika entry_date < hari candle terakhir):
+                last_bar_date = str(hist[-1]["date"])
+                if r["status"] == "RUNNING" and r.get("entry_price") and str(r.get("entry_date") or "") < last_bar_date:
                     cur_c = r["last_close"]
-                    cur_h = float(d.get("high") or cur_c)
+                    cur_h = float(hist[-1].get("high") or cur_c)
                     tp_val = float(r.get("target") or 0)
                     sl_val = float(r.get("stop_loss") or 0)
 
-                    if tp_val > 0 and (cur_c >= tp_val or cur_h >= tp_val):
-                        exit_price = cur_c if cur_c > tp_val else tp_val
+                    if sl_val > 0 and cur_c <= sl_val:
                         self._close(
                             r,
-                            today_str,
-                            exit_price,
-                            "WIN",
-                            f"Target Price (Rp {tp_val:,.0f}) tercapai! Harga terkini: Rp {cur_c:,.0f} (High Rp {cur_h:,.0f}).",
-                            changes,
-                        )
-                    elif sl_val > 0 and cur_c <= sl_val:
-                        self._close(
-                            r,
-                            today_str,
+                            last_bar_date,
                             cur_c,
                             "LOSS",
                             f"Stop Loss Closing Basis (Rp {sl_val:,.0f}) tertembus! Harga terkini: Rp {cur_c:,.0f}.",
                             changes,
                         )
-                    else:
-                        r["pnl_pct"] = round((cur_c - r["entry_price"]) / r["entry_price"] * 100.0, 2)
-                        # Pertahankan peringatan distribusi bila terdeteksi pada analisis terbaru
-                        if "smart_money_score" in d:
-                            c_score = int(d.get("smart_money_score") or 0)
-                            c_trig = str(d.get("trigger_type") or "")
-                            if c_score <= 35 or c_trig == "DISTRIBUTION_WARNING":
-                                r["note"] = (
-                                    f"⚠️ AWAS DISTRIBUSI BANDAR (Skor turun ke {c_score}) — "
-                                    f"Pertimbangkan Early Exit / Ketatkan Stop Loss! (P/L {r['pnl_pct']:+.2f}%)"
-                                )
+                    elif tp_val > 0 and (cur_c >= tp_val or cur_h >= tp_val):
+                        exit_price = tp_val if cur_h >= tp_val and cur_c < tp_val else cur_c
+                        self._close(
+                            r,
+                            last_bar_date,
+                            exit_price,
+                            "WIN",
+                            f"Target Price (Rp {tp_val:,.0f}) tercapai! Harga terkini: Rp {cur_c:,.0f} (High Rp {cur_h:,.0f}).",
+                            changes,
+                        )
+
+                if r["status"] == "RUNNING" and r.get("entry_price"):
+                    cur_c = r["last_close"]
+                    r["pnl_pct"] = round((cur_c - r["entry_price"]) / r["entry_price"] * 100.0, 2)
+                    # Pertahankan peringatan distribusi bila terdeteksi pada analisis terbaru
+                    if "smart_money_score" in d:
+                        c_score = int(d.get("smart_money_score") or 0)
+                        c_trig = str(d.get("trigger_type") or "")
+                        if c_score <= 35 or c_trig == "DISTRIBUTION_WARNING":
+                            r["note"] = (
+                                f"⚠️ AWAS DISTRIBUSI BANDAR (Skor turun ke {c_score}) — "
+                                f"Pertimbangkan Early Exit / Ketatkan Stop Loss! (P/L {r['pnl_pct']:+.2f}%)"
+                            )
 
                 if r["status"] == "WATCHLIST" and isinstance(d.get("trading_plan"), dict):
                     tp_live = d["trading_plan"]
@@ -928,8 +930,7 @@ class SignalTracker:
                 r["entry_date"] = date
                 r["bars_held"] = 0
 
-                # Parameter 2: Evaluasi Stop Loss berbasis Closing Basis (c <= sl) atau panic crash ekstrim (l <= sl * 0.96)
-                # Mencegah terkena shakeout prematur akibat jarum bawah intraday (wick dip) yang ditarik naik saat penutupan.
+                # Evaluasi Stop Loss berbasis Closing Basis (c <= sl) atau panic crash ekstrim (l <= sl * 0.96)
                 if c <= sl or l <= sl * 0.96:
                     exit_p = min(o, sl) if o < sl else (c if c <= sl else sl)
                     self._close(
@@ -942,21 +943,8 @@ class SignalTracker:
                     )
                     return
 
-                # Evaluasi langsung jika di bar ini harga juga menyentuh atau melewati Target Price
-                tp_val = float(r.get("target") or 0)
-                if tp_val > 0 and (h >= tp_val or c >= tp_val):
-                    exit_p = tp_val if h >= tp_val else c
-                    self._close(
-                        r,
-                        date,
-                        exit_p,
-                        "WIN",
-                        f"Entry tereksekusi @ Rp {fill:,.0f} dan Target Price (Rp {tp_val:,.0f}) langsung tercapai (High Rp {h:,.0f} / Close Rp {c:,.0f}).",
-                        changes,
-                    )
-                    return
-
                 # Kondisi normal: Low menyentuh area antrean dan Close bertahan di atas SL -> Posisi masuk RUNNING.
+                # (TP tidak dihitung di hari pertama entry untuk mencegah look-ahead bias intraday)
                 r.update(
                     status="RUNNING",
                     entry_date=date,
@@ -1211,6 +1199,7 @@ class SignalTracker:
         try:
             from backend.screener_engine import (
                 compute_quantitative_dataframe,
+                compute_support_entry_plan,
                 _round_idx_tick,
                 classify_idx_sector,
                 check_fundamental_and_board_safety,
@@ -1219,6 +1208,7 @@ class SignalTracker:
         except ImportError:
             from screener_engine import (
                 compute_quantitative_dataframe,
+                compute_support_entry_plan,
                 _round_idx_tick,
                 classify_idx_sector,
                 check_fundamental_and_board_safety,
@@ -1556,7 +1546,6 @@ class SignalTracker:
             trig_lbl = str(stock.get("trigger_label") or "Akumulasi Broker")
 
             if not existing:
-                # Cek apakah sudah pernah ada record hari ini
                 closed_today = conn.execute(
                     select(signals_table).where(
                         signals_table.c.ticker == ticker,
@@ -1566,10 +1555,11 @@ class SignalTracker:
                 if closed_today:
                     return
 
+                primary_tp = tp2 if self.tp_level == 2 else tp1
                 conn.execute(
                     insert(signals_table).values(
                         ticker=ticker,
-                        sector=str(stock.get("sector", "")),
+                        sector=str(stock.get("sector", ""))[:200],
                         trigger_type=trig_type,
                         trigger_label=trig_lbl,
                         score=score,
@@ -1579,9 +1569,13 @@ class SignalTracker:
                         entry_low=e_p,
                         entry_high=e_p,
                         stop_loss=sl,
-                        target=tp1,
+                        target=primary_tp,
                         target_2=tp2,
                         status="WATCHLIST",
+                        last_close=c_p,
+                        last_eval_date=date_str,
+                        bars_waited=0,
+                        bars_held=0,
                         note=f"Pilihan Saham Hari Ini ({session_label}) - Antre Pullback di {sup_lbl}",
                         created_at=_now_str(),
                         updated_at=_now_str(),

@@ -109,9 +109,9 @@ def main() -> None:
         from screener_engine import select_today_candidates
         final_picks = analysis.get("today_candidates") or select_today_candidates(analysis["stocks"])
         today_cands = tracker.sync_today_candidates(
-            final_picks,
-            str(latest_dt),
-            session_label="EOD Broksum 18:00 WIB",
+            date_str=str(latest_dt),
+            candidate_stocks=final_picks,
+            all_stocks=analysis["stocks"],
         )
         analysis["today_candidates"] = today_cands
         print(f"[AutoMarketSync] Pilihan Saham Hari Ini: {len(today_cands)} saham disinkronkan ke Watchlist & Broker Summary.")

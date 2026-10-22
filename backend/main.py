@@ -573,9 +573,9 @@ LAST_CACHE_MTIME: float = 0.0
 
 
 def check_and_reload_cache_if_updated() -> None:
-    """Otomatis memuat ulang data terbaru jika file real_idx_market_latest.csv diperbarui di disk."""
+    """Otomatis memuat ulang data terbaru jika file real_idx_market_latest.csv diperbarui oleh proses eksternal."""
     global LAST_CACHE_MTIME
-    if not REAL_CACHE_CSV.exists():
+    if STATE.get("is_syncing") or not REAL_CACHE_CSV.exists():
         return
     try:
         current_mtime = os.path.getmtime(REAL_CACHE_CSV)

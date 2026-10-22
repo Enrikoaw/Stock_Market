@@ -235,45 +235,28 @@ def run_historical_backtest(
                 hit_sl = (bar["close"] <= stop_loss) or (bar["open"] <= stop_loss) or (bar["low"] <= stop_loss * 0.96)
                 hit_tp = bar["high"] >= tp1
 
-                # Batasi Stop Loss maksimal pada mesin simulasi (maksimal -4.5% s/d -5.0%) agar rasio Risk:Reward terukur objektif
-                max_loss_exit = _round_idx_tick(entry_price * 0.952)
-
-                # Di hari pertama entry (b_idx == 0), TP belum dihitung untuk mencegah look-ahead bias intraday,
-                # namun jika harga penutupan jebol menembus SL di hari pertama, catat sebagai LOSS riil terukur.
+                # Gunakan harga realisasi sebenarnya (Open jika gap down di bawah SL, atau Close jika tembus SL closing basis)
                 if b_idx == 0:
                     if hit_sl:
                         status = "LOSS"
-                        raw_sl = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
-                        exit_price = max(max_loss_exit, raw_sl)
+                        exit_price = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
                         break
                     continue
 
                 if bar["high"] >= tp2 and not hit_sl:
                     hit_tp2 = True
 
-                # Jika SL dan TP tersentuh di hari yang sama, secara konservatif prioritaskan SL
                 if hit_sl and hit_tp:
-                    status = "WIN" if stop_loss >= entry_price else "LOSS"
-                    raw_sl = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
-                    exit_price = max(max_loss_exit, raw_sl)
+                    status = "LOSS"
+                    exit_price = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
                     break
                 elif hit_tp:
                     status = "WIN"
                     exit_price = max(bar["open"], tp1)
-                    if not hit_tp2:
-                        for rem_date in active_future_dates[b_idx + 1 :]:
-                            if rem_date in ticker_prices:
-                                rem_bar = ticker_prices[rem_date]
-                                if rem_bar["close"] <= entry_price or rem_bar["low"] <= stop_loss:
-                                    break
-                                if rem_bar["high"] >= tp2:
-                                    hit_tp2 = True
-                                    break
                     break
                 elif hit_sl:
-                    status = "WIN" if stop_loss >= entry_price else "LOSS"
-                    raw_sl = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
-                    exit_price = max(max_loss_exit, raw_sl)
+                    status = "LOSS"
+                    exit_price = bar["open"] if bar["open"] <= stop_loss else (bar["close"] if bar["close"] <= stop_loss else stop_loss)
                     break
 
             if status == "TIMEOUT" and bars_held > 0:

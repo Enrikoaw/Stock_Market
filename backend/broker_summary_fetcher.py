@@ -18,6 +18,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+try:
+    from backend.screener_engine import _round_idx_tick
+except ImportError:
+    from screener_engine import _round_idx_tick
+
 # Klasifikasi Broker Bursa Efek Indonesia (IDX)
 RETAIL_BROKERS = {"YP", "PD", "XC", "XL", "KK", "NI", "SQ", "BQ"}
 INST_FOREIGN_BROKERS = {"AK", "BK", "ZP", "KZ", "RX", "YU", "CC", "CS", "MG", "DX", "LG", "OD"}
@@ -630,15 +635,29 @@ def run_stage2_broker_enrichment(
                 print(f"[SmartFunnel] X-Ray Selesai [{idx}/{len(filtered_cands)}]: {ticker} (BDR: {metrics['bdr']}%, Buyer: {s['top_buyers']}, Seller: {s['top_sellers']}).")
 
             if metrics.get("bandar_avg") and s.get("trading_plan"):
-                s["trading_plan"]["bandar_avg_buy"] = metrics["bandar_avg"]
+                tp_obj = s["trading_plan"]
+                tp_obj["bandar_avg_buy"] = metrics["bandar_avg"]
                 b_avg = float(metrics["bandar_avg"])
                 c_val = float(s.get("close") or 0)
-                if 0 < c_val * 0.915 <= b_avg < c_val * 1.01:
-                    rev_ep = int(round(b_avg))
-                    s["trading_plan"]["entry_price"] = rev_ep
-                    s["trading_plan"]["entry_low"] = rev_ep
-                    s["trading_plan"]["entry_high"] = rev_ep
-                    s["trading_plan"]["support_label"] = "Support Avg Bandar"
+                if 0 < c_val * 0.915 <= b_avg < c_val * 0.995:
+                    rev_ep = _round_idx_tick(b_avg)
+                    atr_v = float(tp_obj.get("atr14") or (rev_ep * 0.03))
+                    sl_dist = max(int(round(rev_ep * 0.035)), min(int(round(rev_ep * 0.045)), int(round(1.5 * atr_v))))
+                    new_sl = _round_idx_tick(rev_ep - sl_dist)
+                    risk_rp = max(1, rev_ep - new_sl)
+                    new_tp1 = _round_idx_tick(rev_ep + 2 * risk_rp)
+                    new_tp2 = _round_idx_tick(rev_ep + int(round(3.5 * risk_rp)))
+
+                    tp_obj["entry_price"] = rev_ep
+                    tp_obj["entry_low"] = rev_ep
+                    tp_obj["entry_high"] = rev_ep
+                    tp_obj["stop_loss"] = new_sl
+                    tp_obj["stop_loss_pct"] = -round((risk_rp / rev_ep) * 100.0, 2)
+                    tp_obj["target_1"] = new_tp1
+                    tp_obj["target_1_pct"] = round(((new_tp1 - rev_ep) / rev_ep) * 100.0, 2)
+                    tp_obj["target_2"] = new_tp2
+                    tp_obj["target_2_pct"] = round(((new_tp2 - rev_ep) / rev_ep) * 100.0, 2)
+                    tp_obj["support_label"] = "Support Avg Bandar"
 
             # Sinkronisasi ke details_map
             if details_map and ticker in details_map:
@@ -848,15 +867,29 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
             s["trigger_label"] = "Distribusi (Ritel Trap)"
 
         if metrics.get("bandar_avg") and s.get("trading_plan"):
-            s["trading_plan"]["bandar_avg_buy"] = metrics["bandar_avg"]
+            tp_obj = s["trading_plan"]
+            tp_obj["bandar_avg_buy"] = metrics["bandar_avg"]
             b_avg = float(metrics["bandar_avg"])
             c_val = float(s.get("close") or 0)
-            if 0 < c_val * 0.915 <= b_avg < c_val * 0.992:
-                rev_ep = int(round(b_avg))
-                s["trading_plan"]["entry_price"] = rev_ep
-                s["trading_plan"]["entry_low"] = rev_ep
-                s["trading_plan"]["entry_high"] = rev_ep
-                s["trading_plan"]["support_label"] = "Support Avg Bandar"
+            if 0 < c_val * 0.915 <= b_avg < c_val * 0.995:
+                rev_ep = _round_idx_tick(b_avg)
+                atr_v = float(tp_obj.get("atr14") or (rev_ep * 0.03))
+                sl_dist = max(int(round(rev_ep * 0.035)), min(int(round(rev_ep * 0.045)), int(round(1.5 * atr_v))))
+                new_sl = _round_idx_tick(rev_ep - sl_dist)
+                risk_rp = max(1, rev_ep - new_sl)
+                new_tp1 = _round_idx_tick(rev_ep + 2 * risk_rp)
+                new_tp2 = _round_idx_tick(rev_ep + int(round(3.5 * risk_rp)))
+
+                tp_obj["entry_price"] = rev_ep
+                tp_obj["entry_low"] = rev_ep
+                tp_obj["entry_high"] = rev_ep
+                tp_obj["stop_loss"] = new_sl
+                tp_obj["stop_loss_pct"] = -round((risk_rp / rev_ep) * 100.0, 2)
+                tp_obj["target_1"] = new_tp1
+                tp_obj["target_1_pct"] = round(((new_tp1 - rev_ep) / rev_ep) * 100.0, 2)
+                tp_obj["target_2"] = new_tp2
+                tp_obj["target_2_pct"] = round(((new_tp2 - rev_ep) / rev_ep) * 100.0, 2)
+                tp_obj["support_label"] = "Support Avg Bandar"
 
         if s.get("trading_plan"):
             s["trading_plan"]["top_buyers"] = s.get("top_buyers", "")
@@ -1007,9 +1040,14 @@ def filter_and_purge_watchlist_by_smart_money(
                 "note": f"Smart Money Terkonfirmasi: BDR +{bdr:.1f}% (Buyer: {', '.join(top_buyers)}) · Avg Bandar: Rp {bandar_avg or '-'}",
             }
             if bandar_avg and bandar_avg > 0:
-                upd_values["entry_low"] = float(bandar_avg)
-                upd_values["entry_high"] = float(bandar_avg)
-                upd_values["entry_price"] = float(bandar_avg)
+                rev_ep = float(_round_idx_tick(float(bandar_avg)))
+                new_sl = float(_round_idx_tick(rev_ep * 0.965))
+                risk_rp = max(1.0, rev_ep - new_sl)
+                upd_values["entry_low"] = rev_ep
+                upd_values["entry_high"] = rev_ep
+                upd_values["stop_loss"] = new_sl
+                upd_values["target"] = float(_round_idx_tick(rev_ep + 2.0 * risk_rp))
+                upd_values["target_2"] = float(_round_idx_tick(rev_ep + 3.5 * risk_rp))
 
             try:
                 from sqlalchemy import update
