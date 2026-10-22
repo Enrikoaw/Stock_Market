@@ -159,6 +159,64 @@ class SignalTracker:
             self.engine = self._make_engine(url)
             metadata.create_all(self.engine)
         self.db_backend = "PostgreSQL (permanen)" if url.startswith("postgresql") else "SQLite (file lokal)"
+        try:
+            self.repair_corrupted_loss_signals()
+        except Exception as e:
+            print(f"[Tracker] Error auto-repair corrupted signals: {e}")
+
+    def repair_corrupted_loss_signals(self) -> int:
+        """
+        Memperbaiki sinyal yang salah ditutup sebagai LOSS akibat candle masa lalu (exit_date < signal_date atau exit_date < entry_date).
+        Mengembalikan status ke RUNNING (atau WATCHLIST), menghapus exit_date & exit_price yang salah,
+        serta menghitung ulang floating P/L berdasarkan entry_price dan last_close.
+        """
+        repaired = 0
+        with self._lock, self.engine.begin() as conn:
+            rows = conn.execute(
+                select(signals_table).where(
+                    signals_table.c.status.in_(["LOSS", "WIN", "TIMEOUT", "EXPIRED"])
+                )
+            ).mappings().all()
+
+            for r in rows:
+                sig_dt = str(r["signal_date"] or "")
+                ent_dt = str(r["entry_date"] or "")
+                ext_dt = str(r["exit_date"] or "")
+
+                is_corrupted = False
+                # Jika tanggal keluar terjadi sebelum tanggal sinyal atau sebelum tanggal entry
+                if ext_dt and sig_dt and ext_dt < sig_dt:
+                    is_corrupted = True
+                elif ext_dt and ent_dt and ext_dt < ent_dt:
+                    is_corrupted = True
+                elif ext_dt and sig_dt and ext_dt.startswith("2026-07") and sig_dt.startswith("2026-10"):
+                    is_corrupted = True
+
+                if is_corrupted:
+                    has_entry = bool(r["entry_price"] and float(r["entry_price"]) > 0)
+                    new_status = "RUNNING" if has_entry else "WATCHLIST"
+                    ent_p = float(r["entry_price"] or r["signal_close"] or 1)
+                    cur_p = float(r["last_close"] or ent_p)
+                    pnl = round((cur_p - ent_p) / ent_p * 100.0, 2) if new_status == "RUNNING" else 0.0
+
+                    conn.execute(
+                        update(signals_table)
+                        .where(signals_table.c.id == r["id"])
+                        .values(
+                            status=new_status,
+                            exit_date=None,
+                            exit_price=None,
+                            pnl_pct=pnl,
+                            last_eval_date=ent_dt or sig_dt,
+                            note=f"Dipulihkan ke {new_status} (Bug tanggal lampau diperbaiki): Entry Rp {ent_p:,.0f}, Last Rp {cur_p:,.0f} ({pnl:+.1f}%).",
+                            updated_at=_now_str(),
+                        )
+                    )
+                    repaired += 1
+
+        if repaired > 0:
+            print(f"[SignalTracker] Berhasil memulihkan {repaired} sinyal ke status aktif (RUNNING/WATCHLIST)!")
+        return repaired
 
     def sync_targets_quick_profit(self) -> int:
         """Menyesuaikan target price posisi aktif (WATCHLIST & RUNNING) dengan menghormati konfigurasi self.tp_level."""
@@ -728,18 +786,30 @@ class SignalTracker:
                     continue
 
                 r = dict(row)
-                since = r["last_eval_date"] or r["signal_date"]
+                since = str(r.get("last_eval_date") or r["signal_date"])
+                entry_dt = str(r.get("entry_date") or r["signal_date"])
 
                 for bar in hist:
                     bar_date = str(bar["date"])
-                    # Bebas Look-Ahead Bias: Sinyal baru yang masih antre di WATCHLIST hanya boleh dievaluasi setelah signal_date
+
+                    # 1. Mutlak: Jangan pernah evaluasi candle sebelum tanggal sinyal lahir
+                    if bar_date < r["signal_date"]:
+                        continue
+
+                    # 2. Antrean WATCHLIST hanya boleh dievaluasi untuk candle setelah signal_date
                     if r["status"] == "WATCHLIST" and bar_date <= r["signal_date"]:
+                        continue
+
+                    # 3. Posisi RUNNING hanya boleh dievaluasi dari tanggal entry ke depan
+                    if r["status"] == "RUNNING" and bar_date < entry_dt:
                         continue
 
                     is_live_today = False if force_final else (bar_date == today_str and now_wib().time() < MARKET_CLOSE_CUTOFF)
 
-                    # Jika bar historis yang sudah pernah dievaluasi final dan bukan live today -> lewati
-                    if bar_date <= since and not is_live_today and r["status"] == "WATCHLIST":
+                    # 4. Lewati candle historis yang sudah selesai dievaluasi final
+                    if bar_date < since:
+                        continue
+                    if bar_date == since and not is_live_today and r.get("last_eval_date"):
                         continue
 
                     self._step(r, bar, changes, is_live_today=is_live_today)
@@ -920,6 +990,9 @@ class SignalTracker:
             return
 
         if r["status"] == "RUNNING":
+            entry_dt = str(r.get("entry_date") or r["signal_date"])
+            if date < entry_dt:
+                return
             sl, tp = float(r["stop_loss"]), float(r["target"])
             entry_p = float(r["entry_price"])
 

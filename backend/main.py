@@ -200,6 +200,7 @@ def _process_tracker(analysis: dict, sync_live_network: bool = False, force_auto
 
         # 2. Evaluasi dataset analisis penuh (sudah berisi harga terbaru dari sync)
         if analysis and "details" in analysis:
+            TRACKER.repair_corrupted_loss_signals()
             main_res = TRACKER.evaluate(analysis["details"])
             for k in ("entered", "win", "loss", "expired", "timeout"):
                 result[k] = max(result.get(k, 0), main_res.get(k, 0))
@@ -1393,6 +1394,19 @@ def tracker_cleanup_stale() -> dict:
     ref_dt = analysis.get("kpis", {}).get("latest_date") if analysis else None
     removed = TRACKER.cleanup_stale_watchlist(max_days=3, latest_date=ref_dt)
     return {"success": True, "cleaned": removed, "message": f"{removed} sinyal antrean kedaluwarsa berhasil dibersihkan."}
+
+
+@app.post("/api/tracker/repair")
+def tracker_repair() -> dict:
+    """Memulihkan sinyal yang salah ditutup sebagai LOSS akibat bug evaluasi tanggal lampau."""
+    repaired = TRACKER.repair_corrupted_loss_signals()
+    if STATE.get("analysis") and "details" in STATE["analysis"]:
+        TRACKER.evaluate(STATE["analysis"]["details"])
+    return {
+        "success": True,
+        "repaired_count": repaired,
+        "message": f"Berhasil memulihkan {repaired} sinyal ke status aktif!",
+    }
 
 
 @app.post("/api/tracker/purge-retail-watchlist")
