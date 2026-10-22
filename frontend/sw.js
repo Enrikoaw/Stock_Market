@@ -39,6 +39,38 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Web Push: tampilkan notifikasi di bar notifikasi HP (meski aplikasi/browser tertutup)
+self.addEventListener('push', (event) => {
+  let data = { title: 'SmartFlow IDX', body: '', url: '/' };
+  try {
+    if (event.data) data = Object.assign(data, event.data.json());
+  } catch (_) {
+    if (event.data) data.body = event.data.text();
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/static/icons/icon-192.svg',
+      badge: '/static/icons/icon-192.svg',
+      data: { url: data.url || '/' },
+      vibrate: [200, 100, 200],
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) return c.focus();
+      }
+      return self.clients.openWindow(target.startsWith('http') ? target : '/');
+    })
+  );
+});
+
 self.addEventListener('fetch', (event) => {
   // Hanya tangani GET requests
   if (event.request.method !== 'GET') return;

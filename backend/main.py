@@ -47,6 +47,9 @@ from broker_summary_fetcher import (
     filter_and_purge_watchlist_by_smart_money,
     test_broker_connection,
     enrich_single_stock_broker,
+    can_run_broker_sync_now,
+    load_broker_sync_state,
+    record_broker_sync_done,
 )
 from portfolio_tracker import PortfolioTracker
 from signal_tracker import SignalTracker
@@ -58,6 +61,10 @@ from screener_engine import (
     select_today_candidates,
 )
 from news_fetcher import get_market_news, get_market_news_nonblocking, validate_catalyst, NEWS_CACHE
+from push_notifier import (
+    is_push_configured, process_positive_news_alerts, send_push,
+    get_vapid_keys, add_subscription, remove_subscription,
+)
 
 DATA_DIR = BASE_DIR / "data"
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -81,10 +88,11 @@ STATE: dict = {
 
 TRACKER = SignalTracker(BASE_DIR / "data" / "tracker.db")
 PORTFOLIO = PortfolioTracker(BASE_DIR / "data" / "tracker.db")
+_init_broker_st = load_broker_sync_state()
 LAST_CLOSE_SYNC_DATE: str | None = None
 LAST_BROKSUM_EOD_DATE: str | None = None
-LAST_BROKSUM_SESI1_DATE: str | None = None
-LAST_BROKSUM_SESI2_DATE: str | None = None
+LAST_BROKSUM_SESI1_DATE: str | None = _init_broker_st.get("sesi1_last_date")
+LAST_BROKSUM_SESI2_DATE: str | None = _init_broker_st.get("sesi2_last_date")
 
 
 def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> None:
@@ -276,8 +284,9 @@ def _run_sync_job_blocking(with_broker_enrichment: bool = False) -> dict:
 
     # Stage 2: Broker Summary API Fetcher via Two-Stage Smart Funneling
     # (Pilihan Saham Hari Ini + Watchlist Aktif + Stage 1 Funneling)
-    # HANYA dijalankan 2x sehari (setelah Sesi 1 dan setelah Sesi 2).
-    # DILARANG KERAS menarik broksum jika Sesi 1 belum selesai!
+    # HANYA dijalankan maksimal 2x sehari:
+    # 1. Pasca Sesi 1 bursa selesai (11:30 WIB Jumat / 12:00 WIB Senin-Kamis).
+    # 2. Pasca Sesi 2 bursa selesai sekitar jam 6 sore WIB (18:00 WIB).
     broker_cfg = load_broker_api_config()
     has_api_cred = bool(
         broker_cfg.get("invezgo_api_key") or
@@ -285,19 +294,31 @@ def _run_sync_job_blocking(with_broker_enrichment: bool = False) -> dict:
         broker_cfg.get("stockbit_token")
     )
 
-    if with_broker_enrichment and is_sesi1_running_now():
-        print("[Sync] 🛑 Proteksi Kuota: Sesi 1 bursa belum selesai. Penarikan data Broksum Invezgo DITUNDA sampai Sesi 1 usai!")
-        with_broker_enrichment = False
+    session_name = None
+    if with_broker_enrichment:
+        allowed, reason, session_name = can_run_broker_sync_now()
+        if not allowed:
+            print(f"[Sync] 🛑 Proteksi Kuota Invezgo: {reason}")
+            with_broker_enrichment = False
+        else:
+            print(f"[Sync] ✅ Jadwal Broksum Valid ({session_name}): {reason}")
 
     if with_broker_enrichment and has_api_cred:
-        print(f"[Sync] 📡 Mengambil Broker Summary Invezgo untuk tanggal {latest_dt} (Pilihan Hari Ini & Watchlist)...")
+        print(f"[Sync] 📡 Mengambil Broker Summary Invezgo ({session_name}) untuk tanggal {latest_dt} (Pilihan Hari Ini & Watchlist)...")
         enrich_candidates_and_watchlist(
             analysis,
             str(latest_dt),
             tracker=TRACKER,
             cfg=broker_cfg,
             max_total_candidates=broker_cfg.get("max_candidates", 35),
+            force=True,  # Telah diverifikasi jadwal 2x sehari oleh can_run_broker_sync_now di atas
         )
+        if session_name:
+            record_broker_sync_done(session_name, str(latest_dt))
+            if session_name == "sesi1":
+                LAST_BROKSUM_SESI1_DATE = str(latest_dt)
+            elif session_name == "sesi2":
+                LAST_BROKSUM_SESI2_DATE = str(latest_dt)
 
         # Audit Smart Money & Eliminasi sinyal Watchlist yang didominasi ritel / distribusi
         try:
@@ -310,7 +331,7 @@ def _run_sync_job_blocking(with_broker_enrichment: bool = False) -> dict:
         except Exception as exc:
             print(f"[Sync] Warning purge retail watchlist: {exc}")
     else:
-        print("[Sync] ⏱️ Update Harga Pasar 5 Menit: Hanya memperbarui pergerakan harga OHLC & evaluasi Running/SL/TP (Broksum API di-skip total).")
+        print("[Sync] ⏱️ Update Harga Pasar Intraday: Hanya memperbarui pergerakan harga OHLC & evaluasi Running/SL/TP (Broksum API di-skip total).")
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["source_name"] = f"Live IDX ({latest_dt})"
@@ -324,6 +345,10 @@ def _run_sync_job_blocking(with_broker_enrichment: bool = False) -> dict:
         get_market_news(known_tickers=kt, analysis_stocks=analysis["stocks"], force_refresh=True)
     except Exception as exc:
         print(f"[Sync] Pra-pemanasan berita gagal: {exc}")
+    try:
+        _fetch_ihsg_candles_blocking(period="3mo", force=True)
+    except Exception as exc:
+        print(f"[Sync] Refresh data & grafik IHSG (^JKSE) gagal: {exc}")
     save_screener_snapshot()
     return {
         "status": "success",
@@ -485,23 +510,37 @@ async def _background_market_session_worker() -> None:
             is_trading_day = now_wib.weekday() < 5 and not _is_idx_holiday(now_wib.date())
             is_jumat = (now_wib.weekday() == 4)
 
-            # 1. Jadwal Selesai Sesi 1 (Jumat 11:32 - 13:00 WIB, Senin-Kamis 12:02 - 13:00 WIB)
+            # Muat status sinkronisasi persisten untuk memastikan batas maksimal 2x sehari tidak terlanggar
+            sync_st = load_broker_sync_state()
+            LAST_BROKSUM_SESI1_DATE = sync_st.get("sesi1_last_date")
+            LAST_BROKSUM_SESI2_DATE = sync_st.get("sesi2_last_date")
+
+            # 1. Jadwal Selesai Sesi 1 (Jumat 11:30 - 13:45 WIB, Senin-Kamis 12:00 - 13:15 WIB)
             # Menarik broker summary Invezgo untuk menyaring kandidat Watchlist Hari Ini (Hanya 1x sehari)
+            is_sesi1_time = (
+                (is_jumat and dtime(11, 30) <= now_wib.time() <= dtime(13, 45))
+                or (not is_jumat and dtime(12, 0) <= now_wib.time() <= dtime(13, 15))
+            )
             needs_sesi1_broksum_sync = (
                 is_trading_day
-                and (
-                    (is_jumat and dtime(11, 32) <= now_wib.time() <= dtime(13, 0))
-                    or (not is_jumat and dtime(12, 2) <= now_wib.time() <= dtime(13, 0))
-                )
+                and is_sesi1_time
                 and LAST_BROKSUM_SESI1_DATE != today_str
             )
 
-            # 2. Jadwal Selesai Sesi 2 / Penutupan Bursa (16:08 - 21:00 WIB)
-            # Menarik broker summary Invezgo penutupan & evaluasi final status sinyal Take Profit / Stop Loss (Hanya 1x sehari)
+            # 2. Jadwal Selesai Sesi 2 / Sekitar Jam 6 Sore WIB (18:00 - 22:00 WIB)
+            # Menarik broker summary Invezgo penutupan resmi IDX & evaluasi final status sinyal Take Profit / Stop Loss (Hanya 1x sehari)
+            is_sesi2_time = (dtime(18, 0) <= now_wib.time() <= dtime(22, 0))
             needs_sesi2_broksum_sync = (
                 is_trading_day
-                and (dtime(16, 8) <= now_wib.time() <= dtime(21, 0))
+                and is_sesi2_time
                 and LAST_BROKSUM_SESI2_DATE != today_str
+            )
+
+            # Jadwal Penutupan Pasar 16:10 WIB (HANYA update closing price, TANPA broksum!)
+            needs_close_price_sync = (
+                is_trading_day
+                and (dtime(16, 10) <= now_wib.time() <= dtime(17, 30))
+                and LAST_CLOSE_SYNC_DATE != today_str
             )
 
             should_sync = False
@@ -514,6 +553,9 @@ async def _background_market_session_worker() -> None:
                 elif needs_sesi2_broksum_sync:
                     should_sync = True
                     with_broksum = True
+                elif needs_close_price_sync:
+                    should_sync = True
+                    with_broksum = False
                 elif market_open and (now_ts - last_sync_attempt_ts >= 300):
                     # Update harga pasar rutin setiap 5 menit saat bursa aktif: HANYA update harga OHLC (TANPA broksum!)
                     should_sync = True
@@ -528,18 +570,23 @@ async def _background_market_session_worker() -> None:
             if should_sync:
                 print(
                     f"[MarketWorker] Menjalankan sinkronisasi background "
-                    f"(with_broksum={with_broksum}, market_open={market_open}, sesi1_done={needs_sesi1_broksum_sync}, sesi2_done={needs_sesi2_broksum_sync})..."
+                    f"(with_broksum={with_broksum}, market_open={market_open}, sesi1_due={needs_sesi1_broksum_sync}, sesi2_due={needs_sesi2_broksum_sync}, close_due={needs_close_price_sync})..."
                 )
                 last_sync_attempt_ts = now_ts
                 synced_ok = await trigger_safe_sync(with_broker_enrichment=with_broksum)
                 if synced_ok:
                     if needs_sesi1_broksum_sync:
                         LAST_BROKSUM_SESI1_DATE = today_str
-                        print(f"[MarketWorker] Selesai Sesi 1 ({today_str}): Penarikan Broksum Invezgo & Filter Smart Money selesai.")
+                        record_broker_sync_done("sesi1", today_str)
+                        print(f"[MarketWorker] ✅ Selesai Sesi 1 ({today_str}): Penarikan Broksum Invezgo (1/2) & Filter Smart Money selesai.")
                     if needs_sesi2_broksum_sync:
                         LAST_BROKSUM_SESI2_DATE = today_str
                         LAST_CLOSE_SYNC_DATE = today_str
-                        print(f"[MarketWorker] Selesai Sesi 2 ({today_str}): Penarikan Broksum Invezgo & Evaluasi Take Profit selesai.")
+                        record_broker_sync_done("sesi2", today_str)
+                        print(f"[MarketWorker] ✅ Selesai Sesi 2 ({today_str}): Penarikan Broksum Invezgo (2/2 selesai ~18:00 WIB) & Evaluasi Take Profit selesai.")
+                    elif needs_close_price_sync:
+                        LAST_CLOSE_SYNC_DATE = today_str
+                        print(f"[MarketWorker] ✅ Penutupan Pasar ({today_str}): Candle penutupan tersimpan. Broksum dijadwalkan pukul 18:00 WIB.")
         except Exception as exc:
             print(f"[MarketWorker] Error: {exc}")
 
@@ -547,12 +594,33 @@ async def _background_market_session_worker() -> None:
         await asyncio.sleep(90)
 
 
+async def _background_news_alert_worker() -> None:
+    """Worker alert HP: setiap 10 menit cek berita; kirim push (Telegram/ntfy) HANYA untuk
+    berita POSITIF terkait emiten. Tidak memakai kuota Invezgo."""
+    print("[NewsAlertWorker] Aktif (alert berita positif emiten ke HP).")
+    while True:
+        try:
+            if is_push_configured():
+                stocks = (STATE.get("analysis") or {}).get("stocks") or []
+                kt = {str(s.get("ticker", "")).upper() for s in stocks if s.get("ticker")}
+                items = await asyncio.to_thread(
+                    get_market_news_nonblocking, known_tickers=kt, analysis_stocks=stocks
+                )
+                if items and kt:
+                    await asyncio.to_thread(process_positive_news_alerts, items)
+        except Exception as exc:
+            print(f"[NewsAlertWorker] Error: {exc}")
+        await asyncio.sleep(600)
+
+
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     """Mengelola siklus hidup server: Menjalankan worker market session cerdas secara otomatis."""
     market_task = asyncio.create_task(_background_market_session_worker())
+    news_alert_task = asyncio.create_task(_background_news_alert_worker())
     yield
     market_task.cancel()
+    news_alert_task.cancel()
     try:
         TRACKER.engine.dispose()
         PORTFOLIO.engine.dispose()
@@ -950,30 +1018,7 @@ def get_stock_detail(ticker: str) -> dict:
     if key not in details_map:
         raise HTTPException(status_code=404, detail=f"Saham '{key}' tidak ditemukan pada dataset aktif.")
 
-    item = details_map[key]
-
-    # Auto-fetch Broker Summary on-demand jika belum ada kode broker sah dan token tersedia
-    if not _has_real_broker_codes(item):
-        cfg = load_broker_api_config()
-        if cfg.get("invezgo_api_key") or cfg.get("stockbit_token") or cfg.get("goapi_key"):
-            try:
-                latest_dt = str(item.get("date") or STATE["analysis"]["kpis"].get("latest_date") or "")
-                enrich_single_stock_broker(item, latest_dt, cfg)
-                for s in STATE["analysis"].get("stocks", []):
-                    if s.get("ticker", "").upper() == key:
-                        for field in (
-                            "broker_analysis", "has_broker_summary", "has_real_broker_summary", "bdr_pct",
-                            "top_buyers_list", "top_sellers_list", "top_buyers", "top_sellers",
-                            "bandar_avg_buy", "diff_bandar_avg_pct", "smart_money_score", "retail_trap",
-                            "trigger_type", "trigger_label"
-                        ):
-                            if field in item:
-                                s[field] = item[field]
-                        break
-            except Exception as ex:
-                print(f"[BrokerOnDemand] Error auto-enrich {key}: {ex}")
-
-    return item
+    return details_map[key]
 
 
 @app.post("/api/stock/{ticker}/fetch-broker")
@@ -994,8 +1039,21 @@ def fetch_single_stock_broker_endpoint(ticker: str) -> dict:
         )
 
     item = details_map[key]
+    # Jika sudah memiliki data broker summary resmi dari sesi terbaru, kembalikan langsung tanpa memakan kuota
+    if _has_real_broker_codes(item):
+        return item
+
+    # Proteksi token Invezgo: Hanya boleh digunakan 2x sehari sesuai aturan bursa (Pasca Sesi 1 & Jam 18:00 WIB)
+    if cfg.get("invezgo_api_key"):
+        allowed, reason, _ = can_run_broker_sync_now()
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Proteksi Kuota Token Invezgo: Penarikan broker summary dibatasi hanya 2x sehari otomatis (Pasca Sesi 1 jam 11:30/12:00 WIB & Pasca Sesi 2 jam 18:00 WIB). {reason}",
+            )
+
     latest_dt = str(item.get("date") or STATE["analysis"]["kpis"].get("latest_date") or "")
-    enrich_single_stock_broker(item, latest_dt, cfg)
+    enrich_single_stock_broker(item, latest_dt, cfg, force=True)
 
     # Sinkronisasi ke list analysis["stocks"]
     for s in STATE["analysis"].get("stocks", []):
@@ -1521,7 +1579,7 @@ def export_tracker_csv(status: str = Query(default="ALL")) -> Response:
 IHSG_CACHE: dict[str, dict] = {}
 
 
-def _fetch_ihsg_candles_blocking(period: str = "3mo") -> dict:
+def _fetch_ihsg_candles_blocking(period: str = "3mo", force: bool = False) -> dict:
     import time
     import yfinance as yf
 
@@ -1530,7 +1588,7 @@ def _fetch_ihsg_candles_blocking(period: str = "3mo") -> dict:
     now_ts = time.time()
 
     cached = IHSG_CACHE.get(yf_period)
-    if cached and (now_ts - cached.get("ts", 0) < 300) and cached.get("data"):
+    if not force and cached and (now_ts - cached.get("ts", 0) < 300) and cached.get("data"):
         return cached["data"]
 
     candles: list[dict] = []
@@ -1567,6 +1625,25 @@ def _fetch_ihsg_candles_blocking(period: str = "3mo") -> dict:
                     "pct_change": pct_chg,
                     "volume": vol_val,
                 })
+
+            # Selaraskan bar hari ini dengan real-time fast_info dari Yahoo Finance (jika pasar sedang live)
+            try:
+                fi = getattr(t_obj, "fast_info", None)
+                if fi and candles:
+                    lp = getattr(fi, "last_price", None)
+                    if lp and float(lp) > 0:
+                        last_c = candles[-1]
+                        last_c["close"] = round(float(lp), 2)
+                        dh = getattr(fi, "day_high", None)
+                        dl = getattr(fi, "day_low", None)
+                        if dh and float(dh) > 0:
+                            last_c["high"] = round(max(float(last_c["high"]), float(dh)), 2)
+                        if dl and float(dl) > 0:
+                            last_c["low"] = round(min(float(last_c["low"]), float(dl)), 2)
+                        prev_c_val = candles[-2]["close"] if len(candles) >= 2 else last_c["open"]
+                        last_c["pct_change"] = round(((last_c["close"] - prev_c_val) / max(prev_c_val, 1.0)) * 100.0, 2)
+            except Exception as fi_exc:
+                pass
     except Exception as exc:
         print(f"[IHSGChart] Gagal tarik ^JKSE dari Yahoo Finance, gunakan fallback komposit: {exc}")
 
@@ -1643,11 +1720,11 @@ def _fetch_ihsg_candles_blocking(period: str = "3mo") -> dict:
 
 
 @app.get("/api/ihsg/candles")
-async def get_ihsg_candles(period: str = Query(default="3mo")) -> dict:
+async def get_ihsg_candles(period: str = Query(default="3mo"), force: bool = Query(default=False)) -> dict:
     """Mengembalikan data historis candlestick/line Indeks Harga Saham Gabungan (^JKSE) beserta MA20 & MA50."""
     if STATE["analysis"] is None:
         init_default_state()
-    data = await asyncio.to_thread(_fetch_ihsg_candles_blocking, period)
+    data = await asyncio.to_thread(_fetch_ihsg_candles_blocking, period, force)
     regime = STATE["analysis"]["kpis"].get("market_regime", {}) if STATE.get("analysis") else {}
     return {
         **data,
@@ -1790,10 +1867,12 @@ class BrokerApiConfigRequest(BaseModel):
 @app.get("/api/broker/config")
 def get_broker_api_config_endpoint() -> dict:
     cfg = load_broker_api_config()
+    sync_st = load_broker_sync_state()
     inv_key = cfg.get("invezgo_api_key", "")
     masked_inv = f"{inv_key[:4]}...{inv_key[-4:]}" if len(inv_key) > 8 else ("***" if inv_key else "")
     go_key = cfg.get("goapi_key", "")
     masked_go = f"{go_key[:4]}...{go_key[-4:]}" if len(go_key) > 8 else ("***" if go_key else "")
+    allowed_now, sync_msg, next_sess = can_run_broker_sync_now()
     return {
         "provider": cfg.get("provider", "invezgo"),
         "has_invezgo_key": bool(inv_key),
@@ -1803,6 +1882,14 @@ def get_broker_api_config_endpoint() -> dict:
         "has_stockbit_token": bool(cfg.get("stockbit_token")),
         "delay_ms": cfg.get("delay_ms", 300),
         "max_candidates": cfg.get("max_candidates", 30),
+        "sync_policy": "2x Sehari Otomatis (Pasca Sesi 1 jam 11:30/12:00 WIB & Pasca Sesi 2 jam 18:00 WIB)",
+        "sesi1_last_date": sync_st.get("sesi1_last_date"),
+        "sesi1_last_ts": sync_st.get("sesi1_last_ts"),
+        "sesi2_last_date": sync_st.get("sesi2_last_date"),
+        "sesi2_last_ts": sync_st.get("sesi2_last_ts"),
+        "can_sync_now": allowed_now,
+        "sync_status_message": sync_msg,
+        "current_session_window": next_sess,
     }
 
 
@@ -1856,19 +1943,62 @@ def test_broker_api_endpoint(req: BrokerTestRequest) -> dict:
     return res
 
 
+@app.get("/api/push/public-key")
+def push_public_key() -> dict:
+    return {"public_key": get_vapid_keys()["public"]}
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(sub: dict) -> dict:
+    try:
+        total = add_subscription(sub)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve)) from ve
+    return {"status": "success", "devices": total}
+
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(body: dict) -> dict:
+    remove_subscription(str(body.get("endpoint", "")))
+    return {"status": "success"}
+
+
+@app.post("/api/alerts/test-push")
+def test_push_alert() -> dict:
+    """Kirim notifikasi uji ke HP (bar notifikasi / Telegram / ntfy)."""
+    if not is_push_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="Belum ada perangkat terdaftar. Buka aplikasi di HP lalu tekan 'Aktifkan' pada Notifikasi Desktop / HP.",
+        )
+    ok = send_push("✅ SmartFlow IDX", "Alert berita positif emiten berhasil terhubung ke HP Anda.")
+    if not ok:
+        raise HTTPException(status_code=502, detail="Gagal mengirim. Periksa token/chat id/topic.")
+    return {"status": "success", "message": "Notifikasi uji terkirim ke HP."}
+
+
 @app.post("/api/broker/sync-eod")
 async def manual_broker_sync_eod() -> dict:
     """Trigger manual sinkronisasi Broker Summary EOD (Pilihan Hari Ini + Watchlist) on-demand."""
     global LAST_BROKSUM_EOD_DATE
     if STATE["analysis"] is None:
         init_default_state()
-    synced = await trigger_safe_sync()
+    allowed, reason, session_name = can_run_broker_sync_now()
+    if not allowed:
+        return {
+            "status": "warning",
+            "message": f"Penarikan ditolak untuk proteksi kuota token Invezgo: {reason}",
+            "allowed": False,
+        }
+    synced = await trigger_safe_sync(with_broker_enrichment=True)
     now_wib = _get_now_wib()
     today_str = now_wib.strftime("%Y-%m-%d")
     LAST_BROKSUM_EOD_DATE = today_str
+    if session_name:
+        record_broker_sync_done(session_name, today_str)
     return {
         "status": "success" if synced else "error",
-        "message": f"Sinkronisasi Broker Summary EOD ({today_str}) selesai.",
+        "message": f"Sinkronisasi Broker Summary ({today_str} - {session_name}) selesai.",
         "date": today_str,
     }
 

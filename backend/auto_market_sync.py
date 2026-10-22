@@ -69,12 +69,16 @@ def main() -> None:
         print(f"[AutoMarketSync] Warning: Gagal seleksi awal today candidates: {exc}")
 
     # Two-Stage Smart Funneling X-Ray (Pilihan Saham Hari Ini + Watchlist Aktif + Stage 1)
-    # HANYA dijalankan 2x sehari (tepat setelah Sesi 1 dan setelah Sesi 2).
-    # DILARANG KERAS menarik broksum selama Sesi 1 belum selesai!
+    # HANYA dijalankan maksimal 2x sehari:
+    # 1. Pasca Sesi 1 bursa selesai (11:30 WIB Jumat / 12:00 WIB Senin-Kamis).
+    # 2. Pasca Sesi 2 bursa selesai sekitar jam 6 sore WIB (18:00 WIB).
+    # DILARANG KERAS menarik broksum di luar kedua jendela ini demi proteksi kuota token Invezgo!
     try:
         from broker_summary_fetcher import (
             load_broker_api_config,
             enrich_candidates_and_watchlist,
+            can_run_broker_sync_now,
+            record_broker_sync_done,
         )
         broker_cfg = load_broker_api_config()
         has_api_cred = bool(
@@ -82,26 +86,20 @@ def main() -> None:
             broker_cfg.get("goapi_key") or
             broker_cfg.get("stockbit_token")
         )
-        from datetime import datetime, time as dtime
-        try:
-            from zoneinfo import ZoneInfo
-            now_wib = datetime.now(ZoneInfo("Asia/Jakarta"))
-        except Exception:
-            now_wib = datetime.now()
-        is_jumat = (now_wib.weekday() == 4)
-        sesi1_end = dtime(11, 30) if is_jumat else dtime(12, 0)
-        is_in_sesi1 = (now_wib.weekday() < 5) and (dtime(9, 0) <= now_wib.time() < sesi1_end)
-        is_after_session = (sesi1_end <= now_wib.time() <= dtime(13, 30)) or (now_wib.time() >= dtime(16, 0)) or (now_wib.weekday() >= 5)
+        allowed, reason, session_name = can_run_broker_sync_now()
 
-        if has_api_cred and not is_in_sesi1 and is_after_session:
-            print("[AutoMarketSync] 📡 Mengambil Broker Summary Invezgo (Pasca Sesi 1/Sesi 2)...")
+        if has_api_cred and allowed:
+            print(f"[AutoMarketSync] 📡 Mengambil Broker Summary Invezgo ({reason})...")
             enrich_candidates_and_watchlist(
                 analysis,
                 str(latest_dt),
                 tracker=tracker,
                 cfg=broker_cfg,
                 max_total_candidates=broker_cfg.get("max_candidates", 35),
+                force=True,
             )
+            if session_name:
+                record_broker_sync_done(session_name, str(latest_dt))
 
             # Seleksi & Eliminasi Sinyal Watchlist yang Didominasi Ritel / Distribusi
             from broker_summary_fetcher import filter_and_purge_watchlist_by_smart_money
@@ -113,7 +111,7 @@ def main() -> None:
             )
             print(f"[AutoMarketSync] Audit Smart Money Watchlist: {purge_res.get('retained_count')} lolos, {purge_res.get('eliminated_count')} ritel/distribusi dihapus.")
         else:
-            print("[AutoMarketSync] ⏱️ Skip Penarikan Broksum (Sesi 1 belum selesai atau update interval rutin). Hanya update harga pasar & evaluasi Running/SL/TP.")
+            print(f"[AutoMarketSync] ⏱️ Skip Penarikan Broksum: {reason}. Hanya update harga pasar & evaluasi Running/SL/TP.")
     except Exception as exc:
         print(f"[AutoMarketSync] Warning: Gagal enrichment broker summary: {exc}")
 

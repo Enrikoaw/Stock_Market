@@ -2,8 +2,8 @@ name: IDX Market Autopilot (Wake-Up Render & Auto-Sync BEI)
 
 on:
   schedule:
-    # 1. Ping & Bangunkan Server Render setiap 14 menit selama Jam Bursa BEI (08:45 - 16:45 WIB, Senin - Jumat)
-    - cron: '*/14 1-9 * * 1-5'
+    # 1. Ping & Bangunkan Server Render setiap 14 menit selama Jam Bursa & Pasca Bursa BEI (08:45 - 18:50 WIB, Senin - Jumat)
+    - cron: '*/14 1-11 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -38,7 +38,7 @@ jobs:
             fi
           done
 
-      - name: 2. Cek Apakah Waktu Full Sync Database (Pagi 09:15, Siang 12:15, Penutupan 16:25 WIB, atau Manual)
+      - name: 2. Cek Apakah Waktu Full Sync Database (Pagi 09:15, Sesi 1 12:15, Penutupan 16:25, Sesi 2 18:05 WIB, atau Manual)
         id: check_sync_time
         run: |
           HOUR_WIB=$(TZ=Asia/Jakarta date +%H)
@@ -51,6 +51,8 @@ jobs:
           elif [ "$HOUR_WIB" = "12" ] && [ "$MIN_WIB" -lt "20" ]; then
             echo "should_sync=true" >> $GITHUB_OUTPUT
           elif [ "$HOUR_WIB" = "16" ] && [ "$MIN_WIB" -ge "15" ] && [ "$MIN_WIB" -lt "35" ]; then
+            echo "should_sync=true" >> $GITHUB_OUTPUT
+          elif [ "$HOUR_WIB" = "18" ] && [ "$MIN_WIB" -ge "00" ] && [ "$MIN_WIB" -lt "30" ]; then
             echo "should_sync=true" >> $GITHUB_OUTPUT
           else
             echo "should_sync=false" >> $GITHUB_OUTPUT
@@ -80,7 +82,7 @@ jobs:
         run: |
           git config user.name "SmartFlow Market Bot"
           git config user.email "bot@smartflow-idx.local"
-          git add data/real_idx_market_latest.csv data/tracker.db
+          git add data/real_idx_market_latest.csv data/tracker.db data/broker_sync_state.json
           if ! git diff --cached --quiet; then
             NOW_WIB=$(TZ=Asia/Jakarta date '+%Y-%m-%d %H:%M WIB')
             git commit -m "chore(market-sync): auto-update IDX market data & tracker ($NOW_WIB)"

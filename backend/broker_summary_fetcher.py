@@ -15,6 +15,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import date, datetime, time as dtime
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +71,7 @@ def load_env_file() -> None:
 
                     # Deteksi otomatis token Invezgo (format resmi awalan invz_ atau nama variabel varian)
                     k_upper = key.upper()
-                    if val.startswith("invz_") or any(x in k_upper for x in ("INVEZGO", "INVESTGO", "BROKSUM")):
+                    if val.startswith("invz_") or any(x in k_upper for x in ("INVEZGO", "INVESTGO", "NINVESTGO", "NINVEST", "BROKSUM")):
                         os.environ["INVEZGO_API_KEY"] = val
                         os.environ["BROKER_API_PROVIDER"] = "invezgo"
 
@@ -89,6 +90,10 @@ def load_broker_api_config() -> dict[str, Any]:
         "INVEZGO_API_KEY",
         "INVEZGO_TOKEN",
         "INVEZGO_KEY",
+        "NINVESTGO_API_KEY",
+        "NINVESTGO_TOKEN",
+        "NINVESTGO_KEY",
+        "NINVEST_API_KEY",
         "INVESTGO_API_KEY",
         "INVESTGO_TOKEN",
         "INVESTGO_KEY",
@@ -161,6 +166,158 @@ def save_broker_api_config(cfg: dict[str, Any]) -> bool:
         return True
     except Exception:
         return False
+
+
+SYNC_STATE_PATH = Path(__file__).resolve().parent.parent / "data" / "broker_sync_state.json"
+
+# Daftar Hari Libur Resmi Bursa Efek Indonesia (BEI / IDX) 2025 - 2027
+IDX_HOLIDAYS: set[str] = {
+    # 2025
+    "2025-01-01", "2025-01-27", "2025-01-28", "2025-01-29", "2025-03-28", "2025-03-31",
+    "2025-04-01", "2025-04-02", "2025-04-03", "2025-04-04", "2025-04-07", "2025-04-18",
+    "2025-05-01", "2025-05-12", "2025-05-29", "2025-05-30", "2025-06-06", "2025-06-09",
+    "2025-06-27", "2025-08-18", "2025-09-05", "2025-12-24", "2025-12-25", "2025-12-26", "2025-12-31",
+    # 2026
+    "2026-01-01", "2026-01-16", "2026-02-17", "2026-03-19", "2026-03-20", "2026-03-23",
+    "2026-03-24", "2026-03-25", "2026-04-03", "2026-05-01", "2026-05-14", "2026-05-27",
+    "2026-05-28", "2026-06-01", "2026-06-16", "2026-07-16", "2026-08-17", "2026-08-25",
+    "2026-12-24", "2026-12-25", "2026-12-31",
+    # 2027
+    "2027-01-01", "2027-02-08", "2027-02-09", "2027-03-09", "2027-03-10", "2027-03-26",
+    "2027-04-09", "2027-05-03", "2027-05-06", "2027-05-17", "2027-05-20", "2027-06-01",
+    "2027-08-17", "2027-12-24", "2027-12-25", "2027-12-31",
+}
+
+
+def get_now_wib() -> datetime:
+    """Mengembalikan waktu saat ini dalam zona waktu Jakarta (WIB / UTC+7)."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Jakarta"))
+    except Exception:
+        from datetime import timezone, timedelta
+        return datetime.now(timezone(timedelta(hours=7)))
+
+
+def load_broker_sync_state() -> dict[str, Any]:
+    """Memuat histori sinkronisasi broker summary (Sesi 1 & Sesi 2) dari file data/broker_sync_state.json."""
+    if SYNC_STATE_PATH.exists():
+        try:
+            with open(SYNC_STATE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+    return {
+        "sesi1_last_date": None,
+        "sesi1_last_ts": None,
+        "sesi2_last_date": None,
+        "sesi2_last_ts": None,
+    }
+
+
+def save_broker_sync_state(state: dict[str, Any]) -> bool:
+    """Menyimpan histori sinkronisasi broker summary ke data/broker_sync_state.json."""
+    try:
+        SYNC_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(SYNC_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+        return True
+    except Exception as exc:
+        print(f"[BrokerSyncState] Gagal menyimpan sync state: {exc}")
+        return False
+
+
+def record_broker_sync_done(session_type: str, date_str: str) -> None:
+    """Mencatat sesi (sesi1 / sesi2) telah berhasil disinkronisasi ke data/broker_sync_state.json."""
+    st = load_broker_sync_state()
+    now_str = get_now_wib().strftime("%Y-%m-%d %H:%M:%S")
+    if session_type == "sesi1":
+        st["sesi1_last_date"] = str(date_str)
+        st["sesi1_last_ts"] = now_str
+    elif session_type == "sesi2":
+        st["sesi2_last_date"] = str(date_str)
+        st["sesi2_last_ts"] = now_str
+    save_broker_sync_state(st)
+
+
+def can_run_broker_sync_now(now_dt: datetime | None = None) -> tuple[bool, str, str | None]:
+    """
+    Evaluasi Aturan Ketat Penarikan Broker Summary Invezgo (Maksimal 2x Sehari):
+    1. Sesi 1 Selesai di Jam Bursa:
+       - Jumat: 11:30 WIB s/d 13:45 WIB
+       - Senin - Kamis: 12:00 WIB s/d 13:15 WIB
+       - Hanya boleh 1x sehari (jika belum pernah dijalankan untuk tanggal hari ini).
+    2. Sesi 2 Selesai Sekitar Jam 6 Sore WIB:
+       - Senin - Jumat: 18:00 WIB s/d 22:00 WIB
+       - Hanya boleh 1x sehari (jika belum pernah dijalankan untuk tanggal hari ini).
+    3. Di luar kedua jendela ini: DILARANG memanggil API Invezgo untuk proteksi kuota token.
+
+    Returns:
+        (is_allowed: bool, reason_message: str, session_type: Optional[str] ['sesi1', 'sesi2', or None])
+    """
+    now = now_dt or get_now_wib()
+    today_str = now.strftime("%Y-%m-%d")
+
+    # Cek Hari Bursa (Senin - Jumat)
+    if now.weekday() >= 5:
+        return False, "Hari libur akhir pekan (Sabtu/Minggu). Penarikan broksum ditiadakan.", None
+
+    if today_str in IDX_HOLIDAYS:
+        return False, f"Hari libur resmi bursa BEI ({today_str}). Penarikan broksum ditiadakan.", None
+
+    cur_time = now.time()
+    is_jumat = (now.weekday() == 4)
+    st = load_broker_sync_state()
+
+    # Jendela Waktu Sesi 1:
+    sesi1_start = dtime(11, 30) if is_jumat else dtime(12, 0)
+    sesi1_end = dtime(13, 45) if is_jumat else dtime(13, 15)
+
+    # Jendela Waktu Sesi 2 (sekitar jam 6 sore WIB):
+    sesi2_start = dtime(18, 0)
+    sesi2_end = dtime(22, 0)
+
+    # 1. Evaluasi Jendela Sesi 1
+    if sesi1_start <= cur_time <= sesi1_end:
+        if st.get("sesi1_last_date") == today_str:
+            return (
+                False,
+                f"Broksum Sesi 1 sudah berhasil diambil hari ini ({today_str} pk {st.get('sesi1_last_ts', '-')}). Jadwal berikutnya: Pasca Sesi 2 jam 18:00 WIB.",
+                "sesi1",
+            )
+        return True, f"Jadwal Penarikan 1/2: Pasca Sesi 1 Bursa ({today_str})", "sesi1"
+
+    # 2. Evaluasi Jendela Sesi 2 (Jam 18:00 WIB)
+    if sesi2_start <= cur_time <= sesi2_end:
+        if st.get("sesi2_last_date") == today_str:
+            return (
+                False,
+                f"Broksum Sesi 2 sudah berhasil diambil hari ini ({today_str} pk {st.get('sesi2_last_ts', '-')}). Kuota harian 2x selesai.",
+                "sesi2",
+            )
+        return True, f"Jadwal Penarikan 2/2: Pasca Sesi 2 Bursa Sekitar Jam 6 Sore WIB ({today_str})", "sesi2"
+
+    # 3. Di luar jadwal
+    if cur_time < sesi1_start:
+        return (
+            False,
+            f"Bursa masih berjalan di Sesi 1 ({cur_time.strftime('%H:%M')} WIB). Penarikan Broksum Invezgo dijadwalkan tepat setelah Sesi 1 selesai ({sesi1_start.strftime('%H:%M')} WIB).",
+            None,
+        )
+    elif cur_time < sesi2_start:
+        return (
+            False,
+            f"Bursa Sesi 2 / Sore ({cur_time.strftime('%H:%M')} WIB). Penarikan Broksum Invezgo dijadwalkan sekitar jam 6 sore WIB ({sesi2_start.strftime('%H:%M')} WIB) saat data resmi IDX diterbitkan Invezgo.",
+            None,
+        )
+    else:
+        return (
+            False,
+            f"Melewati jendela penarikan harian broksum ({cur_time.strftime('%H:%M')} WIB).",
+            None,
+        )
 
 
 def analyze_broker_summary(top_buyers: list[dict], top_sellers: list[dict]) -> dict[str, Any]:
@@ -704,13 +861,14 @@ def enrich_candidates_and_watchlist(
     tracker: Any | None = None,
     cfg: dict[str, Any] | None = None,
     max_total_candidates: int = 40,
+    force: bool = False,
 ) -> list[dict]:
     """
     Funneling Terpadu Broker Summary (Pilihan Hari Ini + Watchlist + Top Screener):
-    1. Pastikan seluruh 'Pilihan Saham Hari Ini' (today_candidates) WAJIB diperkaya broker summary.
-    2. Pastikan seluruh saham aktif di 'Watchlist / Pantauan' (WATCHLIST + RUNNING) WAJIB diperkaya broker summary.
-    3. Sisa kuota hingga max_total_candidates diisi oleh kandidat terbaik dari Stage 1 Funneling.
-    
+    HANYA dijalankan maksimal 2x sehari sesuai aturan bursa IDX:
+    1. Pasca Sesi 1 bursa selesai (11:30 WIB Jumat / 12:00 WIB Senin-Kamis).
+    2. Pasca Sesi 2 bursa selesai sekitar jam 6 sore WIB (18:00 WIB).
+
     Hasil:
     - Zero wasted API calls.
     - Semua saham yang dipantau user & rekomendasi hari ini 100% memiliki data broker summary terkini.
@@ -724,6 +882,16 @@ def enrich_candidates_and_watchlist(
     if not has_api:
         print("[SmartFunnel] Token Broker API belum diatur. Melewati enrichment broker summary.")
         return []
+
+    # Validasi jadwal 2x sehari (proteksi kuota token Invezgo)
+    session_name = None
+    if not force:
+        allowed, reason, session_name = can_run_broker_sync_now()
+        if not allowed:
+            print(f"[SmartFunnel] 🛑 Proteksi Kuota Invezgo: {reason}")
+            return []
+    else:
+        _, _, session_name = can_run_broker_sync_now()
 
     details_map = analysis.get("details", {})
     all_stocks = analysis.get("stocks", [])
@@ -797,10 +965,14 @@ def enrich_candidates_and_watchlist(
                     if fld in d_item:
                         cand[fld] = d_item[fld]
 
+    if session_name:
+        record_broker_sync_done(session_name, str(date_str))
+        print(f"[SmartFunnel] 💾 Catatan sinkronisasi tersimpan untuk sesi: {session_name} ({date_str}).")
+
     return enriched
 
 
-def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | None = None) -> dict:
+def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | None = None, force: bool = False) -> dict:
     """Mengambil dan memperkaya data broker summary untuk 1 saham secara on-demand."""
     from datetime import datetime, timedelta
 
@@ -809,6 +981,12 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
     ticker = str(s.get("ticker", "")).upper().strip()
     if not ticker:
         return s
+
+    if config.get("invezgo_api_key") and not force:
+        allowed, reason, _ = can_run_broker_sync_now()
+        if not allowed:
+            print(f"[BrokerOnDemand] Proteksi Token Invezgo: Fetch on-demand #{ticker} di-skip ({reason}).")
+            return s
 
     raw_data = None
     from datetime import datetime
@@ -939,8 +1117,12 @@ def filter_and_purge_watchlist_by_smart_money(
             top_buyers = d_item.get("top_buyers_list", [])
             top_sellers = d_item.get("top_sellers_list", [])
 
-        # Jika belum ada data real, fetch langsung ke Invezgo API
+        # Jika belum ada data real, fetch langsung ke Invezgo API HANYA jika jadwal mengizinkan
         if not metrics or not top_buyers:
+            if config.get("invezgo_api_key"):
+                allowed_purge, _, _ = can_run_broker_sync_now()
+                if not allowed_purge:
+                    continue
             time.sleep(max(0.2, config.get("delay_ms", 300) / 1000.0))
             raw_data = None
             for dt_c in dates_to_try:

@@ -170,6 +170,10 @@ function switchMainTab(tabName, isInitialLoad = false) {
   if (tabName === 'today') {
     renderTodayCandidates(currentTodayCandidates.length > 0 ? currentTodayCandidates : currentStocks);
     loadMarketNews(false);
+    const now = Date.now();
+    if (now - lastIhsgRefreshTs >= 60 * 1000) {
+      loadIhsgTodayChart(currentIhsgPeriod, isIDXMarketOpenNow()).catch(() => {});
+    }
   } else if (tabName === 'watchlist') {
     renderFavorites();
     loadTracker();
@@ -1517,6 +1521,33 @@ function updateBrowserNotificationUI() {
   }
 }
 
+function _b64uToUint8(b64u) {
+  const pad = '='.repeat((4 - (b64u.length % 4)) % 4);
+  const raw = atob((b64u + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+// Daftarkan perangkat ke Web Push server agar alert berita positif emiten masuk ke bar notifikasi HP
+async function subscribeWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    const keyRes = await fetch('/api/push/public-key');
+    const { public_key } = await keyRes.json();
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: _b64uToUint8(public_key),
+    });
+  }
+  const res = await fetch('/api/push/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sub.toJSON()),
+  });
+  return res.ok;
+}
+
 async function requestBrowserNotification() {
   if (!('Notification' in window)) {
     showToast('Peramban Anda tidak mendukung API Notifikasi.', 'error');
@@ -1527,13 +1558,14 @@ async function requestBrowserNotification() {
     updateBrowserNotificationUI();
     if (perm === 'granted') {
       playAlertChime();
-      showToast('🔔 Notifikasi browser berhasil diaktifkan!', 'success');
-      try {
-        new Notification('SmartFlow IDX Alert Aktif', {
-          body: 'Anda akan menerima notifikasi otomatis saat saham pilihan terdeteksi!',
-          icon: '/static/icons/icon-192.svg'
-        });
-      } catch (_) {}
+      let ok = false;
+      try { ok = await subscribeWebPush(); } catch (e) { console.error('Web push subscribe error:', e); }
+      if (ok) {
+        showToast('🔔 Aktif! Alert berita positif emiten akan masuk ke bar notifikasi HP.', 'success');
+        fetch('/api/alerts/test-push', { method: 'POST' }).catch(() => {});
+      } else {
+        showToast('Izin diberikan, tetapi pendaftaran push gagal. Di iPhone: pasang aplikasi ke Layar Utama dulu.', 'error');
+      }
     } else if (perm === 'denied') {
       showToast('Izin notifikasi tidak diberikan oleh pengguna.', 'error');
     }
@@ -2289,11 +2321,9 @@ function renderStockBroksum(d) {
     container.innerHTML = `
       <div class="p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-white/10 flex items-center justify-between gap-2">
         <div class="text-[11px] text-slate-600 dark:text-slate-400">
-          <span class="font-semibold text-slate-900 dark:text-white">Broker Summary:</span> Belum diambil untuk ${escHtml(d.ticker)}
+          <span class="font-semibold text-slate-900 dark:text-white">Broker Summary:</span> Belum tersedia untuk ${escHtml(d.ticker)}
+          <div class="text-[10px] text-slate-500 mt-0.5">Sinkronisasi otomatis 2x sehari: Pasca Sesi 1 (11:30/12:00 WIB) & Pasca Sesi 2 (18:00 WIB)</div>
         </div>
-        <button id="btnFetchSingleBroksum" onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}')" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95 transition shadow-sm">
-          Ambil Broksum
-        </button>
       </div>
     `;
     return;
@@ -3545,6 +3575,19 @@ function initLiveMarketAutoSync() {
     }
   }, 5 * 60 * 1000);
 
+  // Poller grafik IHSG otomatis setiap 5 menit (300 detik) saat jam bursa aktif
+  if (ihsgAutoSyncTimerId) clearInterval(ihsgAutoSyncTimerId);
+  ihsgAutoSyncTimerId = setInterval(async () => {
+    if (isIDXMarketOpenNow()) {
+      try {
+        console.log('[IHSGChart] ⏱️ Memperbarui grafik IHSG 5 menitan (Jam Bursa Aktif)...');
+        await loadIhsgTodayChart(currentIhsgPeriod, true);
+      } catch (err) {
+        console.debug('[IHSGChart] Auto-refresh 5 menit:', err);
+      }
+    }
+  }, 5 * 60 * 1000);
+
   if (autoSyncTimerId) clearInterval(autoSyncTimerId);
   autoSyncTimerId = setInterval(async () => {
     updateMarketLiveStatusUI();
@@ -3553,6 +3596,11 @@ function initLiveMarketAutoSync() {
         await Promise.all([loadScreenerData(true), loadTracker()]);
       } catch (err) {
         console.debug('Background market auto-update:', err);
+      }
+      // Backup trigger jika timer 5 menit terlewat
+      const now = Date.now();
+      if (now - lastIhsgRefreshTs >= 5 * 60 * 1000) {
+        loadIhsgTodayChart(currentIhsgPeriod, true).catch(() => {});
       }
     }
   }, 60 * 1000);
@@ -4191,6 +4239,10 @@ async function resetTracker() {
 // =====================================================================
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // Daftarkan ulang langganan Web Push bila izin sudah diberikan (server bisa kehilangan data saat redeploy)
+    if ('Notification' in window && Notification.permission === 'granted') {
+      setTimeout(() => { subscribeWebPush().catch(() => {}); }, 3000);
+    }
     navigator.serviceWorker.register('/sw.js').then((reg) => {
       reg.update().catch(() => {});
     }).catch((err) => {
@@ -4249,6 +4301,9 @@ async function loadMarketRegime() {
 let ihsgChartInstance = null;
 let lastIhsgChartData = null;
 let ihsgChartCollapsed = false;
+let currentIhsgPeriod = '3mo';
+let lastIhsgRefreshTs = 0;
+let ihsgAutoSyncTimerId = null;
 
 function fmtIndexNum(n) {
   if (n == null || isNaN(n)) return '—';
@@ -4267,7 +4322,8 @@ function toggleIhsgChartCollapse() {
   }
 }
 
-async function loadIhsgTodayChart(period = '3mo') {
+async function loadIhsgTodayChart(period = currentIhsgPeriod, force = false) {
+  currentIhsgPeriod = period;
   try {
     ['1mo', '3mo', '6mo', '1y'].forEach((p) => {
       const btn = document.getElementById(`ihsgPeriod-${p}`);
@@ -4280,16 +4336,18 @@ async function loadIhsgTodayChart(period = '3mo') {
       }
     });
 
-    const res = await fetchWithTimeout(`/api/ihsg/candles?period=${encodeURIComponent(period)}&_t=${Date.now()}`, { cache: 'no-store' }, 9000);
+    const forceQuery = force ? '&force=true' : '';
+    const res = await fetchWithTimeout(`/api/ihsg/candles?period=${encodeURIComponent(period)}${forceQuery}&_t=${Date.now()}`, { cache: 'no-store' }, 9000);
     if (!res.ok) throw new Error('Gagal memuat grafik candle IHSG');
     const data = await res.json();
     lastIhsgChartData = data;
+    lastIhsgRefreshTs = Date.now();
     renderIhsgTodayChart(data);
   } catch (err) {
     console.warn('[IHSGChart] Gagal memuat grafik IHSG:', err);
     const subStats = document.getElementById('ihsgSubStats');
     if (subStats) {
-      subStats.innerHTML = `<span class="text-rose-400 font-medium">Gagal memuat grafik IHSG. <button onclick="loadIhsgTodayChart('${period}')" class="underline hover:text-white ml-1 font-bold cursor-pointer">Coba Lagi</button></span>`;
+      subStats.innerHTML = `<span class="text-rose-400 font-medium">Gagal memuat grafik IHSG. <button onclick="loadIhsgTodayChart('${period}', true)" class="underline hover:text-white ml-1 font-bold cursor-pointer">Coba Lagi</button></span>`;
     }
   }
 }
@@ -5129,7 +5187,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     ['tracker', () => loadTracker()],
     ['portfolio', () => loadPortfolio()],
     ['regime', () => loadMarketRegime()],
-    ['ihsg', () => loadIhsgTodayChart('3mo')],
+    ['ihsg', () => loadIhsgTodayChart('3mo', true)],
     ['news', () => loadMarketNews(false)],
   ];
   const initDone = Promise.allSettled(initTasks.map(([, fn]) => fn())).then((results) => {
@@ -5191,4 +5249,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 6. Jalankan kalkulasi default di modal kalkulator lot
   runModalLotCalculation();
+
+  // 7. Selalu tampilkan data IHSG terbaru saat aplikasi dibuka kembali / tab aktif kembali
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      updateMarketLiveStatusUI();
+      const now = Date.now();
+      if (now - lastIhsgRefreshTs >= 60 * 1000 || isIDXMarketOpenNow()) {
+        loadIhsgTodayChart(currentIhsgPeriod, true).catch(() => {});
+      }
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    const now = Date.now();
+    if (now - lastIhsgRefreshTs >= 60 * 1000) {
+      loadIhsgTodayChart(currentIhsgPeriod, isIDXMarketOpenNow()).catch(() => {});
+    }
+  });
 });

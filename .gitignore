@@ -14,3 +14,6 @@ data/broker_api_config.json
 *.db-wal
 data/news_cache.json
 data/screener_snapshot.json
+data/broker_sync_state.json
+data/push_subscriptions.json
+data/vapid_keys.json
