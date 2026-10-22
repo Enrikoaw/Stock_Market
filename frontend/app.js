@@ -1,3 +1,4 @@
+Warning: fs was declared with const; use let for reassignable variables.
 /**
  * SmartFlow IDX - Frontend Controller (app.js)
  * Antarmuka Ramah Pemula & Mahir, Kalkulator Lot, Glosarium, Favorit Pribadi,
@@ -1783,6 +1784,18 @@ function toggleExpertPillarsView() {
   if (btn) btn.textContent = isHidden ? 'Sembunyikan Rincian' : 'Tampilkan Rincian';
 }
 
+function toggleCatalystDetails() {
+  const content = document.getElementById('snc-factors');
+  const btn = document.getElementById('snc-factors-toggle');
+  if (!content || !btn) return;
+  const isHidden = content.classList.toggle('hidden');
+  const count = content.children.length;
+  const passed = Array.from(content.children).filter(item => item.textContent.trim().startsWith('Terpenuhi:')).length;
+  btn.textContent = isHidden
+    ? `${passed} dari ${count} kriteria terpenuhi · Lihat rincian`
+    : 'Sembunyikan kriteria';
+}
+
 function openTradingViewSuperchart(ticker) {
   openTradingViewModal();
 }
@@ -2275,9 +2288,10 @@ async function loadStockNewsCatalyst(ticker) {
       <div class="px-2 py-1 rounded-md border ${f.ok ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10' : 'border-white/10 text-slate-400 bg-slate-900/30'}">
         ${f.ok ? 'Terpenuhi' : 'Belum'}: ${escHtml(f.label)}
       </div>`).join('');
-    noteEl.textContent = d.has_news
-      ? v.note
-      : 'Tidak ada berita terbaru untuk emiten ini. Keputusan bertumpu pada 5 Pilar kuantitatif dan rencana eksekusi di bawah.';
+    const factorsToggle = document.getElementById('snc-factors-toggle');
+    const passedFactors = (v.factors || []).filter(f => f.ok).length;
+    if (factorsToggle) factorsToggle.textContent = `${passedFactors} dari ${(v.factors || []).length} kriteria terpenuhi · Lihat rincian`;
+    noteEl.textContent = d.has_news ? v.note : '';
     newsEl.innerHTML = (d.news || []).map(n => `
       <div class="text-[11px] text-slate-400">
         <span class="font-mono text-[10px]">${escHtml(n.source || '')} · ${escHtml(n.published_at || '')}</span>
@@ -2388,15 +2402,14 @@ function renderStockBroksum(d) {
   }
 
   container.innerHTML = `
-    <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-white/[0.08] space-y-2">
-      <!-- Header Broksum -->
-      <div class="flex items-center justify-between gap-2">
+    <details class="rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-white/[0.08]">
+      <summary class="p-2.5 cursor-pointer list-none flex items-center justify-between gap-2">
         <div class="flex items-center gap-1.5">
-          <span class="text-[11px] font-bold text-slate-900 dark:text-white tracking-wide">Broker Summary (Bandarmology)</span>
-          <span class="text-[9px] font-mono px-1.5 py-0.2 rounded text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-white/5">Top 3</span>
+          <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-200 tracking-wide">Detail broker</span>
         </div>
         ${statusBadgeHtml}
-      </div>
+      </summary>
+      <div class="p-2.5 pt-0 space-y-2">
 
       <!-- Top 3 Buyer vs Seller Grid -->
       <div class="grid grid-cols-2 gap-2 text-xs">
@@ -2436,7 +2449,8 @@ function renderStockBroksum(d) {
       <p class="text-[10px] text-slate-500 dark:text-slate-400 leading-tight pt-0.5 border-t border-slate-200/50 dark:border-white/[0.04]">
         ${escHtml(verdictNote)}
       </p>
-    </div>
+      </div>
+    </details>
   `;
 }
 
