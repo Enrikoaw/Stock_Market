@@ -214,7 +214,31 @@ def load_broker_sync_state() -> dict[str, Any]:
         "sesi1_last_ts": None,
         "sesi2_last_date": None,
         "sesi2_last_ts": None,
+        "daily_calls_count": {},
     }
+
+
+MAX_DAILY_BROKSUM_REQUESTS = 70  # Kuota hard cap: maks 35 saham x 2 sesi = 70 request/hari
+
+
+def get_today_broker_call_count(date_str: str | None = None) -> int:
+    dt = date_str or get_now_wib().strftime("%Y-%m-%d")
+    st = load_broker_sync_state()
+    counts = st.get("daily_calls_count", {})
+    return int(counts.get(dt, 0))
+
+
+def increment_broker_call_count(date_str: str | None = None) -> int:
+    dt = date_str or get_now_wib().strftime("%Y-%m-%d")
+    st = load_broker_sync_state()
+    counts = st.setdefault("daily_calls_count", {})
+    counts[dt] = int(counts.get(dt, 0)) + 1
+    if len(counts) > 14:
+        sorted_keys = sorted(counts.keys())
+        for k in sorted_keys[:-14]:
+            del counts[k]
+    save_broker_sync_state(st)
+    return counts[dt]
 
 
 def save_broker_sync_state(state: dict[str, Any]) -> bool:
@@ -270,6 +294,15 @@ def can_run_broker_sync_now(now_dt: datetime | None = None) -> tuple[bool, str, 
     cur_time = now.time()
     is_jumat = (now.weekday() == 4)
     st = load_broker_sync_state()
+
+    # Cek Hard Cap Harian: Jika hari ini sudah mencapai 70 request, blokir total!
+    calls_today = get_today_broker_call_count(today_str)
+    if calls_today >= MAX_DAILY_BROKSUM_REQUESTS:
+        return (
+            False,
+            f"Batas Hard Cap harian ({calls_today}/{MAX_DAILY_BROKSUM_REQUESTS} request) untuk {today_str} sudah tercapai. Penarikan diblokir total demi melindungi kuota bulanan.",
+            None,
+        )
 
     # Jendela Waktu Sesi 1:
     sesi1_start = dtime(11, 30) if is_jumat else dtime(12, 0)
@@ -508,13 +541,26 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
     return norm_buyers, norm_sellers
 
 
-def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str) -> list | dict[str, Any] | None:
+def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str, force: bool = False) -> list | dict[str, Any] | None:
     """
     Mengambil data broker summary via API resmi Invezgo:
     GET https://api.invezgo.com/analysis/summary/stock/{code}?from={date_str}&to={date_str}&investor=all&market=RG
     """
     if not api_key:
         return None
+
+    today_str = get_now_wib().strftime("%Y-%m-%d")
+    calls_today = get_today_broker_call_count(today_str)
+    if calls_today >= MAX_DAILY_BROKSUM_REQUESTS:
+        print(f"[InvezgoAPI] 🛑 Hard Cap Harian Tercapai ({calls_today}/{MAX_DAILY_BROKSUM_REQUESTS} request). Request #{ticker} diblokir total.")
+        return None
+
+    # Proteksi jadwal 2x sehari jika tidak dipanggil dalam sesi yang diverifikasi
+    if not force:
+        allowed, reason, _ = can_run_broker_sync_now()
+        if not allowed:
+            print(f"[InvezgoAPI] 🛑 Penarikan #{ticker} ditolak: {reason}")
+            return None
 
     clean_key = api_key.replace("Bearer ", "").strip()
     clean_ticker = ticker.upper().strip()
@@ -528,11 +574,14 @@ def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str) -> li
     try:
         with urllib.request.urlopen(req, timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8"))
+            new_cnt = increment_broker_call_count(today_str)
+            print(f"[InvezgoAPI] [{new_cnt}/{MAX_DAILY_BROKSUM_REQUESTS}] Berhasil ambil #{clean_ticker} ({date_str})")
             if isinstance(data, list):
                 return data
             if isinstance(data, dict):
                 return data.get("data", data)
     except urllib.error.HTTPError as ex:
+        increment_broker_call_count(today_str)
         print(f"[InvezgoAPI] HTTP {ex.code} fetch {clean_ticker} ({date_str}): {ex.reason}")
     except Exception as ex:
         print(f"[InvezgoAPI] Error fetch {clean_ticker}: {ex}")
@@ -742,7 +791,7 @@ def run_stage2_broker_enrichment(
         target_dt = date_str or datetime.now().strftime("%Y-%m-%d")
         try:
             if config.get("invezgo_api_key"):
-                raw_data = fetch_broker_summary_invezgo(ticker, target_dt, config["invezgo_api_key"])
+                raw_data = fetch_broker_summary_invezgo(ticker, target_dt, config["invezgo_api_key"], force=True)
             elif provider == "goapi" and config.get("goapi_key"):
                 raw_data = fetch_broker_summary_goapi(ticker, target_dt, config["goapi_key"])
             elif provider == "stockbit" and config.get("stockbit_token"):
@@ -993,7 +1042,7 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
     target_dt = date_str or datetime.now().strftime("%Y-%m-%d")
     try:
         if config.get("invezgo_api_key"):
-            raw_data = fetch_broker_summary_invezgo(ticker, target_dt, config["invezgo_api_key"])
+            raw_data = fetch_broker_summary_invezgo(ticker, target_dt, config["invezgo_api_key"], force=force)
         elif provider == "stockbit" and config.get("stockbit_token"):
             raw_data = fetch_broker_summary_stockbit(ticker, target_dt, config["stockbit_token"])
         elif provider == "goapi" and config.get("goapi_key"):
@@ -1128,7 +1177,7 @@ def filter_and_purge_watchlist_by_smart_money(
             for dt_c in dates_to_try:
                 try:
                     if config.get("invezgo_api_key"):
-                        raw_data = fetch_broker_summary_invezgo(ticker, dt_c, config["invezgo_api_key"])
+                        raw_data = fetch_broker_summary_invezgo(ticker, dt_c, config["invezgo_api_key"], force=True)
                     elif provider == "stockbit" and config.get("stockbit_token"):
                         raw_data = fetch_broker_summary_stockbit(ticker, dt_c, config["stockbit_token"])
                     elif provider == "goapi" and config.get("goapi_key"):

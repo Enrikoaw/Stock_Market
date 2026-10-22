@@ -2003,6 +2003,36 @@ async def manual_broker_sync_eod() -> dict:
     }
 
 
+@app.get("/api/broker/quota-status")
+def broker_quota_status() -> dict:
+    """Mengembalikan status penggunaan kuota API Invezgo hari ini, batas maksimal hard-cap harian, dan status 2 sesi."""
+    from broker_summary_fetcher import (
+        get_today_broker_call_count,
+        MAX_DAILY_BROKSUM_REQUESTS,
+        load_broker_sync_state,
+        can_run_broker_sync_now,
+        get_now_wib,
+    )
+    now = get_now_wib()
+    today_str = now.strftime("%Y-%m-%d")
+    st = load_broker_sync_state()
+    today_calls = get_today_broker_call_count(today_str)
+    allowed, reason, session = can_run_broker_sync_now(now)
+    return {
+        "date": today_str,
+        "current_time_wib": now.strftime("%H:%M:%S WIB"),
+        "today_calls": today_calls,
+        "daily_limit": MAX_DAILY_BROKSUM_REQUESTS,
+        "remaining_daily_calls": max(0, MAX_DAILY_BROKSUM_REQUESTS - today_calls),
+        "hard_cap_active": True,
+        "sesi1_status": f"SELESAI ({st.get('sesi1_last_ts')})" if st.get("sesi1_last_date") == today_str else "MENUNGGU JADWAL (11:30/12:00 WIB)",
+        "sesi2_status": f"SELESAI ({st.get('sesi2_last_ts')})" if st.get("sesi2_last_date") == today_str else "MENUNGGU JADWAL (18:00 WIB)",
+        "can_sync_now": allowed,
+        "schedule_info": reason,
+        "monthly_quota_estimate": "Maksimal ~1.540 request/bulan (~5% dari 30.000 kuota Invezgo)",
+    }
+
+
 # ===================== PROGRESSIVE WEB APP (PWA) =====================
 
 
