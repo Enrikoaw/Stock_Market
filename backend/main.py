@@ -1024,7 +1024,7 @@ def get_stock_detail(ticker: str) -> dict:
 
 
 @app.post("/api/stock/{ticker}/fetch-broker")
-def fetch_single_stock_broker_endpoint(ticker: str) -> dict:
+def fetch_single_stock_broker_endpoint(ticker: str, force: bool = Query(True)) -> dict:
     if STATE["analysis"] is None:
         init_default_state()
 
@@ -1041,21 +1041,18 @@ def fetch_single_stock_broker_endpoint(ticker: str) -> dict:
         )
 
     item = details_map[key]
-    # Jika sudah memiliki data broker summary resmi dari sesi terbaru, kembalikan langsung tanpa memakan kuota
-    if _has_real_broker_codes(item):
+    # Pengecualian Manual: Setiap tombol diklik pengguna untuk analisa pribadi, langsung akses Invezgo API
+    # Jika force=False dan data sudah lengkap, kembalikan item yang ada.
+    # Jika force=True (default untuk klik manual), bypass cache & langsung ambil data terbaru dari Invezgo.
+    if not force and _has_real_broker_codes(item):
         return item
 
-    # Proteksi token Invezgo: Hanya boleh digunakan 2x sehari sesuai aturan bursa (Pasca Sesi 1 & Jam 18:00 WIB)
-    if cfg.get("invezgo_api_key"):
-        allowed, reason, _ = can_run_broker_sync_now()
-        if not allowed:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Proteksi Kuota Token Invezgo: Penarikan broker summary dibatasi hanya 2x sehari otomatis (Pasca Sesi 1 jam 11:30/12:00 WIB & Pasca Sesi 2 jam 18:00 WIB). {reason}",
-            )
-
     latest_dt = str(item.get("date") or STATE["analysis"]["kpis"].get("latest_date") or "")
-    enrich_single_stock_broker(item, latest_dt, cfg, force=True)
+    if not latest_dt:
+        from broker_summary_fetcher import get_now_wib
+        latest_dt = get_now_wib().strftime("%Y-%m-%d")
+
+    enrich_single_stock_broker(item, latest_dt, cfg, force=True, is_manual=True)
 
     # Sinkronisasi ke list analysis["stocks"]
     for s in STATE["analysis"].get("stocks", []):
@@ -1064,7 +1061,7 @@ def fetch_single_stock_broker_endpoint(ticker: str) -> dict:
                 "broker_analysis", "has_broker_summary", "has_real_broker_summary", "bdr_pct",
                 "top_buyers_list", "top_sellers_list", "top_buyers", "top_sellers",
                 "bandar_avg_buy", "diff_bandar_avg_pct", "smart_money_score", "retail_trap",
-                "trigger_type", "trigger_label"
+                "trigger_type", "trigger_label", "broker_date", "trading_plan"
             ):
                 if field in item:
                     s[field] = item[field]

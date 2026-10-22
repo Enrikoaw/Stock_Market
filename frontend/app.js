@@ -2337,12 +2337,13 @@ function renderStockBroksum(d) {
         <div class="flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
           <div class="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
-            <span class="font-semibold text-slate-900 dark:text-white">Broker Summary Aktual:</span> Belum dimuat untuk ${escHtml(d.ticker)}
-            <div class="text-[10px] text-slate-500 mt-0.5">Sinkronisasi otomatis pasca Sesi 1 (11:30) & Sesi 2 (18:00 WIB)</div>
+            <span class="font-semibold text-slate-900 dark:text-white">Broker Summary:</span> Belum dimuat untuk ${escHtml(d.ticker)}
+            <div class="text-[10px] text-slate-500 mt-0.5">Analisa Pribadi: Klik tombol untuk cek langsung via API Invezgo</div>
           </div>
         </div>
-        <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}')" class="text-[10px] px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold transition shrink-0 whitespace-nowrap active:scale-95">
-          Cek Broksum
+        <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}', true)" class="text-[10px] px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold transition shrink-0 whitespace-nowrap active:scale-95 flex items-center gap-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          <span>Cek Broksum</span>
         </button>
       </div>
     `;
@@ -2411,11 +2412,17 @@ function renderStockBroksum(d) {
     <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-white/[0.08] space-y-2 shadow-xs">
       <!-- Header Broksum -->
       <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-1.5 flex-wrap">
           <span class="text-[11px] font-bold text-slate-900 dark:text-white tracking-wide">Broker Summary (Bandarmology)</span>
           <span class="text-[9px] font-mono px-1.5 py-0.2 rounded text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-white/5">Top 3</span>
+          ${d.broker_date ? `<span class="text-[9px] font-mono text-slate-500 dark:text-slate-400">(${escHtml(d.broker_date)})</span>` : ''}
         </div>
-        ${statusBadgeHtml}
+        <div class="flex items-center gap-1.5 shrink-0">
+          ${statusBadgeHtml}
+          <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}', true)" title="Tarik data terbaru langsung dari API Invezgo untuk analisa pribadi" class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 font-semibold transition active:scale-95 flex items-center gap-1 shrink-0">
+            <span>↻</span> <span class="hidden sm:inline">Cek API</span>
+          </button>
+        </div>
       </div>
 
       <!-- Top 3 Buyer vs Seller Grid -->
@@ -2460,14 +2467,16 @@ function renderStockBroksum(d) {
   `;
 }
 
-window.fetchBrokerSummaryForSelected = async function(ticker) {
-  const btn = document.getElementById('btnFetchSingleBroksum');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Mengambil...';
-  }
+window.fetchBrokerSummaryForSelected = async function(ticker, force = true) {
+  const btns = document.querySelectorAll(`button[onclick*="fetchBrokerSummaryForSelected('${ticker}'"]`);
+  btns.forEach(b => {
+    b.disabled = true;
+    b.dataset.origHtml = b.innerHTML;
+    b.innerHTML = '<span class="inline-block animate-spin mr-1">⌛</span> Mengambil...';
+  });
+
   try {
-    const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}/fetch-broker`, { method: 'POST' });
+    const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}/fetch-broker?force=${force ? 'true' : 'false'}`, { method: 'POST' });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.detail || 'Gagal mengambil data broker');
@@ -2476,13 +2485,13 @@ window.fetchBrokerSummaryForSelected = async function(ticker) {
     selectedStockDetail = updated;
     renderInspectorPanel(updated);
     renderStockBroksum(updated);
-    showToast(`Broker summary #${ticker} berhasil diperbarui!`, 'success');
+    showToast(`Data Invezgo #${ticker} berhasil diambil langsung!`, 'success');
   } catch (err) {
     showToast(err.message, 'error');
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Ambil Broksum';
-    }
+    btns.forEach(b => {
+      b.disabled = false;
+      if (b.dataset.origHtml) b.innerHTML = b.dataset.origHtml;
+    });
   }
 };
 
@@ -2716,7 +2725,7 @@ function renderInspectorPanel(d) {
           planBroksumBadge.className = 'font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30';
         }
       } else {
-        planTopBuyersEl.innerHTML = `<span class="text-slate-400 font-normal italic">Belum dimuat</span> <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}')" class="ml-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600/30">Cek Broksum</button>`;
+        planTopBuyersEl.innerHTML = `<span class="text-slate-400 font-normal italic">Belum dimuat</span> <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}', true)" class="ml-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600/30 font-semibold">Cek Broksum</button>`;
         planBandarAvgEl.textContent = '-';
         planBroksumBadge.textContent = 'DATA BELUM ADA';
         planBroksumBadge.className = 'font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20';

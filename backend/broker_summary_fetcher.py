@@ -541,22 +541,24 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
     return norm_buyers, norm_sellers
 
 
-def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str, force: bool = False) -> list | dict[str, Any] | None:
+def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str, force: bool = False, is_manual: bool = False) -> list | dict[str, Any] | None:
     """
     Mengambil data broker summary via API resmi Invezgo:
     GET https://api.invezgo.com/analysis/summary/stock/{code}?from={date_str}&to={date_str}&investor=all&market=RG
+    Jika is_manual=True, maka request ini adalah aksi langsung pengguna via tombol 'Cek Broksum' untuk analisa pribadi,
+    sehingga diberikan pengecualian langsung (bypass batasan 2 sesi dan hard cap otomatis).
     """
     if not api_key:
         return None
 
     today_str = get_now_wib().strftime("%Y-%m-%d")
     calls_today = get_today_broker_call_count(today_str)
-    if calls_today >= MAX_DAILY_BROKSUM_REQUESTS:
+    if not is_manual and calls_today >= MAX_DAILY_BROKSUM_REQUESTS:
         print(f"[InvezgoAPI] 🛑 Hard Cap Harian Tercapai ({calls_today}/{MAX_DAILY_BROKSUM_REQUESTS} request). Request #{ticker} diblokir total.")
         return None
 
-    # Proteksi jadwal 2x sehari jika tidak dipanggil dalam sesi yang diverifikasi
-    if not force:
+    # Proteksi jadwal 2x sehari jika tidak dipanggil dalam sesi yang diverifikasi dan bukan manual check
+    if not force and not is_manual:
         allowed, reason, _ = can_run_broker_sync_now()
         if not allowed:
             print(f"[InvezgoAPI] 🛑 Penarikan #{ticker} ditolak: {reason}")
@@ -567,7 +569,7 @@ def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str, force
     url = f"https://api.invezgo.com/analysis/summary/stock/{clean_ticker}?from={date_str}&to={date_str}&investor=all&market=RG"
     headers = {
         "Authorization": f"Bearer {clean_key}",
-        "User-Agent": "SmartFlowIDX/93.0",
+        "User-Agent": "SmartFlowIDX/94.4",
         "Accept": "application/json",
     }
     req = urllib.request.Request(url, headers=headers)
@@ -575,7 +577,8 @@ def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str, force
         with urllib.request.urlopen(req, timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             new_cnt = increment_broker_call_count(today_str)
-            print(f"[InvezgoAPI] [{new_cnt}/{MAX_DAILY_BROKSUM_REQUESTS}] Berhasil ambil #{clean_ticker} ({date_str})")
+            tag = f"[MANUAL #{new_cnt}]" if is_manual else f"[{new_cnt}/{MAX_DAILY_BROKSUM_REQUESTS}]"
+            print(f"[InvezgoAPI] {tag} Berhasil ambil #{clean_ticker} ({date_str})")
             if isinstance(data, list):
                 return data
             if isinstance(data, dict):
@@ -1021,8 +1024,9 @@ def enrich_candidates_and_watchlist(
     return enriched
 
 
-def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | None = None, force: bool = False) -> dict:
-    """Mengambil dan memperkaya data broker summary untuk 1 saham secara on-demand."""
+def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | None = None, force: bool = False, is_manual: bool = False) -> dict:
+    """Mengambil dan memperkaya data broker summary untuk 1 saham secara on-demand.
+    Jika is_manual=True, request ini dipicu tombol manual pengguna untuk analisa pribadi dan bebas dari batasan 2 sesi."""
     from datetime import datetime, timedelta
 
     config = cfg or load_broker_api_config()
@@ -1031,24 +1035,49 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
     if not ticker:
         return s
 
-    if config.get("invezgo_api_key") and not force:
+    if config.get("invezgo_api_key") and not force and not is_manual:
         allowed, reason, _ = can_run_broker_sync_now()
         if not allowed:
             print(f"[BrokerOnDemand] Proteksi Token Invezgo: Fetch on-demand #{ticker} di-skip ({reason}).")
             return s
 
-    raw_data = None
-    from datetime import datetime
-    target_dt = date_str or datetime.now().strftime("%Y-%m-%d")
+    target_dt = date_str or get_now_wib().strftime("%Y-%m-%d")
+    dates_to_try = [target_dt]
     try:
-        if config.get("invezgo_api_key"):
-            raw_data = fetch_broker_summary_invezgo(ticker, target_dt, config["invezgo_api_key"], force=force)
-        elif provider == "stockbit" and config.get("stockbit_token"):
-            raw_data = fetch_broker_summary_stockbit(ticker, target_dt, config["stockbit_token"])
-        elif provider == "goapi" and config.get("goapi_key"):
-            raw_data = fetch_broker_summary_goapi(ticker, target_dt, config["goapi_key"])
-    except Exception as ex:
-        print(f"[BrokerOnDemand] Error fetch {ticker} on {target_dt}: {ex}")
+        cur = datetime.strptime(target_dt, "%Y-%m-%d")
+        for i in range(1, 5):
+            prev = cur - timedelta(days=i)
+            if prev.weekday() < 5:
+                dates_to_try.append(prev.strftime("%Y-%m-%d"))
+    except Exception:
+        pass
+
+    raw_data = None
+    actual_date = target_dt
+    for dt_candidate in dates_to_try:
+        try:
+            if config.get("invezgo_api_key"):
+                raw_data = fetch_broker_summary_invezgo(
+                    ticker,
+                    dt_candidate,
+                    config["invezgo_api_key"],
+                    force=force,
+                    is_manual=is_manual,
+                )
+            elif provider == "stockbit" and config.get("stockbit_token"):
+                raw_data = fetch_broker_summary_stockbit(ticker, dt_candidate, config["stockbit_token"])
+            elif provider == "goapi" and config.get("goapi_key"):
+                raw_data = fetch_broker_summary_goapi(ticker, dt_candidate, config["goapi_key"])
+        except Exception as ex:
+            print(f"[BrokerOnDemand] Error fetch {ticker} on {dt_candidate}: {ex}")
+
+        if raw_data:
+            tb, ts = extract_brokers_from_payload(raw_data)
+            if tb or ts:
+                actual_date = dt_candidate
+                break
+            else:
+                raw_data = None
 
     if raw_data:
         top_buyers, top_sellers = extract_brokers_from_payload(raw_data)
@@ -1062,6 +1091,7 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
         s["top_sellers_list"] = metrics.get("top_sellers_list", [sel["code"] for sel in top_sellers[:3]])
         s["top_buyers"] = ", ".join(s["top_buyers_list"])
         s["top_sellers"] = ", ".join(s["top_sellers_list"])
+        s["broker_date"] = actual_date
 
         if metrics.get("bandar_avg"):
             s["bandar_avg_buy"] = metrics["bandar_avg"]
