@@ -1790,9 +1790,9 @@ function toggleCatalystDetails() {
   const isHidden = content.classList.toggle('hidden');
   const count = content.children.length;
   const passed = Array.from(content.children).filter(item => item.textContent.trim().startsWith('Terpenuhi:')).length;
-  btn.textContent = isHidden
-    ? `${passed} dari ${count} kriteria terpenuhi · Lihat rincian`
-    : 'Sembunyikan kriteria';
+  btn.innerHTML = isHidden
+    ? `<span>${passed} dari ${count} kriteria terpenuhi</span><span class="text-[9px]">▾</span>`
+    : `<span>Sembunyikan kriteria</span><span class="text-[9px]">▴</span>`;
 }
 
 function openTradingViewSuperchart(ticker) {
@@ -2289,7 +2289,7 @@ async function loadStockNewsCatalyst(ticker) {
       </div>`).join('');
     const factorsToggle = document.getElementById('snc-factors-toggle');
     const passedFactors = (v.factors || []).filter(f => f.ok).length;
-    if (factorsToggle) factorsToggle.textContent = `${passedFactors} dari ${(v.factors || []).length} kriteria terpenuhi · Lihat rincian`;
+    if (factorsToggle) factorsToggle.innerHTML = `<span>${passedFactors} dari ${(v.factors || []).length} kriteria terpenuhi</span><span class="text-[9px]">▾</span>`;
     noteEl.textContent = d.has_news ? v.note : '';
     newsEl.innerHTML = (d.news || []).map(n => `
       <div class="text-[11px] text-slate-400">
@@ -2333,11 +2333,17 @@ function renderStockBroksum(d) {
 
   if (!hasBrokData) {
     container.innerHTML = `
-      <div class="p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-white/10 flex items-center justify-between gap-2">
-        <div class="text-[11px] text-slate-600 dark:text-slate-400">
-          <span class="font-semibold text-slate-900 dark:text-white">Data broker aktual belum tersedia</span> untuk ${escHtml(d.ticker)}.
-          <div class="text-[10px] text-slate-500 mt-0.5">VWAP 5 hari dan indikator OHLCV adalah estimasi teknikal, bukan transaksi broker atau investor asing.</div>
+      <div class="p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/40 border border-slate-200 dark:border-white/[0.08] flex items-center justify-between gap-3 shadow-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
+          <div class="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+            <span class="font-semibold text-slate-900 dark:text-white">Broker Summary Aktual:</span> Belum dimuat untuk ${escHtml(d.ticker)}
+            <div class="text-[10px] text-slate-500 mt-0.5">Sinkronisasi otomatis pasca Sesi 1 (11:30) & Sesi 2 (18:00 WIB)</div>
+          </div>
         </div>
+        <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}')" class="text-[10px] px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold transition shrink-0 whitespace-nowrap active:scale-95">
+          Cek Broksum
+        </button>
       </div>
     `;
     return;
@@ -2402,14 +2408,15 @@ function renderStockBroksum(d) {
   }
 
   container.innerHTML = `
-    <details class="rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-white/[0.08]">
-      <summary class="p-2.5 cursor-pointer list-none flex items-center justify-between gap-2">
+    <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-white/[0.08] space-y-2 shadow-xs">
+      <!-- Header Broksum -->
+      <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-1.5">
-          <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-200 tracking-wide">Detail broker</span>
+          <span class="text-[11px] font-bold text-slate-900 dark:text-white tracking-wide">Broker Summary (Bandarmology)</span>
+          <span class="text-[9px] font-mono px-1.5 py-0.2 rounded text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-white/5">Top 3</span>
         </div>
         ${statusBadgeHtml}
-      </summary>
-      <div class="p-2.5 pt-0 space-y-2">
+      </div>
 
       <!-- Top 3 Buyer vs Seller Grid -->
       <div class="grid grid-cols-2 gap-2 text-xs">
@@ -2449,8 +2456,7 @@ function renderStockBroksum(d) {
       <p class="text-[10px] text-slate-500 dark:text-slate-400 leading-tight pt-0.5 border-t border-slate-200/50 dark:border-white/[0.04]">
         ${escHtml(verdictNote)}
       </p>
-      </div>
-    </details>
+    </div>
   `;
 }
 
@@ -2738,7 +2744,7 @@ function renderInspectorPanel(d) {
               <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09zM12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
             </svg>
           </span>
-          <span>Posisi Aktif (${(plan.pnl_pct || 0) >= 0 ? '+' : ''}${plan.pnl_pct || 0}%)</span>
+          <span>Posisi Aktif (${(Number(plan.pnl_pct) || 0) >= 0 ? '+' : ''}${(Number(plan.pnl_pct) || 0).toFixed(1)}%)</span>
         `;
         btnWatch.className = isLoss
           ? 'liquid-glass-btn neon-rose active py-2 px-3 justify-center active:scale-95 w-full'

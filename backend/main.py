@@ -149,22 +149,24 @@ def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> No
         plan["pnl_pct"] = float(pnl_val)
 
     if st == "WIN":
-        pnl = pnl_val or 0
-        plan["action_bias"] = f"🏆 TARGET TERCAPAI (WIN +{pnl}%)"
-        plan["rationale"] = f"Target untung (TP1) telah tercapai (+{pnl}%). Rencana trading selesai (Take Profit)."
+        pnl_num = float(pnl_val or 0)
+        pnl_str = f"{pnl_num:+.1f}%"
+        plan["action_bias"] = f"🏆 TARGET WIN ({pnl_str})"
+        plan["rationale"] = f"Target untung (TP1) telah tercapai ({pnl_str}). Rencana trading selesai (Take Profit)."
     elif st == "RUNNING":
-        pnl = float(pnl_val or 0)
-        icon = "🔻" if pnl < 0 else "🚀"
-        plan["action_bias"] = f"{icon} POSISI AKTIF ({pnl:+.1f}%)"
-        plan["rationale"] = f"Posisi beli aktif sejak {sig.get('entry_date', sig.get('signal_date'))} @ Rp {e_p:,.0f}."
+        pnl_num = float(pnl_val or 0)
+        icon = "🔻" if pnl_num < 0 else "🚀"
+        pnl_str = f"{pnl_num:+.1f}%"
+        plan["action_bias"] = f"{icon} POSISI AKTIF ({pnl_str})"
+        plan["rationale"] = f"Posisi beli aktif sejak {sig.get('entry_date', sig.get('signal_date'))} @ Rp {e_p:,.0f} (Floating {pnl_str})."
     elif st == "WATCHLIST":
-        plan["action_bias"] = "⏳ MENUNGGU ENTRY (WATCHLIST)"
-        plan["rationale"] = f"Sinyal aktif di Watchlist sejak {sig.get('signal_date')}. Menunggu harga menyentuh area beli."
+        plan["action_bias"] = "⏳ MENUNGGU ENTRY"
+        plan["rationale"] = f"Sinyal aktif di Watchlist sejak {sig.get('signal_date')}. Menunggu harga menyentuh area beli support."
     elif st == "LOSS":
-        pnl = pnl_val or 0
-        plan["action_bias"] = f"🛑 CUT LOSS ({pnl}%)"
+        pnl_num = float(pnl_val or 0)
+        pnl_str = f"{pnl_num:+.1f}%"
+        plan["action_bias"] = f"🛑 CUT LOSS ({pnl_str})"
         plan["rationale"] = f"Posisi ditutup disiplin batas rugi pada {sig.get('exit_date', sig.get('signal_date'))}."
-
     item["trading_plan"] = plan
 
 
