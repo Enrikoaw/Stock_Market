@@ -134,7 +134,7 @@ initTheme();
 // =====================================================================
 // 3 TOP NAVIGATION TABS (Hari Ini · Jelajah · Pantauan)
 // =====================================================================
-function switchMainTab(tabName) {
+function switchMainTab(tabName, isInitialLoad = false) {
   activeMainTab = tabName;
   localStorage.setItem('smartflow_active_tab', tabName);
 
@@ -150,12 +150,10 @@ function switchMainTab(tabName) {
   if (secExplore) secExplore.classList.toggle('hidden', tabName !== 'explore');
   if (secWatchlist) secWatchlist.classList.toggle('hidden', tabName !== 'watchlist');
 
-  // Desktop Header Tabs (Liquid Glass Pill with Glowing Neon Badges)
   if (btnToday) btnToday.classList.toggle('active', tabName === 'today');
   if (btnExplore) btnExplore.classList.toggle('active', tabName === 'explore');
   if (btnWatchlist) btnWatchlist.classList.toggle('active', tabName === 'watchlist');
 
-  // Mobile Bottom Bar Tabs (Liquid Glass Pill with Glowing Neon Badges)
   const mobToday = document.getElementById('mobileNavToday');
   const mobExplore = document.getElementById('mobileNavExplore');
   const mobWatchlist = document.getElementById('mobileNavWatchlist');
@@ -163,6 +161,11 @@ function switchMainTab(tabName) {
   if (mobToday) mobToday.classList.toggle('active', tabName === 'today');
   if (mobExplore) mobExplore.classList.toggle('active', tabName === 'explore');
   if (mobWatchlist) mobWatchlist.classList.toggle('active', tabName === 'watchlist');
+
+  if (isInitialLoad) {
+    if (tabName === 'watchlist') renderFavorites();
+    return;
+  }
 
   if (tabName === 'today') {
     renderTodayCandidates(currentTodayCandidates.length > 0 ? currentTodayCandidates : currentStocks);
@@ -957,7 +960,7 @@ function renderPortfolioError(errorMsg) {
   if (!tbody) return;
   tbody.innerHTML = `
     <tr>
-      <td colspan="7" class="py-10 text-center space-y-2.5">
+      <td colspan="10" class="py-10 text-center space-y-2.5">
         <div class="text-rose-400 font-bold text-xs">⚠️ Gagal Memuat Catatan Jurnal Portofolio</div>
         <p class="text-[10px] text-slate-400">${escHtml(errorMsg || 'Koneksi database portofolio terputus.')}</p>
         <button onclick="loadPortfolio()" class="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition cursor-pointer">
@@ -1404,20 +1407,23 @@ function closeGlossaryModal() {
 let activeAlertList = [];
 let hasUnreadAlerts = false;
 
-// Audio Chime Synthesizer via Web Audio API (jernih, tanpa file external)
+let sharedAudioCtx = null;
+
 function playAlertChime() {
   const soundEnabled = localStorage.getItem('smartflow_alert_sound') !== 'false';
   if (!soundEnabled) return;
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+      sharedAudioCtx = new AudioCtx();
+    }
+    const ctx = sharedAudioCtx;
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
     }
     const now = ctx.currentTime;
 
-    // Tone 1: High crisp chime (D5 - 587.33 Hz)
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = 'sine';
@@ -1429,7 +1435,6 @@ function playAlertChime() {
     osc1.start(now);
     osc1.stop(now + 0.25);
 
-    // Tone 2: Harmonious resonance (A5 - 880.00 Hz)
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
     osc2.type = 'sine';
@@ -1821,6 +1826,8 @@ function getStockLogoImg(ticker, sizeCls = 'w-7 h-7') {
   `;
 }
 
+let toastTimeoutId = null;
+
 function showToast(msg, type = 'success') {
   const banner = document.getElementById('toastBanner');
   if (!banner) return;
@@ -1832,16 +1839,22 @@ function showToast(msg, type = 'success') {
     'text-emerald-200',
     'bg-rose-950/90',
     'border-rose-500/40',
-    'text-rose-200'
+    'text-rose-200',
+    'bg-sky-950/90',
+    'border-sky-500/40',
+    'text-sky-200'
   );
   if (type === 'error') {
     banner.classList.add('bg-rose-950/90', 'border-rose-500/40', 'text-rose-200');
+  } else if (type === 'info') {
+    banner.classList.add('bg-sky-950/90', 'border-sky-500/40', 'text-sky-200');
   } else {
     banner.classList.add('bg-emerald-950/90', 'border-emerald-500/40', 'text-emerald-200');
   }
   if (text) text.textContent = msg;
 
-  setTimeout(() => {
+  if (toastTimeoutId) clearTimeout(toastTimeoutId);
+  toastTimeoutId = setTimeout(() => {
     banner.classList.add('hidden');
   }, 4000);
 }
@@ -4214,8 +4227,8 @@ function renderMarketRegimeBadge(regime) {
   }
 
   // Jika sedang di tab Pilihan Hari Ini, sesuaikan tampilan kandidat sesuai status lock/rebound
-  if (activeMainTab === 'today' && currentStocks && currentStocks.length > 0) {
-    renderTodayCandidates(currentStocks);
+  if (activeMainTab === 'today' && (currentTodayCandidates.length > 0 || currentStocks.length > 0)) {
+    renderTodayCandidates(currentTodayCandidates.length > 0 ? currentTodayCandidates : currentStocks);
   }
 }
 
@@ -4604,21 +4617,21 @@ function exportPortfolioData() {
     showToast('Jurnal portofolio masih kosong. Belum ada transaksi yang dicatat.', 'info');
     return;
   }
-  const headers = ['id', 'ticker', 'entry_date', 'entry_price', 'lots', 'stop_loss', 'target_1', 'target_2', 'status', 'exit_price', 'exit_date', 'pnl_pct', 'pnl_idr', 'notes'];
+  const headers = ['id', 'ticker', 'entry_date', 'entry_price', 'lots', 'stop_loss', 'target_price', 'broker', 'status', 'exit_price', 'exit_date', 'pnl_pct', 'pnl_rp', 'notes'];
   const rows = portfolioTrades.map(t => [
-    t.id || '',
-    t.ticker || '',
-    t.entry_date || '',
-    t.entry_price || '',
-    t.lots || '',
-    t.stop_loss || '',
-    t.target_1 || '',
-    t.target_2 || '',
-    t.status || '',
-    t.exit_price || '',
-    t.exit_date || '',
-    t.pnl_pct || '',
-    t.pnl_idr || '',
+    t.id ?? '',
+    t.ticker ?? '',
+    t.entry_date ?? '',
+    t.entry_price ?? '',
+    t.lots ?? '',
+    t.stop_loss ?? '',
+    t.target_price ?? '',
+    `"${String(t.broker || 'Sekuritas').replace(/"/g, '""')}"`,
+    t.status ?? 'HOLDING',
+    t.exit_price ?? '',
+    t.exit_date ?? '',
+    t.pnl_pct ?? '',
+    t.pnl_rp ?? '',
     `"${String(t.notes || '').replace(/"/g, '""')}"`
   ].join(','));
   const csvContent = [headers.join(','), ...rows].join('\n');
@@ -4635,6 +4648,26 @@ function exportPortfolioData() {
   showToast(`Cadangan ${portfolioTrades.length} transaksi jurnal berhasil diunduh!`, 'success');
 }
 
+function parseCsvRow(line) {
+  const res = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { cur += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { res.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+  }
+  res.push(cur.trim());
+  return res;
+}
+
 async function importPortfolioData(e) {
   const file = e.target.files?.[0];
   if (!file) return;
@@ -4649,17 +4682,17 @@ async function importPortfolioData(e) {
       } else {
         const lines = content.split(/\r?\n/).filter(Boolean);
         if (lines.length > 1) {
-          const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+          const headers = parseCsvRow(lines[0]).map(h => h.toLowerCase());
           const getCol = (cols, name, altIdx) => {
             const idx = headers.indexOf(name);
-            return (idx >= 0 && cols[idx] !== undefined) ? cols[idx].trim() : (cols[altIdx] ? cols[altIdx].trim() : '');
+            return (idx >= 0 && cols[idx] !== undefined) ? cols[idx] : (cols[altIdx] || '');
           };
           for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',');
+            const cols = parseCsvRow(lines[i]);
             if (cols.length >= 3) {
               const ticker = getCol(cols, 'ticker', 1).toUpperCase();
               const entry_price = parseFloat(getCol(cols, 'entry_price', 3)) || 0;
-              const lots = parseInt(getCol(cols, 'lots', 4)) || 1;
+              const lots = parseInt(getCol(cols, 'lots', 4), 10) || 1;
               if (ticker && entry_price > 0) {
                 tradesToImport.push({
                   ticker,
@@ -4667,8 +4700,11 @@ async function importPortfolioData(e) {
                   entry_price,
                   lots,
                   stop_loss: parseFloat(getCol(cols, 'stop_loss', 5)) || undefined,
-                  target_1: parseFloat(getCol(cols, 'target_1', 6)) || undefined,
-                  target_2: parseFloat(getCol(cols, 'target_2', 7)) || undefined,
+                  target_price: parseFloat(getCol(cols, 'target_price', 6) || getCol(cols, 'target_1', 6)) || undefined,
+                  broker: getCol(cols, 'broker', 7) || 'Sekuritas',
+                  status: (getCol(cols, 'status', 8) || 'HOLDING').toUpperCase(),
+                  exit_price: parseFloat(getCol(cols, 'exit_price', 9)) || undefined,
+                  exit_date: getCol(cols, 'exit_date', 10) || undefined,
                   notes: getCol(cols, 'notes', 13) || 'Impor Cadangan'
                 });
               }
@@ -4685,9 +4721,32 @@ async function importPortfolioData(e) {
           const res = await fetch('/api/portfolio/buy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(t)
+            body: JSON.stringify({
+              ticker: t.ticker,
+              entry_date: t.entry_date,
+              entry_price: t.entry_price,
+              lots: t.lots,
+              stop_loss: t.stop_loss,
+              target_price: t.target_price,
+              broker: t.broker,
+              notes: t.notes
+            })
           });
-          if (res.ok) importedCount++;
+          if (res.ok) {
+            const buyData = await res.json();
+            importedCount++;
+            if (t.status === 'CLOSED' && t.exit_price > 0 && buyData.trade?.id) {
+              await fetch(`/api/portfolio/sell/${buyData.trade.id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  exit_price: t.exit_price,
+                  exit_date: t.exit_date || t.entry_date,
+                  notes: t.notes
+                })
+              });
+            }
+          }
         } catch (err) {
           console.warn('Import item error:', t.ticker, err);
         }
@@ -4808,6 +4867,9 @@ function openPortfolioBuyModal(ticker = '') {
   const bInput = document.getElementById('buyBrokerInput');
   const nInput = document.getElementById('buyNotesInput');
 
+  if (pInput) pInput.value = '';
+  if (slInput) slInput.value = '';
+  if (tpInput) tpInput.value = '';
   if (dInput) dInput.value = new Date().toISOString().split('T')[0];
   if (lInput && !lInput.value) lInput.value = '5';
   if (bInput && !bInput.value) bInput.value = 'Sekuritas';
@@ -4839,15 +4901,9 @@ function handleBuyTickerInput(rawTicker) {
   const stock = currentStocks.find(s => s.ticker === ticker);
   if (stock) {
     const plan = stock.trading_plan || {};
-    if (pInput && (!pInput.value || pInput.value === '0')) {
-      pInput.value = plan.entry_price || plan.entry_high || stock.close;
-    }
-    if (slInput && !slInput.value && plan.stop_loss) {
-      slInput.value = plan.stop_loss;
-    }
-    if (tpInput && !tpInput.value && plan.target_1) {
-      tpInput.value = plan.target_1;
-    }
+    if (pInput) pInput.value = plan.entry_price || plan.entry_high || stock.close;
+    if (slInput && plan.stop_loss) slInput.value = plan.stop_loss;
+    if (tpInput && plan.target_1) tpInput.value = plan.target_1;
   }
   calcBuyTotalCapital();
 }
@@ -5064,7 +5120,7 @@ document.querySelectorAll('#alertModal, #lotCalculatorModal, #glossaryModal, #up
 document.addEventListener('DOMContentLoaded', async () => {
   // 1. Terapkan state mode (Pemula vs Mahir) & Tab Aktif
   applyExpertModeUI();
-  switchMainTab(activeMainTab);
+  switchMainTab(activeMainTab, true);
 
   // 2. Muat data awal secepat mungkin
   // Modul independen & paralel: kegagalan/keterlambatan satu modul tidak menahan modul lain
@@ -5135,7 +5191,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 6. Jalankan kalkulasi default di modal kalkulator lot
   runModalLotCalculation();
-
-  // 7. Muat berita pasar terkini untuk tab Pilihan Hari Ini
-  loadMarketNews(false);
 });
