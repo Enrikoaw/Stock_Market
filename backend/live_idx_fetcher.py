@@ -319,7 +319,9 @@ def fetch_real_idx_market_data(
 
     max_tail = 150 if download_period in ("6mo", "1y", "2y") else 90
 
-    if is_incremental and output_csv_path is not None and output_csv_path.exists():
+    # Pertahankan ticker lama pada semua mode fetch. Unduhan penuh bisa saja
+    # hanya berhasil sebagian; hasil parsial tidak boleh mengganti seluruh cache.
+    if output_csv_path is not None and output_csv_path.exists():
         try:
             old_cache = pd.read_csv(output_csv_path)
             result_df = pd.concat([old_cache, new_batch_df], ignore_index=True)
