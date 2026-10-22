@@ -310,7 +310,7 @@ def _run_sync_job_blocking(with_broker_enrichment: bool = False) -> dict:
         except Exception as exc:
             print(f"[Sync] Warning purge retail watchlist: {exc}")
     else:
-        print("[Sync] ⏱️ Update Harga 15 Menit: Hanya memperbarui pergerakan harga OHLC & evaluasi Running/SL/TP (Broksum API di-skip total).")
+        print("[Sync] ⏱️ Update Harga Pasar 5 Menit: Hanya memperbarui pergerakan harga OHLC & evaluasi Running/SL/TP (Broksum API di-skip total).")
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["source_name"] = f"Live IDX ({latest_dt})"
@@ -514,8 +514,8 @@ async def _background_market_session_worker() -> None:
                 elif needs_sesi2_broksum_sync:
                     should_sync = True
                     with_broksum = True
-                elif market_open and (now_ts - last_sync_attempt_ts >= 900):
-                    # Update harga pasar rutin setiap 15 menit: HANYA update harga OHLC (TANPA broksum!)
+                elif market_open and (now_ts - last_sync_attempt_ts >= 300):
+                    # Update harga pasar rutin setiap 5 menit saat bursa aktif: HANYA update harga OHLC (TANPA broksum!)
                     should_sync = True
                     with_broksum = False
                 elif cache_stale and (now_ts - last_sync_attempt_ts >= 1800):

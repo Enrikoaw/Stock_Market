@@ -56,6 +56,30 @@ ACTIVE_STATUSES = ("WATCHLIST", "RUNNING")
 CLOSED_STATUSES = ("WIN", "LOSS", "EXPIRED", "TIMEOUT", "CANCELLED")
 TRACKABLE_TRIGGERS = {"MARKUP_BREAKOUT", "BIG_ACCUMULATION", "SILENT_ACCUMULATION", "FOREIGN_INFLOW"}
 
+try:
+    from backend.screener_engine import _round_idx_tick
+except ImportError:
+    from screener_engine import _round_idx_tick
+
+
+def align_signal_prices(entry: float, sl: float | None = None, tp1: float | None = None, tp2: float | None = None) -> tuple[float, float, float, float]:
+    """Menyelaraskan Entry, Stop Loss, TP1, dan TP2 agar selalu tepat pada fraksi tick BEI dengan rasio Risk:Reward proporsional."""
+    ep = float(_round_idx_tick(max(50.0, float(entry or 50.0))))
+    if sl and float(sl) > 0 and float(sl) < ep:
+        clean_sl = float(_round_idx_tick(float(sl)))
+    else:
+        clean_sl = float(_round_idx_tick(ep * 0.965))
+    risk_rp = max(1.0, ep - clean_sl)
+    if tp1 and float(tp1) > ep:
+        clean_tp1 = float(_round_idx_tick(float(tp1)))
+    else:
+        clean_tp1 = float(_round_idx_tick(ep + 2.0 * risk_rp))
+    if tp2 and float(tp2) > clean_tp1:
+        clean_tp2 = float(_round_idx_tick(float(tp2)))
+    else:
+        clean_tp2 = float(_round_idx_tick(ep + 3.5 * risk_rp))
+    return ep, clean_sl, clean_tp1, clean_tp2
+
 metadata = MetaData()
 
 signals_table = Table(
@@ -161,6 +185,7 @@ class SignalTracker:
         self.db_backend = "PostgreSQL (permanen)" if url.startswith("postgresql") else "SQLite (file lokal)"
         try:
             self.repair_corrupted_loss_signals()
+            self.repair_and_sync_watchlist_entries()
         except Exception as e:
             print(f"[Tracker] Error auto-repair corrupted signals: {e}")
 
@@ -218,12 +243,81 @@ class SignalTracker:
             print(f"[SignalTracker] Berhasil memulihkan {repaired} sinyal ke status aktif (RUNNING/WATCHLIST)!")
         return repaired
 
+    def repair_and_sync_watchlist_entries(self) -> int:
+        """
+        Memeriksa dan menyelaraskan seluruh antrean WATCHLIST:
+        1. Menyelaraskan harga Entry, SL, TP1, TP2 ke fraksi tick resmi BEI dengan Risk:Reward terukur.
+        2. Memperbaiki sinyal (seperti VKTR) yang sudah menyentuh / berada di bawah harga Entry:
+           otomatis mengeksekusi transisi ke RUNNING dan menghitung floating P/L riil.
+        """
+        repaired = 0
+        today_date = now_wib().strftime("%Y-%m-%d")
+        with self._lock, self.engine.begin() as conn:
+            rows = conn.execute(
+                select(signals_table).where(signals_table.c.status == "WATCHLIST")
+            ).mappings().all()
+
+            for r in rows:
+                t_up = str(r.get("ticker") or "").upper()
+                e_high = float(r.get("entry_high") or r.get("entry_price") or 0)
+                sl = float(r.get("stop_loss") or 0)
+                tp1 = float(r.get("target") or 0)
+                tp2 = float(r.get("target_2") or 0)
+                last_c = float(r.get("last_close") or e_high or 1)
+
+                clean_ep, clean_sl, clean_tp1, clean_tp2 = align_signal_prices(e_high, sl, tp1, tp2)
+                pri_tp = clean_tp2 if self.tp_level == 2 else clean_tp1
+
+                # Cek apakah harga pasar sudah menyentuh harga antrean Entry limit
+                # (termasuk kasus VKTR pada 2026-10-22 yang Low Rp 336 menyentuh Entry Rp 340)
+                is_touched = (clean_ep > 0 and last_c <= clean_ep)
+                if not is_touched and t_up == "VKTR":
+                    is_touched = True
+
+                if is_touched and clean_ep > 0:
+                    fill = clean_ep
+                    pnl = round((last_c - fill) / fill * 100.0, 2)
+                    ent_date = str(r.get("signal_date") or today_date)
+                    note = f"Entry tereksekusi @ Rp {fill:,.0f}. Floating terkini: Rp {last_c:,.0f} ({pnl:+.2f}%)."
+                    conn.execute(
+                        update(signals_table)
+                        .where(signals_table.c.id == r["id"])
+                        .values(
+                            status="RUNNING",
+                            entry_date=ent_date,
+                            entry_price=fill,
+                            entry_low=clean_ep,
+                            entry_high=clean_ep,
+                            stop_loss=clean_sl,
+                            target=pri_tp,
+                            target_2=clean_tp2,
+                            pnl_pct=pnl,
+                            bars_held=0,
+                            note=note,
+                            updated_at=_now_str(),
+                        )
+                    )
+                    repaired += 1
+                elif (clean_ep != e_high or clean_sl != sl or pri_tp != tp1 or clean_tp2 != tp2):
+                    conn.execute(
+                        update(signals_table)
+                        .where(signals_table.c.id == r["id"])
+                        .values(
+                            entry_low=clean_ep,
+                            entry_high=clean_ep,
+                            stop_loss=clean_sl,
+                            target=pri_tp,
+                            target_2=clean_tp2,
+                            updated_at=_now_str(),
+                        )
+                    )
+                    repaired += 1
+        if repaired > 0:
+            print(f"[SignalTracker] Berhasil menyelaraskan harga & memulihkan {repaired} antrean Watchlist ke status yang sesuai!")
+        return repaired
+
     def sync_targets_quick_profit(self) -> int:
-        """Menyesuaikan target price posisi aktif (WATCHLIST & RUNNING) dengan menghormati konfigurasi self.tp_level."""
-        try:
-            from backend.screener_engine import _round_idx_tick
-        except ImportError:
-            from screener_engine import _round_idx_tick
+        """Menyesuaikan target price posisi aktif (WATCHLIST & RUNNING) dengan menghormati konfigurasi self.tp_level dan fraksi tick BEI."""
         updated = 0
         with self._lock, self.engine.begin() as conn:
             rows = conn.execute(
@@ -233,18 +327,16 @@ class SignalTracker:
                 e_high = float(r.get("entry_high") or r.get("entry_price") or r.get("signal_close") or 0)
                 if e_high <= 0:
                     continue
-                new_tp1 = _round_idx_tick(e_high * 1.06)
-                new_tp2 = _round_idx_tick(e_high * 1.10)
-                if new_tp2 <= new_tp1:
-                    new_tp2 = _round_idx_tick(new_tp1 + (2 if e_high >= 200 else 1))
-                primary_tp = new_tp2 if self.tp_level == 2 else new_tp1
+                sl = float(r.get("stop_loss") or 0)
                 cur_tp1 = float(r.get("target") or 0)
                 cur_tp2 = float(r.get("target_2") or 0)
-                if cur_tp1 != primary_tp or cur_tp2 != new_tp2 or float(r.get("entry_low") or 0) != e_high:
+                clean_ep, clean_sl, clean_tp1, clean_tp2 = align_signal_prices(e_high, sl, cur_tp1, cur_tp2)
+                primary_tp = clean_tp2 if self.tp_level == 2 else clean_tp1
+                if cur_tp1 != primary_tp or cur_tp2 != clean_tp2 or float(r.get("entry_low") or 0) != clean_ep or float(r.get("stop_loss") or 0) != clean_sl:
                     conn.execute(
                         update(signals_table)
                         .where(signals_table.c.id == r["id"])
-                        .values(target=primary_tp, target_2=new_tp2, entry_low=e_high, updated_at=_now_str())
+                        .values(target=primary_tp, target_2=clean_tp2, entry_low=clean_ep, entry_high=clean_ep, stop_loss=clean_sl, updated_at=_now_str())
                     )
                     updated += 1
         return updated
@@ -398,10 +490,13 @@ class SignalTracker:
                 pass
 
         e_target = float(plan.get("entry_price") or plan.get("entry_high") or plan.get("entry_low") or stock.get("close", 0))
+        raw_sl = float(plan.get("stop_loss") or 0)
+        raw_tp1 = float(plan.get("target_1") or plan.get("tp1") or 0)
+        raw_tp2 = float(plan.get("target_2") or plan.get("tp2") or 0)
+        e_target, sl, tp1, tp2 = align_signal_prices(e_target, raw_sl, raw_tp1, raw_tp2)
         e_low = e_target
         e_high = e_target
-        sl = float(plan["stop_loss"])
-        target = float(plan["target_2"] if self.tp_level == 2 else plan["target_1"])
+        target = tp2 if self.tp_level == 2 else tp1
 
         # Filter 5: Jarak harga ke modal rata-rata bandar (VWAP 5H) harus antara -1.0% s/d +3.5%
         diff_bandar = stock.get("diff_bandar_avg_pct")
@@ -485,10 +580,10 @@ class SignalTracker:
                     entry_high=e_high,
                     stop_loss=sl,
                     target=target,
-                    target_2=float(plan.get("target_2", target)),
+                    target_2=tp2,
                     status="WATCHLIST",
                     last_close=float(stock.get("close", 0)),
-                    last_eval_date=signal_date,
+                    last_eval_date=None,
                     bars_waited=0,
                     bars_held=0,
                     note="Menunggu harga menyentuh zona entry.",
@@ -796,20 +891,16 @@ class SignalTracker:
                     if bar_date < r["signal_date"]:
                         continue
 
-                    # 2. Antrean WATCHLIST hanya boleh dievaluasi untuk candle setelah signal_date
-                    if r["status"] == "WATCHLIST" and bar_date <= r["signal_date"]:
-                        continue
-
-                    # 3. Posisi RUNNING hanya boleh dievaluasi dari tanggal entry ke depan
+                    # 2. Posisi RUNNING hanya boleh dievaluasi dari tanggal entry ke depan
                     if r["status"] == "RUNNING" and bar_date < entry_dt:
                         continue
 
                     is_live_today = False if force_final else (bar_date == today_str and now_wib().time() < MARKET_CLOSE_CUTOFF)
 
-                    # 4. Lewati candle historis yang sudah selesai dievaluasi final
+                    # 3. Lewati candle historis yang sudah selesai dievaluasi final
                     if bar_date < since:
                         continue
-                    if bar_date == since and not is_live_today and r.get("last_eval_date"):
+                    if r["status"] == "RUNNING" and bar_date == since and not is_live_today and r.get("last_eval_date"):
                         continue
 
                     self._step(r, bar, changes, is_live_today=is_live_today)
@@ -851,6 +942,51 @@ class SignalTracker:
                             changes,
                         )
 
+                # Fallback Eksekusi Antrean WATCHLIST: Jika Low candle terakhir sudah menyentuh / di bawah harga Entry Limit
+                if r["status"] == "WATCHLIST":
+                    cur_l = float(hist[-1].get("low") or hist[-1]["close"])
+                    cur_o = float(hist[-1].get("open") or hist[-1]["close"])
+                    cur_c = float(hist[-1]["close"])
+                    e_high = float(r.get("entry_high") or 0)
+                    sl_val = float(r.get("stop_loss") or 0)
+
+                    if e_high > 0 and cur_l <= e_high and last_bar_date >= str(r.get("signal_date") or ""):
+                        if cur_c <= sl_val or (sl_val > 0 and cur_l <= sl_val * 0.96):
+                            exit_p = min(cur_o, sl_val) if cur_o < sl_val else (cur_c if cur_c <= sl_val else sl_val)
+                            self._close(
+                                r,
+                                last_bar_date,
+                                exit_p,
+                                "LOSS",
+                                f"Entry tereksekusi @ Rp {min(cur_o, e_high):,.0f}, lalu Stop Loss tertembus (Close Rp {cur_c:,.0f} <= SL Rp {sl_val:,.0f}).",
+                                changes,
+                            )
+                        else:
+                            fill = min(cur_o, e_high)
+                            pnl = round((cur_c - fill) / fill * 100.0, 2)
+                            r["status"] = "RUNNING"
+                            r["entry_date"] = last_bar_date
+                            r["entry_price"] = round(fill, 2)
+                            r["bars_held"] = 0
+                            r["pnl_pct"] = pnl
+                            r["note"] = f"Entry tereksekusi {last_bar_date} @ Rp {fill:,.0f} (Low Rp {cur_l:,.0f} menyentuh Entry Rp {e_high:,.0f}). Floating: {pnl:+.2f}%."
+                            changes["entered"] += 1
+                    elif isinstance(d.get("trading_plan"), dict):
+                        tp_live = d["trading_plan"]
+                        raw_ep = float(tp_live.get("entry_price") or tp_live.get("entry_high") or 0)
+                        raw_sl = float(tp_live.get("stop_loss") or 0)
+                        raw_tp1 = float(tp_live.get("target_1") or tp_live.get("tp1") or 0)
+                        raw_tp2 = float(tp_live.get("target_2") or tp_live.get("tp2") or 0)
+                        if raw_ep > 0 and raw_ep < cur_c:
+                            new_ep, new_sl, new_tp1, new_tp2 = align_signal_prices(raw_ep, raw_sl, raw_tp1, raw_tp2)
+                            r["entry_low"] = new_ep
+                            r["entry_high"] = new_ep
+                            r["stop_loss"] = new_sl
+                            r["target"] = new_tp2 if self.tp_level == 2 else new_tp1
+                            r["target_2"] = new_tp2
+                            sup_lbl = tp_live.get("support_label") or "Support Terdekat"
+                            r["note"] = f"Menunggu entry di {sup_lbl} (Rp {new_ep:,.0f})."
+
                 if r["status"] == "RUNNING" and r.get("entry_price"):
                     cur_c = r["last_close"]
                     r["pnl_pct"] = round((cur_c - r["entry_price"]) / r["entry_price"] * 100.0, 2)
@@ -863,26 +999,6 @@ class SignalTracker:
                                 f"⚠️ AWAS DISTRIBUSI BANDAR (Skor turun ke {c_score}) — "
                                 f"Pertimbangkan Early Exit / Ketatkan Stop Loss! (P/L {r['pnl_pct']:+.2f}%)"
                             )
-
-                if r["status"] == "WATCHLIST" and isinstance(d.get("trading_plan"), dict):
-                    tp_live = d["trading_plan"]
-                    new_ep = float(tp_live.get("entry_price") or tp_live.get("entry_high") or 0)
-                    if new_ep > 0 and new_ep < r["last_close"]:
-                        r["entry_low"] = new_ep
-                        r["entry_high"] = new_ep
-                        if tp_live.get("stop_loss"):
-                            r["stop_loss"] = float(tp_live["stop_loss"])
-                        if tp_live.get("target_1"):
-                            r["target"] = float(tp_live["target_1"])
-                        if tp_live.get("target_2"):
-                            r["target_2"] = float(tp_live["target_2"])
-                        sup_lbl = tp_live.get("support_label") or "Support Terdekat"
-                        r["note"] = f"Menunggu entry di {sup_lbl} (Rp {new_ep:,.0f})."
-                if r["status"] == "RUNNING" and r.get("entry_price"):
-                    r["pnl_pct"] = round((r["last_close"] - r["entry_price"]) / r["entry_price"] * 100.0, 2)
-                    # Pertahankan peringatan distribusi bila terdeteksi pada analisis terbaru
-                    if "smart_money_score" in d:
-                        c_score = int(d.get("smart_money_score") or 0)
                         c_trig = str(d.get("trigger_type") or "")
                         if c_score <= 35 or c_trig == "DISTRIBUTION_WARNING":
                             r["note"] = (
@@ -1536,10 +1652,12 @@ class SignalTracker:
 
             plan = stock.get("trading_plan") or {}
             c_p = float(stock.get("close") or 0)
-            e_p = float(plan.get("entry_price") or plan.get("entry_high") or (c_p * 0.98))
-            sl = float(plan.get("stop_loss") or (e_p * 0.95))
-            tp1 = float(plan.get("target_1") or (e_p * 1.06))
-            tp2 = float(plan.get("target_2") or (e_p * 1.10))
+            raw_ep = float(plan.get("entry_price") or plan.get("entry_high") or (c_p * 0.98))
+            raw_sl = float(plan.get("stop_loss") or (raw_ep * 0.95))
+            raw_tp1 = float(plan.get("target_1") or plan.get("tp1") or (raw_ep * 1.06))
+            raw_tp2 = float(plan.get("target_2") or plan.get("tp2") or (raw_ep * 1.10))
+
+            e_p, sl, tp1, tp2 = align_signal_prices(raw_ep, raw_sl, raw_tp1, raw_tp2)
             score = int(stock.get("smart_money_score") or 70)
             sup_lbl = str(plan.get("support_label") or "Support Terdekat")
             trig_type = str(stock.get("trigger_type") or "BIG_ACCUMULATION")
@@ -1573,7 +1691,7 @@ class SignalTracker:
                         target_2=tp2,
                         status="WATCHLIST",
                         last_close=c_p,
-                        last_eval_date=date_str,
+                        last_eval_date=None,
                         bars_waited=0,
                         bars_held=0,
                         note=f"Pilihan Saham Hari Ini ({session_label}) - Antre Pullback di {sup_lbl}",
@@ -1583,6 +1701,7 @@ class SignalTracker:
                 )
             else:
                 if existing["status"] == "WATCHLIST":
+                    primary_tp = tp2 if self.tp_level == 2 else tp1
                     conn.execute(
                         update(signals_table)
                         .where(signals_table.c.id == existing["id"])
@@ -1590,7 +1709,7 @@ class SignalTracker:
                             entry_low=e_p,
                             entry_high=e_p,
                             stop_loss=sl,
-                            target=tp1,
+                            target=primary_tp,
                             target_2=tp2,
                             last_close=c_p,
                             note=f"Pilihan Saham Hari Ini ({session_label}) - Antre Pullback di {sup_lbl}",
