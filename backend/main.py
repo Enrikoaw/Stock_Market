@@ -241,10 +241,11 @@ class LocalPathRequest(BaseModel):
     path: str
 
 
-def _run_sync_job_blocking() -> dict:
+def _run_sync_job_blocking(with_broker_enrichment: bool = False) -> dict:
     """SATU jalur sinkronisasi: tarik pembaruan SELURUH saham BEI secara paralel
     (mode incremental 5 hari bila cache tersedia), hitung ulang indikator semua saham,
-    evaluasi status Watchlist/Running, lalu kembalikan data terbaru untuk tampilan."""
+    evaluasi status Watchlist/Running, lalu kembalikan data terbaru untuk tampilan.
+    with_broker_enrichment HANYA aktif 2x sehari (setelah Sesi 1 dan Sesi 2)."""
     global LAST_CACHE_MTIME
     if MASTER_UPLOADED_CSV.exists():
         tickers_df = pd.read_csv(MASTER_UPLOADED_CSV)
@@ -275,13 +276,21 @@ def _run_sync_job_blocking() -> dict:
 
     # Stage 2: Broker Summary API Fetcher via Two-Stage Smart Funneling
     # (Pilihan Saham Hari Ini + Watchlist Aktif + Stage 1 Funneling)
+    # HANYA dijalankan 2x sehari (setelah Sesi 1 dan setelah Sesi 2).
+    # DILARANG KERAS menarik broksum jika Sesi 1 belum selesai!
     broker_cfg = load_broker_api_config()
     has_api_cred = bool(
         broker_cfg.get("invezgo_api_key") or
         broker_cfg.get("goapi_key") or
         broker_cfg.get("stockbit_token")
     )
-    if has_api_cred:
+
+    if with_broker_enrichment and is_sesi1_running_now():
+        print("[Sync] 🛑 Proteksi Kuota: Sesi 1 bursa belum selesai. Penarikan data Broksum Invezgo DITUNDA sampai Sesi 1 usai!")
+        with_broker_enrichment = False
+
+    if with_broker_enrichment and has_api_cred:
+        print(f"[Sync] 📡 Mengambil Broker Summary Invezgo untuk tanggal {latest_dt} (Pilihan Hari Ini & Watchlist)...")
         enrich_candidates_and_watchlist(
             analysis,
             str(latest_dt),
@@ -300,6 +309,8 @@ def _run_sync_job_blocking() -> dict:
             )
         except Exception as exc:
             print(f"[Sync] Warning purge retail watchlist: {exc}")
+    else:
+        print("[Sync] ⏱️ Update Harga 15 Menit: Hanya memperbarui pergerakan harga OHLC & evaluasi Running/SL/TP (Broksum API di-skip total).")
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["source_name"] = f"Live IDX ({latest_dt})"
@@ -335,7 +346,7 @@ def get_sync_lock() -> asyncio.Lock:
     return SYNC_LOCK
 
 
-async def trigger_safe_sync() -> bool:
+async def trigger_safe_sync(with_broker_enrichment: bool = False) -> bool:
     """Eksekusi sinkronisasi aman non-reentrant menggunakan asyncio.Lock."""
     lock = get_sync_lock()
     if lock.locked() or STATE["is_syncing"]:
@@ -343,7 +354,7 @@ async def trigger_safe_sync() -> bool:
     async with lock:
         STATE["is_syncing"] = True
         try:
-            await asyncio.to_thread(_run_sync_job_blocking)
+            await asyncio.to_thread(_run_sync_job_blocking, with_broker_enrichment)
             STATE["last_sync_error"] = None
             return True
         except Exception as exc:
@@ -410,6 +421,19 @@ def is_idx_market_open_now() -> bool:
     return is_sesi_1 or is_sesi_2
 
 
+def is_sesi1_running_now() -> bool:
+    """Mengecek apakah saat ini bursa sedang berjalan di Sesi 1 (09:00 - 12:00 WIB, atau Jumat 09:00 - 11:30 WIB)."""
+    now = _get_now_wib()
+    if now.weekday() >= 5 or _is_idx_holiday(now.date()):
+        return False
+    from datetime import time as dtime
+    t = now.time()
+    if now.weekday() == 4:  # Hari Jumat
+        return dtime(9, 0) <= t < dtime(11, 30)
+    else:  # Senin - Kamis
+        return dtime(9, 0) <= t < dtime(12, 0)
+
+
 def _expected_latest_trading_date() -> str:
     """Mengembalikan tanggal hari bursa terakhir yang seharusnya sudah memiliki data (melewati akhir pekan & hari libur BEI)."""
     from datetime import time as dtime, timedelta
@@ -462,7 +486,7 @@ async def _background_market_session_worker() -> None:
             is_jumat = (now_wib.weekday() == 4)
 
             # 1. Jadwal Selesai Sesi 1 (Jumat 11:32 - 13:00 WIB, Senin-Kamis 12:02 - 13:00 WIB)
-            # Menarik broker summary Invezgo untuk menyaring kandidat Watchlist Hari Ini
+            # Menarik broker summary Invezgo untuk menyaring kandidat Watchlist Hari Ini (Hanya 1x sehari)
             needs_sesi1_broksum_sync = (
                 is_trading_day
                 and (
@@ -472,45 +496,42 @@ async def _background_market_session_worker() -> None:
                 and LAST_BROKSUM_SESI1_DATE != today_str
             )
 
-            # 2. Jadwal Selesai Sesi 2 / Penutupan Bursa (16:08 - 18:30 WIB)
-            # Menarik broker summary penutupan & evaluasi final status sinyal Take Profit / Stop Loss
+            # 2. Jadwal Selesai Sesi 2 / Penutupan Bursa (16:08 - 21:00 WIB)
+            # Menarik broker summary Invezgo penutupan & evaluasi final status sinyal Take Profit / Stop Loss (Hanya 1x sehari)
             needs_sesi2_broksum_sync = (
                 is_trading_day
-                and (dtime(16, 8) <= now_wib.time() <= dtime(18, 30))
+                and (dtime(16, 8) <= now_wib.time() <= dtime(21, 0))
                 and LAST_BROKSUM_SESI2_DATE != today_str
             )
 
-            # 3. Jadwal EOD Broksum 18:00 WIB (update resmi EOD Invezgo harian)
-            needs_eod_broksum_sync = (
-                is_trading_day
-                and dtime(18, 0) <= now_wib.time() <= dtime(23, 59)
-                and LAST_BROKSUM_EOD_DATE != today_str
-            )
-
-            needs_post_close_sync = needs_sesi2_broksum_sync and LAST_CLOSE_SYNC_DATE != today_str
-
             should_sync = False
+            with_broksum = False
+
             if not STATE["is_syncing"] and not get_sync_lock().locked():
                 if needs_sesi1_broksum_sync:
                     should_sync = True
-                elif needs_sesi2_broksum_sync or needs_eod_broksum_sync:
+                    with_broksum = True
+                elif needs_sesi2_broksum_sync:
                     should_sync = True
-                elif needs_post_close_sync:
-                    should_sync = True
+                    with_broksum = True
                 elif market_open and (now_ts - last_sync_attempt_ts >= 900):
+                    # Update harga pasar rutin setiap 15 menit: HANYA update harga OHLC (TANPA broksum!)
                     should_sync = True
+                    with_broksum = False
                 elif cache_stale and (now_ts - last_sync_attempt_ts >= 1800):
                     should_sync = True
+                    with_broksum = False
                 elif loop_count == 1 and not REAL_CACHE_CSV.exists():
                     should_sync = True
+                    with_broksum = False
 
             if should_sync:
                 print(
                     f"[MarketWorker] Menjalankan sinkronisasi background "
-                    f"(market_open={market_open}, cache_stale={cache_stale}, sesi1_done={needs_sesi1_broksum_sync}, sesi2_done={needs_sesi2_broksum_sync}, eod_18wib={needs_eod_broksum_sync})..."
+                    f"(with_broksum={with_broksum}, market_open={market_open}, sesi1_done={needs_sesi1_broksum_sync}, sesi2_done={needs_sesi2_broksum_sync})..."
                 )
                 last_sync_attempt_ts = now_ts
-                synced_ok = await trigger_safe_sync()
+                synced_ok = await trigger_safe_sync(with_broker_enrichment=with_broksum)
                 if synced_ok:
                     if needs_sesi1_broksum_sync:
                         LAST_BROKSUM_SESI1_DATE = today_str
@@ -519,9 +540,6 @@ async def _background_market_session_worker() -> None:
                         LAST_BROKSUM_SESI2_DATE = today_str
                         LAST_CLOSE_SYNC_DATE = today_str
                         print(f"[MarketWorker] Selesai Sesi 2 ({today_str}): Penarikan Broksum Invezgo & Evaluasi Take Profit selesai.")
-                    if needs_eod_broksum_sync:
-                        LAST_BROKSUM_EOD_DATE = today_str
-                        print(f"[MarketWorker] EOD Broker Summary 18:00 WIB untuk tanggal {today_str} berhasil diperbarui.")
         except Exception as exc:
             print(f"[MarketWorker] Error: {exc}")
 

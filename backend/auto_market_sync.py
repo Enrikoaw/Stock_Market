@@ -69,6 +69,8 @@ def main() -> None:
         print(f"[AutoMarketSync] Warning: Gagal seleksi awal today candidates: {exc}")
 
     # Two-Stage Smart Funneling X-Ray (Pilihan Saham Hari Ini + Watchlist Aktif + Stage 1)
+    # HANYA dijalankan 2x sehari (tepat setelah Sesi 1 dan setelah Sesi 2).
+    # DILARANG KERAS menarik broksum selama Sesi 1 belum selesai!
     try:
         from broker_summary_fetcher import (
             load_broker_api_config,
@@ -80,7 +82,19 @@ def main() -> None:
             broker_cfg.get("goapi_key") or
             broker_cfg.get("stockbit_token")
         )
-        if has_api_cred:
+        from datetime import datetime, time as dtime
+        try:
+            from zoneinfo import ZoneInfo
+            now_wib = datetime.now(ZoneInfo("Asia/Jakarta"))
+        except Exception:
+            now_wib = datetime.now()
+        is_jumat = (now_wib.weekday() == 4)
+        sesi1_end = dtime(11, 30) if is_jumat else dtime(12, 0)
+        is_in_sesi1 = (now_wib.weekday() < 5) and (dtime(9, 0) <= now_wib.time() < sesi1_end)
+        is_after_session = (sesi1_end <= now_wib.time() <= dtime(13, 30)) or (now_wib.time() >= dtime(16, 0)) or (now_wib.weekday() >= 5)
+
+        if has_api_cred and not is_in_sesi1 and is_after_session:
+            print("[AutoMarketSync] 📡 Mengambil Broker Summary Invezgo (Pasca Sesi 1/Sesi 2)...")
             enrich_candidates_and_watchlist(
                 analysis,
                 str(latest_dt),
@@ -98,6 +112,8 @@ def main() -> None:
                 cfg=broker_cfg,
             )
             print(f"[AutoMarketSync] Audit Smart Money Watchlist: {purge_res.get('retained_count')} lolos, {purge_res.get('eliminated_count')} ritel/distribusi dihapus.")
+        else:
+            print("[AutoMarketSync] ⏱️ Skip Penarikan Broksum (Sesi 1 belum selesai atau update interval rutin). Hanya update harga pasar & evaluasi Running/SL/TP.")
     except Exception as exc:
         print(f"[AutoMarketSync] Warning: Gagal enrichment broker summary: {exc}")
 

@@ -580,27 +580,18 @@ def run_stage2_broker_enrichment(
             continue
 
         raw_data = None
-        # Coba date_str, jika kosong coba tanggal hari kerja terbaru
-        dates_to_try = [date_str] if date_str else []
-        from datetime import datetime, timedelta
-        now = datetime.now()
-        for d in range(5):
-            dt = (now - timedelta(days=d)).strftime("%Y-%m-%d")
-            if dt not in dates_to_try:
-                dates_to_try.append(dt)
-
-        for dt_candidate in dates_to_try:
-            try:
-                if config.get("invezgo_api_key"):
-                    raw_data = fetch_broker_summary_invezgo(ticker, dt_candidate, config["invezgo_api_key"])
-                elif provider == "goapi" and config.get("goapi_key"):
-                    raw_data = fetch_broker_summary_goapi(ticker, dt_candidate, config["goapi_key"])
-                elif provider == "stockbit" and config.get("stockbit_token"):
-                    raw_data = fetch_broker_summary_stockbit(ticker, dt_candidate, config["stockbit_token"])
-                if raw_data:
-                    break
-            except Exception as ex:
-                print(f"[SmartFunnel] Warning fetch {ticker} on {dt_candidate}: {ex}")
+        # Hanya tembak 1 tanggal (target date) agar hemat kuota API dan tidak looping multi-hari
+        from datetime import datetime
+        target_dt = date_str or datetime.now().strftime("%Y-%m-%d")
+        try:
+            if config.get("invezgo_api_key"):
+                raw_data = fetch_broker_summary_invezgo(ticker, target_dt, config["invezgo_api_key"])
+            elif provider == "goapi" and config.get("goapi_key"):
+                raw_data = fetch_broker_summary_goapi(ticker, target_dt, config["goapi_key"])
+            elif provider == "stockbit" and config.get("stockbit_token"):
+                raw_data = fetch_broker_summary_stockbit(ticker, target_dt, config["stockbit_token"])
+        except Exception as ex:
+            print(f"[SmartFunnel] Warning fetch {ticker} on {target_dt}: {ex}")
 
         if raw_data:
             top_buyers, top_sellers = extract_brokers_from_payload(raw_data)
@@ -820,25 +811,17 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
         return s
 
     raw_data = None
-    dates_to_try = [date_str] if date_str else []
-    now = datetime.now()
-    for d in range(7):
-        dt = (now - timedelta(days=d)).strftime("%Y-%m-%d")
-        if dt not in dates_to_try:
-            dates_to_try.append(dt)
-
-    for dt_candidate in dates_to_try:
-        try:
-            if config.get("invezgo_api_key"):
-                raw_data = fetch_broker_summary_invezgo(ticker, dt_candidate, config["invezgo_api_key"])
-            elif provider == "stockbit" and config.get("stockbit_token"):
-                raw_data = fetch_broker_summary_stockbit(ticker, dt_candidate, config["stockbit_token"])
-            elif provider == "goapi" and config.get("goapi_key"):
-                raw_data = fetch_broker_summary_goapi(ticker, dt_candidate, config["goapi_key"])
-            if raw_data:
-                break
-        except Exception as ex:
-            print(f"[BrokerOnDemand] Error fetch {ticker} on {dt_candidate}: {ex}")
+    from datetime import datetime
+    target_dt = date_str or datetime.now().strftime("%Y-%m-%d")
+    try:
+        if config.get("invezgo_api_key"):
+            raw_data = fetch_broker_summary_invezgo(ticker, target_dt, config["invezgo_api_key"])
+        elif provider == "stockbit" and config.get("stockbit_token"):
+            raw_data = fetch_broker_summary_stockbit(ticker, target_dt, config["stockbit_token"])
+        elif provider == "goapi" and config.get("goapi_key"):
+            raw_data = fetch_broker_summary_goapi(ticker, target_dt, config["goapi_key"])
+    except Exception as ex:
+        print(f"[BrokerOnDemand] Error fetch {ticker} on {target_dt}: {ex}")
 
     if raw_data:
         top_buyers, top_sellers = extract_brokers_from_payload(raw_data)
@@ -924,13 +907,9 @@ def filter_and_purge_watchlist_by_smart_money(
         print("[SmartPurge] Token API broker belum disetel. Melewati filter eliminasi ritel.")
         return {"total": 0, "retained": [], "eliminated": [], "message": "Token API broker tidak ditemukan."}
 
-    from datetime import datetime, timedelta
-    dates_to_try = [date_str] if date_str else []
-    now = datetime.now()
-    for d in range(5):
-        dt = (now - timedelta(days=d)).strftime("%Y-%m-%d")
-        if dt not in dates_to_try:
-            dates_to_try.append(dt)
+    from datetime import datetime
+    target_dt = date_str or datetime.now().strftime("%Y-%m-%d")
+    dates_to_try = [target_dt]
 
     wl_signals = tracker.list_signals(status="WATCHLIST")
     if not wl_signals:
