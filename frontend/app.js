@@ -1,4 +1,3 @@
-Warning: fs was declared with const; use let for reassignable variables.
 /**
  * SmartFlow IDX - Frontend Controller (app.js)
  * Antarmuka Ramah Pemula & Mahir, Kalkulator Lot, Glosarium, Favorit Pribadi,
