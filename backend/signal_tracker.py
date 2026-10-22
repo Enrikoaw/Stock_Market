@@ -1100,6 +1100,18 @@ class SignalTracker:
             sl, tp = float(r["stop_loss"]), float(r["target"])
             entry_p = float(r["entry_price"])
 
+            # OHLC harian tidak menyimpan urutan harga intraday. Jangan memakai
+            # high/low candle hari entry untuk menyimpulkan TP/SL setelah entry,
+            # karena nilainya mungkin terjadi sebelum order terisi.
+            if date == entry_dt:
+                r["last_close"] = c
+                r["pnl_pct"] = round((c - entry_p) / entry_p * 100.0, 2)
+                r["note"] = (
+                    f"Entry Rp {entry_p:,.0f} hari ini; TP/SL mulai dievaluasi "
+                    f"pada candle berikutnya. Last Rp {c:,.0f} ({r['pnl_pct']:+.2f}%)."
+                )
+                return
+
             # 1. Parameter 2: Stop Loss berbasis Closing Basis (Close <= SL) + proteksi Gap Down (Open <= SL) / Panic Crash (Low <= SL * 0.96)
             hit_sl_close = (c <= sl) or (o <= sl) or (l <= sl * 0.96)
             if hit_sl_close:
