@@ -911,18 +911,31 @@ function renderCandidatesError(errorMsg) {
 
 function renderTableError(errorMsg) {
   const tbody = document.getElementById('screenerTableBody');
-  if (!tbody) return;
-  tbody.innerHTML = `
-    <tr>
-      <td colspan="6" class="py-12 text-center space-y-3">
-        <div class="text-rose-400 font-bold text-xs sm:text-sm">⚠️ Gagal Memuat Daftar Saham Bursa</div>
-        <p class="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed">${escHtml(errorMsg || 'Waktu tunggu server melebihi batas. Periksa koneksi backend Anda.')}</p>
-        <button onclick="loadScreenerData(true)" class="mt-2 px-4 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition active:scale-95 cursor-pointer shadow-sm">
-          🔄 Muat Ulang / Coba Lagi
+  const mobileList = document.getElementById('screenerMobileList');
+  if (tbody) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" class="py-12 text-center space-y-3">
+          <div class="text-rose-400 font-bold text-xs sm:text-sm">Gagal Memuat Daftar Saham Bursa</div>
+          <p class="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed">${escHtml(errorMsg || 'Waktu tunggu server melebihi batas. Periksa koneksi backend Anda.')}</p>
+          <button onclick="loadScreenerData(true)" class="mt-2 px-4 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition active:scale-95 cursor-pointer shadow-sm">
+            Muat Ulang / Coba Lagi
+          </button>
+        </td>
+      </tr>
+    `;
+  }
+  if (mobileList) {
+    mobileList.innerHTML = `
+      <div class="p-6 rounded-xl bg-slate-900/50 border border-rose-500/20 text-center space-y-2">
+        <div class="text-xs text-rose-400 font-bold">Gagal Memuat Daftar Saham Bursa</div>
+        <p class="text-[10px] text-slate-400">${escHtml(errorMsg || 'Waktu tunggu server melebihi batas. Periksa koneksi backend Anda.')}</p>
+        <button onclick="loadScreenerData(true)" class="mt-2 px-3.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-semibold transition cursor-pointer">
+          Muat Ulang / Coba Lagi
         </button>
-      </td>
-    </tr>
-  `;
+      </div>
+    `;
+  }
 }
 
 function renderNewsError(errorMsg) {
@@ -2138,7 +2151,8 @@ function changePage(delta) {
 // =====================================================================
 function renderScreenerTable(stocks) {
   const tbody = document.getElementById('screenerTableBody');
-  if (!tbody) return;
+  const mobileList = document.getElementById('screenerMobileList');
+  if (!tbody && !mobileList) return;
 
   const totalPages = Math.max(1, Math.ceil(stocks.length / PAGE_SIZE));
   if (currentPage > totalPages) currentPage = totalPages;
@@ -2161,95 +2175,195 @@ function renderScreenerTable(stocks) {
   if (btnNext) btnNext.disabled = currentPage >= totalPages;
 
   if (!pageStocks.length) {
-    tbody.innerHTML = `
+    const emptyHtml = `
       <tr>
         <td colspan="6" class="py-10 text-center text-slate-400">
           Tidak ada saham yang memenuhi filter kriteria saat ini. Coba longgarkan filter di atas.
         </td>
       </tr>
     `;
+    if (tbody) tbody.innerHTML = emptyHtml;
+    if (mobileList) {
+      mobileList.innerHTML = `
+        <div class="py-10 text-center text-xs text-slate-400 bg-white/5 dark:bg-slate-900/40 rounded-xl p-4 border border-white/5">
+          Tidak ada saham yang memenuhi filter kriteria saat ini. Coba longgarkan filter di atas.
+        </div>
+      `;
+    }
     return;
   }
 
-  tbody.innerHTML = pageStocks
-    .map((s) => {
-      const safeTicker = escHtml(s.ticker);
-      const safeSector = escHtml(s.sector);
-      const safeSecCat = s.sector_category ? escHtml(s.sector_category) : '';
-      const isSelected = s.ticker === selectedTicker;
-      const starActive = isFavorite(s.ticker);
-      const chgColor = s.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
+  // 1. Render Desktop Table Rows (Tablet & Desktop >= md)
+  if (tbody) {
+    tbody.innerHTML = pageStocks
+      .map((s) => {
+        const safeTicker = escHtml(s.ticker);
+        const safeSector = escHtml(s.sector);
+        const safeSecCat = s.sector_category ? escHtml(s.sector_category) : '';
+        const isSelected = s.ticker === selectedTicker;
+        const starActive = isFavorite(s.ticker);
+        const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
 
-      return `
-        <tr
-          id="row-${safeTicker}"
-          onclick="selectStock('${safeTicker}', true)"
-          class="stock-row hover:bg-white/[0.05] transition-colors cursor-pointer ${isSelected ? 'selected-row' : ''}"
-        >
-          <!-- Ticker & Logo & Star -->
-          <td class="py-3 pl-4 pr-2">
-            <div class="flex items-center gap-2.5">
-              <button
-                onclick="toggleFavorite('${safeTicker}', event)"
-                class="star-btn star-btn-${safeTicker} text-base leading-none transition ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-500 hover:text-amber-300'}"
-                title="Simpan ke Favorit"
-              >
-                ${starActive ? '★' : '☆'}
-              </button>
-              ${getStockLogoImg(s.ticker, 'w-8 h-8')}
-              <div>
-                <div class="flex items-center gap-1.5">
-                  <div class="font-mono font-black text-sm text-slate-900 dark:text-white">${safeTicker}</div>
-                  ${safeSecCat ? `<span class="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${safeSecCat}</span>` : ''}
+        return `
+          <tr
+            id="row-${safeTicker}"
+            onclick="selectStock('${safeTicker}', true)"
+            class="stock-row hover:bg-white/[0.05] transition-colors cursor-pointer ${isSelected ? 'selected-row' : ''}"
+          >
+            <!-- Ticker & Logo & Star -->
+            <td class="py-3 pl-4 pr-2">
+              <div class="flex items-center gap-2.5">
+                <button
+                  onclick="event.stopPropagation(); toggleFavorite('${safeTicker}', event)"
+                  class="star-btn star-btn-${safeTicker} text-base leading-none transition ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-400 hover:text-amber-300'}"
+                  title="Simpan ke Favorit"
+                >
+                  ${starActive ? '★' : '☆'}
+                </button>
+                ${getStockLogoImg(s.ticker, 'w-8 h-8')}
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <div class="font-mono font-black text-sm text-slate-900 dark:text-white">${safeTicker}</div>
+                    ${safeSecCat ? `<span class="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 leading-none">${safeSecCat}</span>` : ''}
+                  </div>
+                  <div class="text-[10px] text-slate-400 truncate max-w-[120px]">${safeSector}</div>
                 </div>
-                <div class="text-[10px] text-slate-400 truncate max-w-[120px]">${safeSector}</div>
+              </div>
+            </td>
+
+            <!-- Price -->
+            <td class="py-3 px-2 text-right font-mono font-bold text-slate-900 dark:text-white text-xs whitespace-nowrap">
+              ${fmtPrice(s.close)}
+            </td>
+
+            <!-- Change -->
+            <td class="py-3 px-2 text-right font-mono text-xs font-bold ${chgColor} whitespace-nowrap">
+              ${fmtSignPct(s.pct_change)}
+            </td>
+
+            <!-- Volume Spike Badge & Status Pantauan -->
+            <td class="py-3 px-2 text-center font-mono">
+              ${renderSignalTypeBadge(s)}
+              <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${s.vol_ratio >= 1.5 ? 'bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
+                ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
+              </span>
+              ${s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW' ? `<span class="block text-[8px] font-bold text-amber-800 bg-amber-100 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 mt-0.5 font-mono px-1 py-0.2 rounded whitespace-nowrap" title="${escHtml(s.tape_quality.reason)}">${s.tape_quality.code === 'SUSPICIOUS_CROSSING' ? 'Crossing' : s.tape_quality.code === 'UPTHRUST_DISTRIBUTION' ? 'Upthrust' : 'Thin'}</span>` : ''}
+              ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded whitespace-nowrap">WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? ((s.tracker_pnl_pct || 0) < 0 ? `<span class="block text-[9px] font-bold text-rose-800 bg-rose-100 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50 mt-1 font-mono px-1 py-0.5 rounded whitespace-nowrap">RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : `<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded whitespace-nowrap">RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>`) : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-800 bg-blue-100 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50 mt-1 font-mono px-1 py-0.5 rounded whitespace-nowrap">WATCHLIST</span>' : ''}
+            </td>
+
+            <!-- Smart Money Score with Progress Bar -->
+            <td class="py-3 px-2 text-right whitespace-nowrap">
+              <div class="flex items-center justify-end gap-2">
+                <span class="font-mono font-extrabold text-xs text-slate-900 dark:text-white">${escHtml(s.smart_money_score)}</span>
+                <div class="w-16 bg-slate-200 dark:bg-white/[0.08] h-2 rounded-full overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 dark:from-emerald-400 dark:to-teal-300 rounded-full" style="width: ${Math.min(100, Math.max(0, Number(s.smart_money_score || 0)))}%"></div>
+                </div>
+              </div>
+            </td>
+
+            <!-- Profil VSA & VWAP 5H -->
+            <td class="py-3 pl-2 pr-4 text-xs font-mono whitespace-nowrap">
+              <div class="text-[11px] text-slate-600 dark:text-slate-300">
+                <span class="lbl-vwap-text">${isExpertMode ? 'VWAP 5H' : 'Modal Bandar'}</span>: <span class="text-slate-900 dark:text-white font-bold">${fmtPrice(s.bandar_avg_buy)}</span> <span class="${s.diff_bandar_avg_pct >= 0 ? 'text-amber-500 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-400'} font-semibold">(${s.diff_bandar_avg_pct >= 0 ? '+' : ''}${s.diff_bandar_avg_pct.toFixed(1)}%)</span>
+              </div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">
+                CR: <span class="text-slate-800 dark:text-slate-200 font-semibold">${escHtml(s.closing_range_pct)}%</span> · <span class="lbl-val-text">${isExpertMode ? 'Turnover' : 'Transaksi'}</span>: <span class="text-slate-800 dark:text-slate-200">Rp ${escHtml(s.value_b_idr)} M</span>
+              </div>
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+  }
+
+  // 2. Render Mobile Card List View (Khusus Mobile < md: Rapi, Proporsional, Tanpa Teks Terpotong)
+  if (mobileList) {
+    mobileList.innerHTML = pageStocks
+      .map((s) => {
+        const safeTicker = escHtml(s.ticker);
+        const safeSector = escHtml(s.sector);
+        const safeSecCat = s.sector_category ? escHtml(s.sector_category) : '';
+        const isSelected = s.ticker === selectedTicker;
+        const starActive = isFavorite(s.ticker);
+        const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
+
+        // Broksum ratio pill
+        const bdr = s.bdr_pct != null ? Number(s.bdr_pct) : null;
+        let bdrPill = '';
+        if (bdr !== null) {
+          bdrPill = `<span class="px-1.5 py-0.2 rounded font-mono font-bold text-[9px] ${bdr >= 10 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' : bdr <= -10 ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30' : 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border border-slate-500/20'}">BDR ${bdr >= 0 ? '+' : ''}${bdr.toFixed(1)}%</span>`;
+        }
+
+        return `
+          <div
+            id="mob-row-${safeTicker}"
+            onclick="selectStock('${safeTicker}', true)"
+            class="stock-row p-3 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200/80 dark:border-white/[0.08] shadow-xs hover:border-slate-300 dark:hover:border-white/20 transition cursor-pointer active:scale-[0.99] space-y-2 ${isSelected ? 'selected-row' : ''}"
+          >
+            <!-- Baris 1: Logo, Ticker, Sektor & Harga, % Perubahan -->
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <button
+                  onclick="event.stopPropagation(); toggleFavorite('${safeTicker}', event)"
+                  class="star-btn star-btn-${safeTicker} text-base leading-none transition shrink-0 ${starActive ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-400 hover:text-amber-300'}"
+                  title="Simpan ke Favorit"
+                >
+                  ${starActive ? '★' : '☆'}
+                </button>
+                ${getStockLogoImg(s.ticker, 'w-7 h-7 rounded-lg shrink-0')}
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="font-mono font-black text-sm text-slate-900 dark:text-white leading-tight">${safeTicker}</span>
+                    ${safeSecCat ? `<span class="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 leading-none">${safeSecCat}</span>` : ''}
+                  </div>
+                  <div class="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[150px] leading-tight mt-0.5">${safeSector}</div>
+                </div>
+              </div>
+
+              <!-- Kanan: Harga & % Change (Single Line) -->
+              <div class="text-right shrink-0">
+                <div class="font-mono font-bold text-sm text-slate-900 dark:text-white whitespace-nowrap">${fmtPrice(s.close)}</div>
+                <div class="font-mono text-xs font-bold ${chgColor} whitespace-nowrap">${fmtSignPct(s.pct_change)}</div>
               </div>
             </div>
-          </td>
 
-          <!-- Price -->
-          <td class="py-3 px-2 text-right font-mono font-bold text-slate-900 dark:text-white text-xs">
-            ${fmtPrice(s.close)}
-          </td>
+            <!-- Baris 2: Sinyal VSA & Skor Smart Money -->
+            <div class="flex items-center justify-between gap-2 text-xs pt-1.5 border-t border-slate-100 dark:border-white/[0.04]">
+              <!-- Sinyal & Vol Ratio Badges -->
+              <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+                ${renderSignalTypeBadge(s)}
+                <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/35' : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30'}">
+                  ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
+                </span>
+                ${bdrPill}
+                ${s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW' ? `<span class="text-[9px] font-bold text-amber-800 bg-amber-100 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 font-mono px-1.5 py-0.2 rounded" title="${escHtml(s.tape_quality.reason)}">${s.tape_quality.code === 'SUSPICIOUS_CROSSING' ? 'Crossing' : s.tape_quality.code === 'UPTHRUST_DISTRIBUTION' ? 'Upthrust' : 'Thin'}</span>` : ''}
+                ${s.tracker_status === 'WIN' ? '<span class="text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 px-1.5 py-0.2 rounded font-mono">WIN</span>' : s.tracker_status === 'RUNNING' ? `<span class="text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 px-1.5 py-0.2 rounded font-mono">RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : s.tracker_status === 'WATCHLIST' ? '<span class="text-[9px] font-bold text-blue-800 bg-blue-100 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.2 rounded font-mono">WATCHLIST</span>' : ''}
+              </div>
 
-          <!-- Change -->
-          <td class="py-3 px-2 text-right font-mono text-xs font-bold ${chgColor}">
-            ${fmtSignPct(s.pct_change)}
-          </td>
-
-          <!-- Volume Spike Badge & Status Pantauan -->
-          <td class="py-3 px-2 text-center font-mono">
-            ${renderSignalTypeBadge(s)}
-            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${s.vol_ratio >= 1.5 ? 'bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/35 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.12)]'}">
-              ${s.vol_ratio >= 2.0 ? 'Vol Spike' : s.vol_ratio >= 1.2 ? 'High Vol' : 'Normal'} ${s.vol_ratio.toFixed(1)}x
-            </span>
-            ${s.tape_quality && s.tape_quality.code !== 'ORGANIC_FLOW' ? `<span class="block text-[8px] font-bold text-amber-800 bg-amber-100 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 mt-0.5 font-mono px-1 py-0.2 rounded" title="${escHtml(s.tape_quality.reason)}">${s.tape_quality.code === 'SUSPICIOUS_CROSSING' ? 'Crossing' : s.tape_quality.code === 'UPTHRUST_DISTRIBUTION' ? 'Upthrust' : 'Thin'}</span>` : ''}
-            ${s.tracker_status === 'WIN' ? '<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">WIN (TP1)</span>' : s.tracker_status === 'RUNNING' ? ((s.tracker_pnl_pct || 0) < 0 ? `<span class="block text-[9px] font-bold text-rose-800 bg-rose-100 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800/50 mt-1 font-mono px-1 py-0.5 rounded">RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>` : `<span class="block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 mt-1 font-mono px-1 py-0.5 rounded">RUNNING ${(s.tracker_pnl_pct || 0) >= 0 ? '+' : ''}${s.tracker_pnl_pct || 0}%</span>`) : s.tracker_status === 'WATCHLIST' ? '<span class="block text-[9px] font-bold text-blue-800 bg-blue-100 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50 mt-1 font-mono px-1 py-0.5 rounded">WATCHLIST</span>' : ''}
-          </td>
-
-          <!-- Smart Money Score with Progress Bar -->
-          <td class="py-3 px-2 text-right">
-            <div class="flex items-center justify-end gap-2.5">
-              <span class="font-mono font-extrabold text-xs text-slate-900 dark:text-white">${escHtml(s.smart_money_score)}</span>
-              <div class="w-20 bg-slate-200 dark:bg-white/[0.08] h-2 rounded-full overflow-hidden">
-                <div class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 dark:from-emerald-400 dark:to-teal-300 rounded-full" style="width: ${Math.min(100, Math.max(0, Number(s.smart_money_score || 0)))}%"></div>
+              <!-- Skor Smart Money -->
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Skor:</span>
+                <span class="font-mono font-extrabold text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">${escHtml(s.smart_money_score)}</span>
               </div>
             </div>
-          </td>
 
-          <!-- Profil VSA & VWAP 5H -->
-          <td class="py-3 pl-2 pr-4 text-xs font-mono">
-            <div class="text-[11px] text-slate-600 dark:text-slate-300">
-              <span class="lbl-vwap-text">${isExpertMode ? 'VWAP 5H' : 'Rata2 5H'}</span>: <span class="text-slate-900 dark:text-white font-bold">${fmtPrice(s.bandar_avg_buy)}</span> <span class="${s.diff_bandar_avg_pct >= 0 ? 'text-amber-500 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-400'} font-semibold">(${s.diff_bandar_avg_pct >= 0 ? '+' : ''}${s.diff_bandar_avg_pct.toFixed(1)}%)</span>
+            <!-- Baris 3: Modal Bandar (VWAP) & Turnover Transaksi -->
+            <div class="flex items-center justify-between text-[10px] font-mono text-slate-500 dark:text-slate-400 pt-0.5">
+              <div>
+                <span>${isExpertMode ? 'VWAP 5H' : 'Modal Bandar'}:</span>
+                <span class="text-slate-900 dark:text-white font-bold">${fmtPrice(s.bandar_avg_buy)}</span>
+                <span class="${s.diff_bandar_avg_pct >= 0 ? 'text-amber-500 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-400'} font-semibold">(${s.diff_bandar_avg_pct >= 0 ? '+' : ''}${s.diff_bandar_avg_pct.toFixed(1)}%)</span>
+              </div>
+              <div>
+                <span>${isExpertMode ? 'Turnover' : 'Tx'}:</span>
+                <span class="text-slate-900 dark:text-white font-semibold">Rp ${escHtml(s.value_b_idr)} M</span>
+              </div>
             </div>
-            <div class="text-[10px] text-slate-500 dark:text-slate-400">
-              CR: <span class="text-slate-800 dark:text-slate-200 font-semibold">${escHtml(s.closing_range_pct)}%</span> · <span class="lbl-val-text">${isExpertMode ? 'Turnover' : 'Transaksi'}</span>: <span class="text-slate-800 dark:text-slate-200">Rp ${escHtml(s.value_b_idr)} M</span>
-            </div>
-          </td>
-        </tr>
-      `;
-    })
-    .join('');
+          </div>
+        `;
+      })
+      .join('');
+  }
 }
 
 // =====================================================================
@@ -2501,6 +2615,8 @@ async function selectStock(ticker, isUserClick = false, scrollToTradingPlan = fa
   document.querySelectorAll('.stock-row').forEach((el) => el.classList.remove('selected-row'));
   const activeRow = document.getElementById(`row-${ticker}`);
   if (activeRow) activeRow.classList.add('selected-row');
+  const activeMobRow = document.getElementById(`mob-row-${ticker}`);
+  if (activeMobRow) activeMobRow.classList.add('selected-row');
 
   try {
     const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}?_t=${Date.now()}`, { cache: 'no-store' });

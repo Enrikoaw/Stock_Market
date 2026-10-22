@@ -705,118 +705,105 @@
             <span id="tableResultCount" class="text-xs font-mono text-slate-300">Memuat data...</span>
           </div>
 
-          <!-- Filter Toolbar -->
-          <div class="p-3 border-b border-white/[0.08] bg-slate-950/30 flex flex-wrap items-center justify-between gap-2.5">
-            <!-- Search Box -->
-            <div class="relative flex-1 min-w-[180px]">
-              <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
-              </svg>
-              <input
-                id="filterSearch"
-                type="text"
-                placeholder="Cari kode saham (BBCA, ASPI)..."
-                class="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-emerald-400/70 transition shadow-inner"
-              />
+          <!-- Filter Toolbar (Clean Responsive Grid) -->
+          <div class="p-2.5 sm:p-3 border-b border-white/[0.08] bg-slate-950/30 space-y-2">
+            <!-- Baris 1: Pencarian Saham & Tombol Arti Istilah -->
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1">
+                <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                </svg>
+                <input
+                  id="filterSearch"
+                  type="text"
+                  placeholder="Cari kode saham (BBCA, ASII)..."
+                  class="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-emerald-400/70 transition shadow-inner"
+                />
+              </div>
+              <button
+                type="button"
+                onclick="openGlossaryModal('all')"
+                class="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold flex items-center gap-1.5 transition whitespace-nowrap active:scale-95 cursor-pointer shrink-0"
+                title="Kamus &amp; Penjelasan Istilah Teknis"
+              >
+                <span class="w-3.5 h-3.5 rounded-full border border-emerald-400/70 inline-flex items-center justify-center font-mono text-[10px] font-bold text-emerald-300">?</span>
+                <span>Arti Istilah</span>
+              </button>
             </div>
 
-            <!-- Trigger Filter -->
-            <select id="filterTrigger" class="px-3 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
-              <option value="ALL" class="bg-slate-900 text-white">Semua Sinyal</option>
-              <option value="ACCUM_ALL" class="bg-slate-900 text-white">Akumulasi Sah</option>
-              <option value="NEWS_ACCUM" class="bg-slate-900 text-white">Katalis Berita + Akumulasi</option>
-              <option value="MARKUP_BREAKOUT" class="bg-slate-900 text-white">Markup Breakout</option>
-              <option value="BIG_ACCUMULATION" class="bg-slate-900 text-white">Big Accumulation</option>
-              <option value="SILENT_ACCUMULATION" class="bg-slate-900 text-white">Silent Accumulation</option>
-              <option value="FOREIGN_INFLOW" class="bg-slate-900 text-white">Foreign Inflow</option>
-              <option value="DISTRIBUTION_WARNING" class="bg-slate-900 text-white">Waspada Distribusi</option>
-            </select>
+            <!-- Baris 2: Dropdown Filter (2 Kolom di Mobile, Flex di Desktop) -->
+            <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+              <!-- Trigger Filter -->
+              <select id="filterTrigger" class="w-full sm:w-auto px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
+                <option value="ALL" class="bg-slate-900 text-white">Semua Sinyal</option>
+                <option value="ACCUM_ALL" class="bg-slate-900 text-white">Akumulasi Sah</option>
+                <option value="NEWS_ACCUM" class="bg-slate-900 text-white">Katalis Berita + Akumulasi</option>
+                <option value="MARKUP_BREAKOUT" class="bg-slate-900 text-white">Markup Breakout</option>
+                <option value="BIG_ACCUMULATION" class="bg-slate-900 text-white">Big Accumulation</option>
+                <option value="SILENT_ACCUMULATION" class="bg-slate-900 text-white">Silent Accumulation</option>
+                <option value="FOREIGN_INFLOW" class="bg-slate-900 text-white">Foreign Inflow</option>
+                <option value="DISTRIBUTION_WARNING" class="bg-slate-900 text-white">Waspada Distribusi</option>
+              </select>
 
-            <!-- Min Score Filter -->
-            <select id="filterMinScore" class="px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
-              <option value="0" class="bg-slate-900 text-white">Skor Minimal: 0</option>
-              <option value="60" class="bg-slate-900 text-white">Skor &ge; 60 (Cukup)</option>
-              <option value="70" class="bg-slate-900 text-white">Skor &ge; 70 (Kuat)</option>
-              <option value="80" class="bg-slate-900 text-white">Skor &ge; 80 (Sangat Kuat)</option>
-            </select>
+              <!-- Min Score Filter -->
+              <select id="filterMinScore" class="w-full sm:w-auto px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
+                <option value="0" class="bg-slate-900 text-white">Skor Minimal: 0</option>
+                <option value="60" class="bg-slate-900 text-white">Skor &ge; 60 (Cukup)</option>
+                <option value="70" class="bg-slate-900 text-white">Skor &ge; 70 (Kuat)</option>
+                <option value="80" class="bg-slate-900 text-white">Skor &ge; 80 (Sangat Kuat)</option>
+              </select>
 
-            <!-- Volume Ratio Filter -->
-            <select id="filterVolRatio" class="px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
-              <option value="0.0" class="bg-slate-900 text-white">Volume: Semua</option>
-              <option value="1.2" class="bg-slate-900 text-white">Vol &ge; 1.2x MA20</option>
-              <option value="1.5" class="bg-slate-900 text-white">Vol &ge; 1.5x (Spike)</option>
-              <option value="2.0" class="bg-slate-900 text-white">Vol &ge; 2.0x (Ledakan)</option>
-            </select>
+              <!-- Volume Ratio Filter -->
+              <select id="filterVolRatio" class="w-full sm:w-auto px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
+                <option value="0.0" class="bg-slate-900 text-white">Volume: Semua</option>
+                <option value="1.2" class="bg-slate-900 text-white">Vol &ge; 1.2x MA20</option>
+                <option value="1.5" class="bg-slate-900 text-white">Vol &ge; 1.5x (Spike)</option>
+                <option value="2.0" class="bg-slate-900 text-white">Vol &ge; 2.0x (Ledakan)</option>
+              </select>
 
-            <!-- Likuiditas (Turnover) Filter -->
-            <select id="filterMinValue" class="px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
-              <option value="0" class="bg-slate-900 text-white">Transaksi: Semua</option>
-              <option value="1" class="bg-slate-900 text-white">Transaksi &ge; Rp 1 M</option>
-              <option value="5" class="bg-slate-900 text-white">Transaksi &ge; Rp 5 M</option>
-              <option value="10" class="bg-slate-900 text-white">Transaksi &ge; Rp 10 M</option>
-              <option value="50" class="bg-slate-900 text-white">Transaksi &ge; Rp 50 M</option>
-            </select>
+              <!-- Likuiditas (Turnover) Filter -->
+              <select id="filterMinValue" class="w-full sm:w-auto px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
+                <option value="0" class="bg-slate-900 text-white">Transaksi: Semua</option>
+                <option value="1" class="bg-slate-900 text-white">Transaksi &ge; Rp 1 M</option>
+                <option value="5" class="bg-slate-900 text-white">Transaksi &ge; Rp 5 M</option>
+                <option value="10" class="bg-slate-900 text-white">Transaksi &ge; Rp 10 M</option>
+                <option value="50" class="bg-slate-900 text-white">Transaksi &ge; Rp 50 M</option>
+              </select>
 
-            <!-- Sort By Selector -->
-            <select id="filterSortBy" class="px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
-              <option value="score" class="bg-slate-900 text-white">Urutkan: Skor Tertinggi</option>
-              <option value="vol_ratio" class="bg-slate-900 text-white">Urutkan: Lonjakan Volume</option>
-              <option value="vwap" class="bg-slate-900 text-white">Urutkan: Jarak VWAP Terdekat</option>
-              <option value="pct_change" class="bg-slate-900 text-white">Urutkan: % Kenaikan</option>
-            </select>
-
-            <!-- Tombol Arti Istilah di Atas Tabel Screener (Temuan K3) -->
-            <button
-              type="button"
-              onclick="openGlossaryModal('all')"
-              class="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold flex items-center gap-1.5 transition whitespace-nowrap active:scale-95 cursor-pointer shadow-sm"
-              title="Kamus &amp; Penjelasan Lengkap Istilah Teknis (VSA, VWAP, Squeeze, Turnover)"
-            >
-              <span class="w-3.5 h-3.5 rounded-full border border-emerald-400/70 inline-flex items-center justify-center font-mono text-[10px] font-bold text-emerald-300">?</span>
-              <span>Arti Istilah</span>
-            </button>
+              <!-- Sort By Selector -->
+              <select id="filterSortBy" class="col-span-2 sm:col-span-1 w-full sm:w-auto px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
+                <option value="score" class="bg-slate-900 text-white">Urutkan: Skor Tertinggi</option>
+                <option value="vol_ratio" class="bg-slate-900 text-white">Urutkan: Lonjakan Volume</option>
+                <option value="vwap" class="bg-slate-900 text-white">Urutkan: Jarak VWAP Terdekat</option>
+                <option value="pct_change" class="bg-slate-900 text-white">Urutkan: % Kenaikan</option>
+              </select>
+            </div>
           </div>
 
-          <!-- Table Container -->
-          <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse text-xs">
+          <!-- Desktop Table Container (Tampil di Layar Desktop & Tablet >= md) -->
+          <div class="overflow-x-auto hidden md:block">
+            <table class="w-full text-left border-collapse text-xs min-w-[680px]">
               <thead class="sticky top-0 bg-slate-900/90 backdrop-blur-md border-b border-white/[0.08] text-slate-300 font-semibold select-none z-10">
                 <tr id="screenerTableHeader">
                   <th class="py-3 pl-4 pr-2">Saham</th>
-                  <th class="py-3 px-2 text-right">Harga</th>
-                  <th class="py-3 px-2 text-right">Perubahan</th>
-                  <th class="py-3 px-2 text-center">
+                  <th class="py-3 px-2 text-right whitespace-nowrap">Harga</th>
+                  <th class="py-3 px-2 text-right whitespace-nowrap">Perubahan</th>
+                  <th class="py-3 px-2 text-center whitespace-nowrap">
                     <span id="colHeaderVolume">Volume / Sinyal</span>
                     <button type="button" class="term-tip ml-1 text-slate-400 hover:text-emerald-300 font-normal inline-flex items-center" onclick="openGlossaryModal('vsa')" title="VSA: Volume Spread Analysis.">ⓘ</button>
                   </th>
-                  <th class="py-3 px-2 text-right">
+                  <th class="py-3 px-2 text-right whitespace-nowrap">
                     <span id="colHeaderScore">Skor VSA</span>
                     <button type="button" class="term-tip ml-1 text-slate-400 hover:text-emerald-300 font-normal inline-flex items-center" onclick="openGlossaryModal('smart_money')" title="Skor gabungan 5 pilar kuantitatif aliran dana besar.">ⓘ</button>
                   </th>
-                  <th class="py-3 pl-2 pr-4 text-left">
+                  <th class="py-3 pl-2 pr-4 text-left whitespace-nowrap">
                     <span id="colHeaderProfile">Profil VSA &amp; VWAP 5H</span>
                     <button type="button" class="term-tip ml-1 text-slate-400 hover:text-emerald-300 font-normal inline-flex items-center" onclick="openGlossaryModal('vwap')" title="VWAP 5H: Volume-Weighted Average Price 5 hari sebagai jangkar support.">ⓘ</button>
                   </th>
                 </tr>
               </thead>
               <tbody id="screenerTableBody" class="divide-y divide-white/[0.05]">
-                <!-- Skeleton Loader Tabel (Temuan K6) -->
-                <tr class="animate-pulse">
-                  <td class="py-4 pl-4 pr-2"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-slate-800/80"></div><div class="space-y-1"><div class="h-3.5 bg-slate-800 rounded w-14"></div><div class="h-2.5 bg-slate-800/60 rounded w-20"></div></div></div></td>
-                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-16 ml-auto"></div></td>
-                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-12 ml-auto"></div></td>
-                  <td class="py-4 px-2 text-center"><div class="h-5 bg-slate-800/60 rounded-full w-20 mx-auto"></div></td>
-                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-10 ml-auto"></div></td>
-                  <td class="py-4 pl-2 pr-4"><div class="space-y-1"><div class="h-3 bg-slate-800/60 rounded w-28"></div><div class="h-2.5 bg-slate-800/40 rounded w-36"></div></div></td>
-                </tr>
-                <tr class="animate-pulse">
-                  <td class="py-4 pl-4 pr-2"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-slate-800/80"></div><div class="space-y-1"><div class="h-3.5 bg-slate-800 rounded w-14"></div><div class="h-2.5 bg-slate-800/60 rounded w-20"></div></div></div></td>
-                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-16 ml-auto"></div></td>
-                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-12 ml-auto"></div></td>
-                  <td class="py-4 px-2 text-center"><div class="h-5 bg-slate-800/60 rounded-full w-20 mx-auto"></div></td>
-                  <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-10 ml-auto"></div></td>
-                  <td class="py-4 pl-2 pr-4"><div class="space-y-1"><div class="h-3 bg-slate-800/60 rounded w-28"></div><div class="h-2.5 bg-slate-800/40 rounded w-36"></div></div></td>
-                </tr>
+                <!-- Skeleton Loader Desktop -->
                 <tr class="animate-pulse">
                   <td class="py-4 pl-4 pr-2"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-slate-800/80"></div><div class="space-y-1"><div class="h-3.5 bg-slate-800 rounded w-14"></div><div class="h-2.5 bg-slate-800/60 rounded w-20"></div></div></div></td>
                   <td class="py-4 px-2 text-right"><div class="h-4 bg-slate-800/70 rounded w-16 ml-auto"></div></td>
@@ -827,6 +814,41 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- Mobile Screener List Container (Khusus Tampilan Mobile < md: Rapi, Proporsional, Tanpa Teks Terpotong) -->
+          <div id="screenerMobileList" class="block md:hidden p-2.5 space-y-2">
+            <!-- Skeleton Loader Mobile -->
+            <div class="p-3 rounded-xl bg-slate-900/50 border border-white/5 space-y-2 animate-pulse">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-7 h-7 rounded-lg bg-slate-800"></div>
+                  <div class="h-4 bg-slate-800 rounded w-16"></div>
+                </div>
+                <div class="h-4 bg-slate-800 rounded w-14"></div>
+              </div>
+              <div class="h-3 bg-slate-800/60 rounded w-3/4"></div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-900/50 border border-white/5 space-y-2 animate-pulse">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-7 h-7 rounded-lg bg-slate-800"></div>
+                  <div class="h-4 bg-slate-800 rounded w-16"></div>
+                </div>
+                <div class="h-4 bg-slate-800 rounded w-14"></div>
+              </div>
+              <div class="h-3 bg-slate-800/60 rounded w-3/4"></div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-900/50 border border-white/5 space-y-2 animate-pulse">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-7 h-7 rounded-lg bg-slate-800"></div>
+                  <div class="h-4 bg-slate-800 rounded w-16"></div>
+                </div>
+                <div class="h-4 bg-slate-800 rounded w-14"></div>
+              </div>
+              <div class="h-3 bg-slate-800/60 rounded w-3/4"></div>
+            </div>
           </div>
 
           <!-- Pagination Bar -->
@@ -2284,6 +2306,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=94.4"></script>
+  <script src="/static/app.js?v=94.5"></script>
 </body>
 </html>
