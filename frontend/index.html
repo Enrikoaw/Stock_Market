@@ -1,3 +1,4 @@
+Warning: fs was declared with const; use let for reassignable variables.
 <!DOCTYPE html>
 <html lang="id" class="dark">
 <head>
@@ -945,10 +946,11 @@
           <!-- 2b. KORELASI SENTIMEN BERITA x SMART MONEY (mengikuti emiten terpilih) -->
           <div id="stockNewsCatalystCard" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.08] space-y-2.5">
             <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-bold text-slate-900 dark:text-white">Korelasi Sentimen Berita &amp; Smart Money</span>
+              <span class="text-xs font-bold text-slate-900 dark:text-white">Analisis Berita &amp; Broker</span>
               <span id="snc-verdict" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-slate-700/40 text-slate-300 border border-white/10">Memuat...</span>
             </div>
-            <div id="snc-factors" class="grid grid-cols-2 gap-1.5 text-[10px]"></div>
+            <button id="snc-factors-toggle" type="button" onclick="toggleCatalystDetails()" class="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline">Lihat 4 kriteria</button>
+            <div id="snc-factors" class="hidden grid grid-cols-2 gap-1.5 text-[10px]"></div>
             <p id="snc-note" class="text-[11px] text-slate-500 dark:text-slate-300 leading-relaxed"></p>
 
             <!-- BROKER SUMMARY (BANDARMOLOGY) REAL-TIME TEPAT DI ATAS BERITA KONTAN -->
@@ -987,21 +989,21 @@
               </div>
             </div>
 
-            <div class="text-[11px] text-slate-700 dark:text-slate-300 flex items-center justify-between bg-white border border-slate-200 dark:bg-white/[0.02] dark:border-white/5 p-2 rounded-lg shadow-xs dark:shadow-none">
-              <span>Target 2 (Kawal 50% Lot): <span id="planTarget2" class="font-mono text-emerald-700 dark:text-emerald-300 font-semibold">-</span></span>
-              <span id="planRationale" class="text-slate-600 dark:text-slate-300 truncate max-w-[180px]">-</span>
-            </div>
+            <details class="text-[11px] text-slate-700 dark:text-slate-300 bg-white border border-slate-200 dark:bg-white/[0.02] dark:border-white/5 rounded-lg shadow-xs dark:shadow-none">
+              <summary class="cursor-pointer list-none p-2 text-slate-500 dark:text-slate-400">Detail target &amp; alasan</summary>
+              <div class="px-2 pb-2 flex items-center justify-between gap-2">
+                <span>Target 2 (50% lot): <span id="planTarget2" class="font-mono text-emerald-700 dark:text-emerald-300 font-semibold">-</span></span>
+                <span id="planRationale" class="text-slate-600 dark:text-slate-300 truncate max-w-[180px]">-</span>
+              </div>
+            </details>
 
             <!-- JEJAK BROKER SMART MONEY (BROKSUM) DI TRADING PLAN -->
-            <div id="planBroksumSection" class="p-2.5 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/20 text-xs space-y-1.5 shadow-xs">
-              <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  Jejak Akumulasi Broksum (Smart Money)
-                </span>
-                <span id="planBroksumBadge" class="font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">-</span>
+            <div id="planBroksumSection" class="p-2 rounded-lg bg-slate-100/70 dark:bg-slate-800/40 border border-slate-200 dark:border-white/[0.08] text-xs shadow-xs">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Konfirmasi broker</span>
+                <span id="planBroksumBadge" class="font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/20">-</span>
               </div>
-              <div class="grid grid-cols-2 gap-2 text-[11px] pt-0.5">
+              <div class="hidden">
                 <div>
                   <span class="text-slate-500 dark:text-slate-400 block text-[10px]">Buyer Dominan (Akumulasi):</span>
                   <span id="planTopBuyers" class="font-mono font-bold text-emerald-600 dark:text-emerald-400">-</span>
