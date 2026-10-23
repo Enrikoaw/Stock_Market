@@ -957,6 +957,63 @@ def _apply_buy_readiness(items: list) -> None:
             it["buy_status_reason"] = v.get("buy_status_reason")
             if v.get("holder_type"):
                 it["broker_holder_type"] = v.get("holder_type")
+            for k in ("bdr_pct", "bandar_avg_buy", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list"):
+                if v.get(k) is not None and not it.get(k):
+                    it[k] = v[k]
+
+
+def _sync_buy_readiness_to_tracker() -> None:
+    """Sinkronkan saham hasil validasi broksum 3H (SIAP_BELI & MENUNGGU) ke tabel Watchlist Pantauan,
+    dan hapus yang DITOLAK dari antrean Watchlist."""
+    try:
+        from broker_summary_fetcher import load_buy_readiness
+        from screener_engine import _round_idx_tick
+        br = load_buy_readiness()
+    except Exception:
+        return
+    if not br:
+        return
+    analysis = STATE.get("analysis") or {}
+    details_map = analysis.get("details") or {}
+    latest_dt = str((analysis.get("kpis") or {}).get("latest_date") or datetime.now().strftime("%Y-%m-%d"))
+
+    for t_up, v in br.items():
+        base = details_map.get(t_up)
+        d = dict(base) if base else {"ticker": t_up}
+        d["buy_status"] = v.get("buy_status")
+        d["buy_status_reason"] = v.get("buy_status_reason")
+        d["broker_holder_type"] = v.get("holder_type")
+        for k in ("bdr_pct", "bandar_avg_buy", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list"):
+            if v.get(k) is not None:
+                d[k] = v[k]
+        if v.get("close"):
+            d["close"] = float(v["close"])
+
+        # Sinkronkan juga ke details_map di memori agar Trading Plan punya entry_price = Support Avg Bandar
+        if base and v.get("bandar_avg_buy"):
+            for k in ("buy_status", "buy_status_reason", "bdr_pct", "bandar_avg_buy", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list"):
+                if v.get(k) is not None:
+                    base[k] = v[k]
+            if v.get("buy_status") in ("SIAP_BELI", "MENUNGGU"):
+                base["retail_trap"] = False
+                d["retail_trap"] = False
+            b_avg = float(v["bandar_avg_buy"])
+            if base.get("trading_plan") and b_avg > 0 and v.get("buy_status") in ("SIAP_BELI", "MENUNGGU"):
+                from signal_tracker import align_signal_prices
+                rev_ep, rev_sl, rev_tp1, rev_tp2 = align_signal_prices(b_avg)
+                base["trading_plan"]["entry_price"] = rev_ep
+                base["trading_plan"]["entry_low"] = rev_ep
+                base["trading_plan"]["entry_high"] = rev_ep
+                base["trading_plan"]["stop_loss"] = rev_sl
+                base["trading_plan"]["target_1"] = rev_tp1
+                base["trading_plan"]["target_2"] = rev_tp2
+                base["trading_plan"]["support_label"] = "Support Avg Bandar"
+                d["trading_plan"] = base["trading_plan"]
+
+        try:
+            TRACKER._ensure_candidate_in_watchlist(d, str(v.get("date") or latest_dt), "Validasi Broksum 3H")
+        except Exception as ex:
+            print(f"[SyncBuyReadiness] Warning {t_up}: {ex}")
 
 
 
@@ -1548,9 +1605,16 @@ def download_excel_template(mode: Literal["sample", "blank"] = Query(default="sa
 
 @app.get("/api/tracker/stats")
 def tracker_stats() -> dict:
+    _sync_buy_readiness_to_tracker()
+    st = TRACKER.stats()
+    wl_rows = [dict(r) for r in TRACKER.list_signals(status="WATCHLIST")]
+    _apply_buy_readiness(wl_rows)
+    st["priority"] = min(3, sum(1 for r in wl_rows if r.get("buy_status") == "SIAP_BELI"))
+    st["watchlist_waiting"] = sum(1 for r in wl_rows if r.get("buy_status") not in ("SIAP_BELI", "DITOLAK"))
+    st["watchlist"] = st["priority"] + st["watchlist_waiting"]
     return {
         "config": TRACKER.config(),
-        "stats": TRACKER.stats(),
+        "stats": st,
         "last_tracker_run": STATE.get("last_tracker_run"),
         "is_real_market": STATE.get("is_real_market"),
     }
@@ -1561,8 +1625,10 @@ def tracker_signals(
     status: str = Query(default="ALL"),
     sort_by: str = Query(default="id_desc", description="Urutkan sinyal: pnl_desc, pnl_asc, score_desc, date_desc, ticker_asc, distance_asc"),
 ) -> dict:
-    if status.upper() == "PRIORITY":
-        rows = TRACKER.get_priority_watchlist_candidates(limit=3)
+    _sync_buy_readiness_to_tracker()
+    st_up = status.upper()
+    if st_up == "PRIORITY":
+        rows = TRACKER.list_signals(status="WATCHLIST", sort_by="distance_asc")
     else:
         rows = TRACKER.list_signals(status=status, sort_by=sort_by)
 
@@ -1625,6 +1691,13 @@ def tracker_signals(
 
     rows = [dict(r) for r in rows]
     _apply_buy_readiness(rows)
+
+    if st_up == "PRIORITY":
+        rows = [r for r in rows if r.get("buy_status") == "SIAP_BELI"][:3]
+    elif st_up == "WATCHLIST":
+        rows = [r for r in rows if r.get("buy_status") not in ("SIAP_BELI", "DITOLAK")]
+    elif st_up == "ALL":
+        rows = [r for r in rows if not (r.get("status") == "WATCHLIST" and r.get("buy_status") == "DITOLAK")]
 
     return {"count": len(rows), "signals": rows}
 

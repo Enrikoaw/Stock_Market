@@ -1904,34 +1904,68 @@ class SignalTracker:
 
             plan = stock.get("trading_plan") or {}
             c_p = float(stock.get("close") or 0)
-            raw_ep = float(plan.get("entry_price") or plan.get("entry_high") or (c_p * 0.98))
-            raw_sl = float(plan.get("stop_loss") or (raw_ep * 0.95))
-            raw_tp1 = float(plan.get("target_1") or plan.get("tp1") or (raw_ep * 1.06))
-            raw_tp2 = float(plan.get("target_2") or plan.get("tp2") or (raw_ep * 1.10))
-
-            e_p, sl, tp1, tp2 = align_signal_prices(raw_ep, raw_sl, raw_tp1, raw_tp2)
-            score = int(stock.get("smart_money_score") or 70)
-            sup_lbl = str(plan.get("support_label") or "Support Terdekat")
+            b_avg = float(stock.get("bandar_avg_buy") or plan.get("bandar_avg_buy") or 0)
+            buy_st = str(stock.get("buy_status") or "").upper()
             trig_type = str(stock.get("trigger_type") or "BIG_ACCUMULATION")
             trig_lbl = str(stock.get("trigger_label") or "Akumulasi Broker")
 
+            # Jika ditolak validasi broksum 3H (atau belum divalidasi broksum namun terdeteksi distribusi/retail trap), hapus dari WATCHLIST
+            if buy_st == "DITOLAK" or (buy_st not in ("SIAP_BELI", "MENUNGGU") and (stock.get("retail_trap") or trig_type == "DISTRIBUTION_WARNING")):
+                if existing and existing["status"] == "WATCHLIST":
+                    conn.execute(delete(signals_table).where(signals_table.c.id == existing["id"]))
+                return
+
+            if buy_st == "SIAP_BELI":
+                trig_type = "BIG_ACCUMULATION"
+                trig_lbl = "Akumulasi Broker"
+            elif buy_st == "MENUNGGU" and trig_type in ("DISTRIBUTION_WARNING", "NO_SIGNAL", "", "NONE"):
+                trig_type = "PULLBACK_ACCUM"
+                trig_lbl = "Pullback Support"
+
+            raw_ep = float(plan.get("entry_price") or plan.get("entry_high") or (c_p * 0.98))
+            sup_lbl = str(plan.get("support_label") or "Support Terdekat")
+            if b_avg > 0 and (buy_st in ("SIAP_BELI", "MENUNGGU") or c_p <= 0 or (0 < c_p * 0.915 <= b_avg <= c_p)):
+                raw_ep = b_avg
+                sup_lbl = "Support Avg Bandar"
+                raw_sl = raw_ep * 0.965
+                raw_tp1 = raw_ep * 1.07
+                raw_tp2 = raw_ep * 1.12
+            else:
+                raw_sl = float(plan.get("stop_loss") or (raw_ep * 0.965))
+                raw_tp1 = float(plan.get("target_1") or plan.get("tp1") or (raw_ep * 1.07))
+                raw_tp2 = float(plan.get("target_2") or plan.get("tp2") or (raw_ep * 1.12))
+
+            e_p, sl, tp1, tp2 = align_signal_prices(raw_ep, raw_sl, raw_tp1, raw_tp2)
+            score = int(stock.get("smart_money_score") or 70)
+            if trig_type in ("NO_SIGNAL", "", "NONE"):
+                trig_type = "BIG_ACCUMULATION" if buy_st == "SIAP_BELI" else "PULLBACK_ACCUM"
+                trig_lbl = "Akumulasi Broker" if buy_st == "SIAP_BELI" else "Pullback Support"
+
+            if buy_st in ("SIAP_BELI", "MENUNGGU"):
+                why_txt = stock.get("buy_status_reason") or "Lolos Broksum 3H"
+                buyers_txt = stock.get("top_buyers") or "-"
+                note_str = f"{'SIAP BELI' if buy_st == 'SIAP_BELI' else 'MENUNGGU'}: {why_txt} · Buyer: {buyers_txt} · Antre di {sup_lbl} (Rp {e_p:,.0f})"
+            else:
+                note_str = f"Pilihan Saham Hari Ini ({session_label}) - Antre Pullback di {sup_lbl}"
+
             if not existing:
-                # Cek apakah emiten sudah pernah Take Profit (WIN) atau exit hari ini / tanggal ini
-                # Sesuai aturan: jika saham sudah take profit di hari yang sama, DILARANG entry kembali!
-                prior_trade_today = conn.execute(
+                # Cek apakah emiten sudah pernah Take Profit (WIN) di hari yang sama (DILARANG entry kembali di hari yang sama!)
+                prior_win_today = conn.execute(
                     select(signals_table).where(
                         signals_table.c.ticker == ticker,
+                        signals_table.c.status == "WIN",
                         or_(
                             signals_table.c.signal_date == date_str,
                             signals_table.c.exit_date == date_str,
                         ),
                     )
                 ).mappings().first()
-                if prior_trade_today:
+                if prior_win_today:
                     return
 
-                # Tolak jika skor di bawah minimum atau terdeteksi distribusi
-                if score < self.min_score or trig_type == "DISTRIBUTION_WARNING":
+                # Saham kandidat hari ini / hasil validasi broksum 3H (SIAP_BELI / MENUNGGU) tetap dicatat ke Watchlist
+                # meskipun skor harian sedang koreksi (< min_score)
+                if buy_st not in ("SIAP_BELI", "MENUNGGU") and score < 45:
                     return
 
                 primary_tp = tp2 if self.tp_level == 2 else tp1
@@ -1944,18 +1978,18 @@ class SignalTracker:
                         score=score,
                         source="AUTO_TODAY",
                         signal_date=date_str,
-                        signal_close=c_p,
+                        signal_close=c_p if c_p > 0 else e_p,
                         entry_low=e_p,
                         entry_high=e_p,
                         stop_loss=sl,
                         target=primary_tp,
                         target_2=tp2,
                         status="WATCHLIST",
-                        last_close=c_p,
+                        last_close=c_p if c_p > 0 else e_p,
                         last_eval_date=None,
                         bars_waited=0,
                         bars_held=0,
-                        note=f"Pilihan Saham Hari Ini ({session_label}) - Antre Pullback di {sup_lbl}",
+                        note=note_str,
                         created_at=_now_str(),
                         updated_at=_now_str(),
                     )
@@ -1972,8 +2006,8 @@ class SignalTracker:
                             stop_loss=sl,
                             target=primary_tp,
                             target_2=tp2,
-                            last_close=c_p,
-                            note=f"Pilihan Saham Hari Ini ({session_label}) - Antre Pullback di {sup_lbl}",
+                            last_close=c_p if c_p > 0 else float(existing.get("last_close") or e_p),
+                            note=note_str,
                             updated_at=_now_str(),
                         )
                     )

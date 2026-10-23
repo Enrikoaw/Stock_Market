@@ -1236,6 +1236,11 @@ def save_buy_readiness(s: dict) -> None:
             "bdr_pct": s.get("bdr_pct"),
             "holder_type": s.get("broker_holder_type"),
             "bandar_avg_buy": s.get("bandar_avg_buy"),
+            "top_buyers": s.get("top_buyers", ""),
+            "top_sellers": s.get("top_sellers", ""),
+            "top_buyers_list": s.get("top_buyers_list", []),
+            "top_sellers_list": s.get("top_sellers_list", []),
+            "close": s.get("close"),
             "date": get_now_wib().strftime("%Y-%m-%d"),
             "ts": get_now_wib().strftime("%H:%M"),
         }
