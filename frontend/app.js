@@ -863,6 +863,17 @@ function selectStockAndGoToInspector(ticker) {
   selectStock(ticker, true, true);
 }
 
+// Buka Trading Plan emiten dari klik notifikasi berita katalis (bar HP / desktop)
+function openTradingPlanFromNotification(ticker) {
+  const t = String(ticker || '').trim().toUpperCase();
+  if (!t) return;
+  selectStockAndGoToInspector(t);
+  // Bersihkan ?ticker= dari URL agar refresh tidak membuka ulang
+  if (window.location.search.includes('ticker=')) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
+
 // =====================================================================
 // MODUL BERITA & SENTIMEN PASAR SAHAM (INTEGRASI SMART MONEY)
 // =====================================================================
@@ -1640,7 +1651,7 @@ async function sendSystemNotification(title, body, url = '/', tag = '') {
       window.focus();
       if (url && url !== '/') {
         const matchTicker = url.match(/ticker=([A-Z0-9]+)/);
-        if (matchTicker) selectStockAndGoToInspector(matchTicker[1]);
+        if (matchTicker) openTradingPlanFromNotification(matchTicker[1]);
       }
       n.close();
     };
@@ -5496,6 +5507,17 @@ document.querySelectorAll('#alertModal, #lotCalculatorModal, #glossaryModal, #up
 // EVENT LISTENERS INITIALIZATION
 // =====================================================================
 document.addEventListener('DOMContentLoaded', async () => {
+  // 0. Deep-link dari notifikasi berita katalis: /?ticker=XXXX -> langsung ke Trading Plan emiten
+  const deepLinkTicker = (new URLSearchParams(window.location.search).get('ticker') || '').trim().toUpperCase();
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (evt) => {
+      const msg = evt.data || {};
+      if (msg.type === 'OPEN_TRADING_PLAN' && msg.ticker) {
+        openTradingPlanFromNotification(String(msg.ticker).toUpperCase());
+      }
+    });
+  }
+
   // 1. Terapkan state mode (Pemula vs Mahir) & Tab Aktif
   applyExpertModeUI();
   switchMainTab(activeMainTab, true);
@@ -5515,6 +5537,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (r.status === 'rejected') console.warn(`[Init] Modul ${initTasks[i][0]} gagal:`, r.reason);
     });
   });
+
+  if (deepLinkTicker && /^[A-Z0-9]{2,6}$/.test(deepLinkTicker)) {
+    initDone.then(() => openTradingPlanFromNotification(deepLinkTicker));
+  }
 
   // 3. Setup filter listeners di Tab Jelajah
   ['filterTrigger', 'filterVolRatio', 'filterMinScore', 'filterSortBy', 'filterMinValue'].forEach((id) => {

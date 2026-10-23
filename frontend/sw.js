@@ -1,8 +1,8 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'smartflow-idx-v94.8';
+const CACHE_NAME = 'smartflow-idx-v94.9';
 const ASSETS_TO_CACHE = [
-  '/static/styles.css?v=94.8',
-  '/static/app.js?v=94.8',
+  '/static/styles.css?v=94.9',
+  '/static/app.js?v=94.9',
   '/manifest.json',
   '/static/icons/icon.svg',
   '/static/icons/icon-192.svg',
@@ -62,13 +62,20 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || '/';
+  const rawTarget = (event.notification.data && event.notification.data.url) || '/';
+  const targetUrl = new URL(rawTarget, self.location.origin);
+  const ticker = (targetUrl.searchParams.get('ticker') || '').toUpperCase();
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {
-        if ('focus' in c) return c.focus();
+        if (c.url.startsWith(self.location.origin) && 'focus' in c) {
+          // Aplikasi sudah terbuka: fokuskan & arahkan langsung ke Trading Plan emiten
+          if (ticker) c.postMessage({ type: 'OPEN_TRADING_PLAN', ticker });
+          return c.focus();
+        }
       }
-      return self.clients.openWindow(target.startsWith('http') ? target : '/');
+      // Aplikasi tertutup: buka dengan parameter ?ticker= agar langsung ke Trading Plan
+      return self.clients.openWindow(targetUrl.href);
     })
   );
 });
