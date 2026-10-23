@@ -4184,9 +4184,10 @@ function renderTrackerTable(rows) {
           ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.exit_date || '')}</div>`
           : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">last</div>`;
 
+        const syncedEntryPrice = r.entry_high || r.entry_low || r.entry_price;
         let entryCell = '<span class="text-slate-400 dark:text-slate-500">-</span>';
         if (r.entry_price) {
-          entryCell = `${fmtNumber(r.entry_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.entry_date || '')}</div>`;
+          entryCell = `${fmtNumber(syncedEntryPrice)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.entry_date || '')}</div>`;
         } else if (r.status === 'WATCHLIST' && r.dist_to_entry_pct !== undefined && r.dist_to_entry_pct !== null) {
           const distNum = Number(r.dist_to_entry_pct);
           const absDist = Math.abs(distNum);
