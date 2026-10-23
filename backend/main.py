@@ -217,6 +217,144 @@ def sync_tracker_to_analysis(analysis: dict | None) -> None:
             _overlay_tracker_signal_on_plan(detail, sig_map[t_up], latest_dt)
 
 
+def _apply_buy_readiness(items: list) -> None:
+    """Tempelkan status SIAP BELI/MENUNGGU/DITOLAK dari Database Broksum 3H lokal (+ buy_readiness.json) ke daftar saham."""
+    try:
+        from broker_summary_fetcher import load_buy_readiness, load_broker_summary_db, compute_buy_readiness
+        br = load_buy_readiness()
+        db_map = load_broker_summary_db()
+    except Exception:
+        return
+    for it in items:
+        t_up = str(it.get("ticker", "")).upper()
+        rec = db_map.get(t_up) if db_map else None
+        if rec:
+            it["bdr_pct"] = rec.get("bdr")
+            it["broker_holder_type"] = rec.get("holder_type", "MIXED")
+            it["bandar_avg_buy"] = rec.get("bandar_avg")
+            it["top_buyers"] = rec.get("top_buyers", "")
+            it["top_sellers"] = rec.get("top_sellers", "")
+            it["top_buyers_list"] = rec.get("top_buyers_list", [])
+            it["top_sellers_list"] = rec.get("top_sellers_list", [])
+            it["retail_trap"] = bool(rec.get("retail_trap", False))
+            it["has_real_broker_summary"] = bool(it["top_buyers_list"] or it["top_sellers_list"])
+            it["broker_date"] = rec.get("date")
+            it["broker_range_from"] = rec.get("range_from")
+            it["broker_analysis"] = {
+                "holder_type": it["broker_holder_type"],
+                "bdr": float(rec.get("bdr") or 0.0),
+                "top_buyers_list": it["top_buyers_list"],
+                "top_sellers_list": it["top_sellers_list"],
+                "bandar_avg": it["bandar_avg_buy"],
+                "retail_trap": it["retail_trap"],
+            }
+            c_px = float(it.get("close") or it.get("last_close") or 0)
+            if it["bandar_avg_buy"] and c_px > 0:
+                it["diff_bandar_avg_pct"] = round(((c_px - float(it["bandar_avg_buy"])) / float(it["bandar_avg_buy"])) * 100.0, 2)
+            compute_buy_readiness(it, persist=False)
+            continue
+
+        v = br.get(t_up) if br else None
+        if v:
+            it["buy_status"] = v.get("buy_status")
+            it["buy_status_reason"] = v.get("buy_status_reason")
+            if v.get("holder_type"):
+                it["broker_holder_type"] = v.get("holder_type")
+            for k in ("bdr_pct", "bandar_avg_buy", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list"):
+                if v.get(k) is not None and not it.get(k):
+                    it[k] = v[k]
+
+
+def _sync_buy_readiness_to_tracker() -> None:
+    """Setiap screener lolos kandidat hari ini, langsung validasi dengan Database Broksum 3H
+    dan masukkan ke Pantauan (SIAP_BELI -> Top 3 Siap Beli, MENUNGGU -> Menunggu, DITOLAK -> hapus)."""
+    try:
+        from broker_summary_fetcher import (
+            load_buy_readiness,
+            load_broker_summary_db,
+            enrich_stock_from_broksum_db,
+        )
+        from signal_tracker import align_signal_prices
+        br = load_buy_readiness()
+        db_map = load_broker_summary_db()
+    except Exception:
+        return
+
+    analysis = STATE.get("analysis") or {}
+    details_map = analysis.get("details") or {}
+    latest_dt = str((analysis.get("kpis") or {}).get("latest_date") or datetime.now().strftime("%Y-%m-%d"))
+
+    # 1. Validasi seluruh Kandidat Saham Pilihan Hari Ini langsung dengan Database Broksum 3H
+    today_cands = analysis.get("today_candidates") or []
+    seen_tickers: set[str] = set()
+    for cand in today_cands:
+        t_up = str(cand.get("ticker") or "").upper()
+        if not t_up:
+            continue
+        seen_tickers.add(t_up)
+        if db_map and t_up in db_map:
+            enrich_stock_from_broksum_db(cand, db_map)
+            if t_up in details_map:
+                enrich_stock_from_broksum_db(details_map[t_up], db_map)
+        try:
+            TRACKER._ensure_candidate_in_watchlist(cand, latest_dt, "Database Broksum 3H")
+        except Exception as ex:
+            print(f"[SyncBroksumDB] Warning candidate {t_up}: {ex}")
+
+    # 2. Sinkronkan juga dari buy_readiness.json (termasuk hasil validasi hari ini)
+    for t_up, v in (br or {}).items():
+        if t_up in seen_tickers:
+            continue
+        base = details_map.get(t_up)
+        d = dict(base) if base else {"ticker": t_up}
+        if db_map and t_up in db_map:
+            enrich_stock_from_broksum_db(d, db_map)
+        else:
+            d["buy_status"] = v.get("buy_status") or d.get("buy_status")
+            d["buy_status_reason"] = v.get("buy_status_reason") or d.get("buy_status_reason")
+            d["broker_holder_type"] = v.get("holder_type") or d.get("broker_holder_type")
+            for k in ("bdr_pct", "bandar_avg_buy", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list"):
+                if v.get(k) is not None:
+                    d[k] = v[k]
+        if v.get("close") and not d.get("close"):
+            d["close"] = float(v["close"])
+
+        if base and d.get("bandar_avg_buy"):
+            for k in ("buy_status", "buy_status_reason", "bdr_pct", "bandar_avg_buy", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list"):
+                if d.get(k) is not None:
+                    base[k] = d[k]
+            if d.get("buy_status") in ("SIAP_BELI", "MENUNGGU"):
+                base["retail_trap"] = False
+                d["retail_trap"] = False
+            b_avg = float(d["bandar_avg_buy"])
+            if base.get("trading_plan") and b_avg > 0 and d.get("buy_status") in ("SIAP_BELI", "MENUNGGU"):
+                rev_ep, rev_sl, rev_tp1, rev_tp2 = align_signal_prices(b_avg)
+                base["trading_plan"]["entry_price"] = rev_ep
+                base["trading_plan"]["entry_low"] = rev_ep
+                base["trading_plan"]["entry_high"] = rev_ep
+                base["trading_plan"]["stop_loss"] = rev_sl
+                base["trading_plan"]["target_1"] = rev_tp1
+                base["trading_plan"]["target_2"] = rev_tp2
+                base["trading_plan"]["support_label"] = "Support Avg Bandar"
+                d["trading_plan"] = base["trading_plan"]
+
+        try:
+            TRACKER._ensure_candidate_in_watchlist(d, latest_dt, "Database Broksum 3H")
+        except Exception as ex:
+            print(f"[SyncBuyReadiness] Warning {t_up}: {ex}")
+
+    # 3. Audit seluruh sinyal WATCHLIST yang sudah ada terhadap Database Broksum 3H: hapus jika DITOLAK
+    if db_map:
+        try:
+            wl_existing = [dict(r) for r in TRACKER.list_signals(status="WATCHLIST")]
+            _apply_buy_readiness(wl_existing)
+            for r in wl_existing:
+                if r.get("buy_status") == "DITOLAK" and r.get("id"):
+                    TRACKER.delete_signal(int(r["id"]))
+        except Exception:
+            pass
+
+
 def _process_tracker(analysis: dict, sync_live_network: bool = False, force_auto_track: bool = False) -> dict:
     """Evaluasi sinyal aktif dengan candle baru, lalu catat sinyal akumulasi baru ke Watchlist.
     Hanya berjalan untuk data pasar REAL (bukan simulasi / upload manual).
@@ -252,6 +390,12 @@ def _process_tracker(analysis: dict, sync_live_network: bool = False, force_auto
 
             # Pencatatan sinyal akumulasi tanpa pembekuan IHSG
             result["added"] = TRACKER.auto_track(analysis)
+
+            # Validasi instan kandidat & Watchlist dengan Database Broksum 3H lokal
+            try:
+                _sync_buy_readiness_to_tracker()
+            except Exception as e_br:
+                print(f"[Tracker] Sync broksum DB to tracker warning: {e_br}")
 
             # Auto-expire antrean Watchlist yang sudah stale (> 3 hari bursa tanpa kena zona entry)
             try:
@@ -330,34 +474,18 @@ def _run_sync_job_blocking(with_broker_enrichment: bool = False) -> dict:
             print(f"[Sync] ✅ Jadwal Broksum Valid ({session_name}): {reason}")
 
     if with_broker_enrichment and has_api_cred:
-        print(f"[Sync] 📡 Mengambil Broker Summary Invezgo ({session_name}) untuk tanggal {latest_dt} (Pilihan Hari Ini & Watchlist)...")
-        enrich_candidates_and_watchlist(
-            analysis,
-            str(latest_dt),
-            tracker=TRACKER,
-            cfg=broker_cfg,
-            max_total_candidates=broker_cfg.get("max_candidates", 35),
-            force=True,  # Telah diverifikasi jadwal 2x sehari oleh can_run_broker_sync_now di atas
-        )
-        if session_name:
-            record_broker_sync_done(session_name, str(latest_dt))
-            if session_name == "sesi1":
-                LAST_BROKSUM_SESI1_DATE = str(latest_dt)
-            elif session_name == "sesi2":
-                LAST_BROKSUM_SESI2_DATE = str(latest_dt)
-
-        # Audit Smart Money & Eliminasi sinyal Watchlist yang didominasi ritel / distribusi
+        print(f"[Sync] 📡 Jam Update Broksum EOD ({session_name}): Menarik Broksum 3H seluruh saham terdaftar ke Database ({latest_dt})...")
+        from broker_summary_fetcher import sync_all_stocks_broksum_eod, apply_broksum_db_to_analysis
+        sync_all_stocks_broksum_eod(str(latest_dt))
+        apply_broksum_db_to_analysis(analysis)
         try:
-            filter_and_purge_watchlist_by_smart_money(
-                TRACKER,
-                analysis=analysis,
-                date_str=str(latest_dt),
-                cfg=broker_cfg,
-            )
-        except Exception as exc:
-            print(f"[Sync] Warning purge retail watchlist: {exc}")
+            analysis["today_candidates"] = select_today_candidates(analysis.get("stocks", []))
+        except Exception:
+            pass
+        if session_name == "sesi2":
+            LAST_BROKSUM_SESI2_DATE = str(latest_dt)
     else:
-        print("[Sync] ⏱️ Update Harga Pasar Intraday: Hanya memperbarui pergerakan harga OHLC & evaluasi Running/SL/TP (Broksum API di-skip total).")
+        print("[Sync] ⏱️ Update Harga Pasar: Validasi kandidat & Watchlist langsung menggunakan Database Broksum 3H lokal (0 API call).")
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     STATE["source_name"] = f"Live IDX ({latest_dt})"
@@ -536,25 +664,11 @@ async def _background_market_session_worker() -> None:
             is_trading_day = now_wib.weekday() < 5 and not _is_idx_holiday(now_wib.date())
             is_jumat = (now_wib.weekday() == 4)
 
-            # Muat status sinkronisasi persisten untuk memastikan batas maksimal 2x sehari tidak terlanggar
+            # Muat status sinkronisasi persisten EOD (1x sehari jam 18:00 WIB)
             sync_st = load_broker_sync_state()
-            LAST_BROKSUM_SESI1_DATE = sync_st.get("sesi1_last_date")
             LAST_BROKSUM_SESI2_DATE = sync_st.get("sesi2_last_date")
 
-            # 1. Jadwal Selesai Sesi 1 (Jumat 11:30 - 13:45 WIB, Senin-Kamis 12:00 - 13:15 WIB)
-            # Menarik broker summary Invezgo untuk menyaring kandidat Watchlist Hari Ini (Hanya 1x sehari)
-            is_sesi1_time = (
-                (is_jumat and dtime(11, 30) <= now_wib.time() <= dtime(13, 45))
-                or (not is_jumat and dtime(12, 0) <= now_wib.time() <= dtime(13, 15))
-            )
-            needs_sesi1_broksum_sync = (
-                is_trading_day
-                and is_sesi1_time
-                and LAST_BROKSUM_SESI1_DATE != today_str
-            )
-
-            # 2. Jadwal Selesai Sesi 2 / Sekitar Jam 6 Sore WIB (18:00 - 22:00 WIB)
-            # Menarik broker summary Invezgo penutupan resmi IDX & evaluasi final status sinyal Take Profit / Stop Loss (Hanya 1x sehari)
+            # Jadwal Update Broksum EOD Jam 18:00 - 22:00 WIB (1x sehari: tarik semua saham terdaftar ke Database)
             is_sesi2_time = (dtime(18, 0) <= now_wib.time() <= dtime(22, 0))
             needs_sesi2_broksum_sync = (
                 is_trading_day
@@ -573,17 +687,14 @@ async def _background_market_session_worker() -> None:
             with_broksum = False
 
             if not STATE["is_syncing"] and not get_sync_lock().locked():
-                if needs_sesi1_broksum_sync:
-                    should_sync = True
-                    with_broksum = True
-                elif needs_sesi2_broksum_sync:
+                if needs_sesi2_broksum_sync:
                     should_sync = True
                     with_broksum = True
                 elif needs_close_price_sync:
                     should_sync = True
                     with_broksum = False
                 elif market_open and (now_ts - last_sync_attempt_ts >= 300):
-                    # Update harga pasar rutin setiap 5 menit saat bursa aktif: HANYA update harga OHLC (TANPA broksum!)
+                    # Update harga pasar rutin setiap 5 menit saat bursa aktif: validasi memakai Database Broksum lokal
                     should_sync = True
                     with_broksum = False
                 elif cache_stale and (now_ts - last_sync_attempt_ts >= 1800):
@@ -596,23 +707,19 @@ async def _background_market_session_worker() -> None:
             if should_sync:
                 print(
                     f"[MarketWorker] Menjalankan sinkronisasi background "
-                    f"(with_broksum={with_broksum}, market_open={market_open}, sesi1_due={needs_sesi1_broksum_sync}, sesi2_due={needs_sesi2_broksum_sync}, close_due={needs_close_price_sync})..."
+                    f"(with_broksum={with_broksum}, market_open={market_open}, eod_broksum_due={needs_sesi2_broksum_sync}, close_due={needs_close_price_sync})..."
                 )
                 last_sync_attempt_ts = now_ts
                 synced_ok = await trigger_safe_sync(with_broker_enrichment=with_broksum)
                 if synced_ok:
-                    if needs_sesi1_broksum_sync:
-                        LAST_BROKSUM_SESI1_DATE = today_str
-                        record_broker_sync_done("sesi1", today_str)
-                        print(f"[MarketWorker] ✅ Selesai Sesi 1 ({today_str}): Penarikan Broksum Invezgo (1/2) & Filter Smart Money selesai.")
                     if needs_sesi2_broksum_sync:
                         LAST_BROKSUM_SESI2_DATE = today_str
                         LAST_CLOSE_SYNC_DATE = today_str
                         record_broker_sync_done("sesi2", today_str)
-                        print(f"[MarketWorker] ✅ Selesai Sesi 2 ({today_str}): Penarikan Broksum Invezgo (2/2 selesai ~18:00 WIB) & Evaluasi Take Profit selesai.")
+                        print(f"[MarketWorker] ✅ Database Broksum EOD ({today_str}) selesai diperbarui untuk seluruh saham terdaftar.")
                     elif needs_close_price_sync:
                         LAST_CLOSE_SYNC_DATE = today_str
-                        print(f"[MarketWorker] ✅ Penutupan Pasar ({today_str}): Candle penutupan tersimpan. Broksum dijadwalkan pukul 18:00 WIB.")
+                        print(f"[MarketWorker] ✅ Penutupan Pasar ({today_str}): Candle penutupan tersimpan. Update Database Broksum dijadwalkan pukul 18:00 WIB.")
         except Exception as exc:
             print(f"[MarketWorker] Error: {exc}")
 
@@ -939,83 +1046,6 @@ def _screener_compute(
         "stocks": stocks,
         "today_candidates": today_cands or [],
     }
-
-
-def _apply_buy_readiness(items: list) -> None:
-    """Tempelkan status SIAP BELI/MENUNGGU/DITOLAK hasil validasi broksum 3H (persisten) ke daftar saham."""
-    try:
-        from broker_summary_fetcher import load_buy_readiness
-        br = load_buy_readiness()
-    except Exception:
-        return
-    if not br:
-        return
-    for it in items:
-        v = br.get(str(it.get("ticker", "")).upper())
-        if v:
-            it["buy_status"] = v.get("buy_status")
-            it["buy_status_reason"] = v.get("buy_status_reason")
-            if v.get("holder_type"):
-                it["broker_holder_type"] = v.get("holder_type")
-            for k in ("bdr_pct", "bandar_avg_buy", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list"):
-                if v.get(k) is not None and not it.get(k):
-                    it[k] = v[k]
-
-
-def _sync_buy_readiness_to_tracker() -> None:
-    """Sinkronkan saham hasil validasi broksum 3H (SIAP_BELI & MENUNGGU) ke tabel Watchlist Pantauan,
-    dan hapus yang DITOLAK dari antrean Watchlist."""
-    try:
-        from broker_summary_fetcher import load_buy_readiness
-        from screener_engine import _round_idx_tick
-        br = load_buy_readiness()
-    except Exception:
-        return
-    if not br:
-        return
-    analysis = STATE.get("analysis") or {}
-    details_map = analysis.get("details") or {}
-    latest_dt = str((analysis.get("kpis") or {}).get("latest_date") or datetime.now().strftime("%Y-%m-%d"))
-
-    for t_up, v in br.items():
-        base = details_map.get(t_up)
-        d = dict(base) if base else {"ticker": t_up}
-        d["buy_status"] = v.get("buy_status")
-        d["buy_status_reason"] = v.get("buy_status_reason")
-        d["broker_holder_type"] = v.get("holder_type")
-        for k in ("bdr_pct", "bandar_avg_buy", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list"):
-            if v.get(k) is not None:
-                d[k] = v[k]
-        if v.get("close"):
-            d["close"] = float(v["close"])
-
-        # Sinkronkan juga ke details_map di memori agar Trading Plan punya entry_price = Support Avg Bandar
-        if base and v.get("bandar_avg_buy"):
-            for k in ("buy_status", "buy_status_reason", "bdr_pct", "bandar_avg_buy", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list"):
-                if v.get(k) is not None:
-                    base[k] = v[k]
-            if v.get("buy_status") in ("SIAP_BELI", "MENUNGGU"):
-                base["retail_trap"] = False
-                d["retail_trap"] = False
-            b_avg = float(v["bandar_avg_buy"])
-            if base.get("trading_plan") and b_avg > 0 and v.get("buy_status") in ("SIAP_BELI", "MENUNGGU"):
-                from signal_tracker import align_signal_prices
-                rev_ep, rev_sl, rev_tp1, rev_tp2 = align_signal_prices(b_avg)
-                base["trading_plan"]["entry_price"] = rev_ep
-                base["trading_plan"]["entry_low"] = rev_ep
-                base["trading_plan"]["entry_high"] = rev_ep
-                base["trading_plan"]["stop_loss"] = rev_sl
-                base["trading_plan"]["target_1"] = rev_tp1
-                base["trading_plan"]["target_2"] = rev_tp2
-                base["trading_plan"]["support_label"] = "Support Avg Bandar"
-                d["trading_plan"] = base["trading_plan"]
-
-        try:
-            TRACKER._ensure_candidate_in_watchlist(d, str(v.get("date") or latest_dt), "Validasi Broksum 3H")
-        except Exception as ex:
-            print(f"[SyncBuyReadiness] Warning {t_up}: {ex}")
-
-
 
 
 SCREENER_MEMO: dict = {}
@@ -1609,7 +1639,7 @@ def tracker_stats() -> dict:
     st = TRACKER.stats()
     wl_rows = [dict(r) for r in TRACKER.list_signals(status="WATCHLIST")]
     _apply_buy_readiness(wl_rows)
-    st["priority"] = min(3, sum(1 for r in wl_rows if r.get("buy_status") == "SIAP_BELI"))
+    st["priority"] = sum(1 for r in wl_rows if r.get("buy_status") == "SIAP_BELI")
     st["watchlist_waiting"] = sum(1 for r in wl_rows if r.get("buy_status") not in ("SIAP_BELI", "DITOLAK"))
     st["watchlist"] = st["priority"] + st["watchlist_waiting"]
     return {
@@ -1693,7 +1723,7 @@ def tracker_signals(
     _apply_buy_readiness(rows)
 
     if st_up == "PRIORITY":
-        rows = [r for r in rows if r.get("buy_status") == "SIAP_BELI"][:3]
+        rows = [r for r in rows if r.get("buy_status") == "SIAP_BELI"]
     elif st_up == "WATCHLIST":
         rows = [r for r in rows if r.get("buy_status") not in ("SIAP_BELI", "DITOLAK")]
     elif st_up == "ALL":

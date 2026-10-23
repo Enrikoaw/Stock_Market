@@ -7,8 +7,16 @@
   "bandar_avg_buy": 405,
   "top_buyers": "BK, AK, ZP",
   "top_sellers": "SQ, DX, LG",
-  "top_buyers_list": ["BK", "AK", "ZP"],
-  "top_sellers_list": ["SQ", "DX", "LG"],
+  "top_buyers_list": [
+   "BK",
+   "AK",
+   "ZP"
+  ],
+  "top_sellers_list": [
+   "SQ",
+   "DX",
+   "LG"
+  ],
   "close": 408.0,
   "date": "2026-10-23",
   "ts": "19:55"
@@ -21,8 +29,16 @@
   "bandar_avg_buy": 356,
   "top_buyers": "LG, CC, BK",
   "top_sellers": "XC, ZP, YP",
-  "top_buyers_list": ["LG", "CC", "BK"],
-  "top_sellers_list": ["XC", "ZP", "YP"],
+  "top_buyers_list": [
+   "LG",
+   "CC",
+   "BK"
+  ],
+  "top_sellers_list": [
+   "XC",
+   "ZP",
+   "YP"
+  ],
   "close": 360.0,
   "date": "2026-10-23",
   "ts": "19:55"
@@ -35,8 +51,16 @@
   "bandar_avg_buy": 1057,
   "top_buyers": "LS, CP, AK",
   "top_sellers": "TP, DU, GR",
-  "top_buyers_list": ["LS", "CP", "AK"],
-  "top_sellers_list": ["TP", "DU", "GR"],
+  "top_buyers_list": [
+   "LS",
+   "CP",
+   "AK"
+  ],
+  "top_sellers_list": [
+   "TP",
+   "DU",
+   "GR"
+  ],
   "close": 1060.0,
   "date": "2026-10-23",
   "ts": "19:55"
@@ -49,8 +73,16 @@
   "bandar_avg_buy": 3066,
   "top_buyers": "CP, BK, OD",
   "top_sellers": "CC, XC, AZ",
-  "top_buyers_list": ["CP", "BK", "OD"],
-  "top_sellers_list": ["CC", "XC", "AZ"],
+  "top_buyers_list": [
+   "CP",
+   "BK",
+   "OD"
+  ],
+  "top_sellers_list": [
+   "CC",
+   "XC",
+   "AZ"
+  ],
   "close": 3090.0,
   "date": "2026-10-23",
   "ts": "19:55"
@@ -63,10 +95,238 @@
   "bandar_avg_buy": 6573,
   "top_buyers": "PD, DX, CC",
   "top_sellers": "LG, YU, KZ",
-  "top_buyers_list": ["PD", "DX", "CC"],
-  "top_sellers_list": ["LG", "YU", "KZ"],
+  "top_buyers_list": [
+   "PD",
+   "DX",
+   "CC"
+  ],
+  "top_sellers_list": [
+   "LG",
+   "YU",
+   "KZ"
+  ],
   "close": 6675.0,
   "date": "2026-10-23",
   "ts": "19:55"
+ },
+ "UNTR": {
+  "buy_status": "SIAP_BELI",
+  "buy_status_reason": "Smart money menampung, BDR +24.7% (3H)",
+  "bdr_pct": 24.73,
+  "holder_type": "SMART_MONEY",
+  "bandar_avg_buy": 24272,
+  "top_buyers": "RX, AK, BB",
+  "top_sellers": "BK, ZP, XL",
+  "top_buyers_list": [
+   "RX",
+   "AK",
+   "BB"
+  ],
+  "top_sellers_list": [
+   "BK",
+   "ZP",
+   "XL"
+  ],
+  "close": 24350,
+  "date": "2026-10-23",
+  "ts": "20:37"
+ },
+ "BTPS": {
+  "buy_status": "SIAP_BELI",
+  "buy_status_reason": "Smart money menampung, BDR +12.8% (3H)",
+  "bdr_pct": 12.8,
+  "holder_type": "SMART_MONEY",
+  "bandar_avg_buy": 981,
+  "top_buyers": "CC, BK, BB",
+  "top_sellers": "AK, XL, AI",
+  "top_buyers_list": [
+   "CC",
+   "BK",
+   "BB"
+  ],
+  "top_sellers_list": [
+   "AK",
+   "XL",
+   "AI"
+  ],
+  "close": 975,
+  "date": "2026-10-23",
+  "ts": "20:37"
+ },
+ "BBNI": {
+  "buy_status": "SIAP_BELI",
+  "buy_status_reason": "Smart money menampung, BDR +15.1% (3H)",
+  "bdr_pct": 15.11,
+  "holder_type": "SMART_MONEY",
+  "bandar_avg_buy": 3324,
+  "top_buyers": "NI, CC, RX",
+  "top_sellers": "AK, ZP, YU",
+  "top_buyers_list": [
+   "NI",
+   "CC",
+   "RX"
+  ],
+  "top_sellers_list": [
+   "AK",
+   "ZP",
+   "YU"
+  ],
+  "close": 3380,
+  "date": "2026-10-23",
+  "ts": "20:37"
+ },
+ "LSIP": {
+  "buy_status": "SIAP_BELI",
+  "buy_status_reason": "Smart money menampung, BDR +24.8% (3H)",
+  "bdr_pct": 24.79,
+  "holder_type": "SMART_MONEY",
+  "bandar_avg_buy": 1442,
+  "top_buyers": "SQ, ZP, BB",
+  "top_sellers": "YU, YB, CC",
+  "top_buyers_list": [
+   "SQ",
+   "ZP",
+   "BB"
+  ],
+  "top_sellers_list": [
+   "YU",
+   "YB",
+   "CC"
+  ],
+  "close": 1470,
+  "date": "2026-10-23",
+  "ts": "20:37"
+ },
+ "PGEO": {
+  "buy_status": "SIAP_BELI",
+  "buy_status_reason": "Smart money menampung, BDR +30.5% (3H)",
+  "bdr_pct": 30.47,
+  "holder_type": "SMART_MONEY",
+  "bandar_avg_buy": 1005,
+  "top_buyers": "PD, KZ, YU",
+  "top_sellers": "CC, XL, YP",
+  "top_buyers_list": [
+   "PD",
+   "KZ",
+   "YU"
+  ],
+  "top_sellers_list": [
+   "CC",
+   "XL",
+   "YP"
+  ],
+  "close": 985,
+  "date": "2026-10-23",
+  "ts": "20:37"
+ },
+ "PANI": {
+  "buy_status": "SIAP_BELI",
+  "buy_status_reason": "Smart money menampung, BDR +13.8% (3H)",
+  "bdr_pct": 13.82,
+  "holder_type": "SMART_MONEY",
+  "bandar_avg_buy": 4463,
+  "top_buyers": "KI, ZP, AO",
+  "top_sellers": "AK, YP, CC",
+  "top_buyers_list": [
+   "KI",
+   "ZP",
+   "AO"
+  ],
+  "top_sellers_list": [
+   "AK",
+   "YP",
+   "CC"
+  ],
+  "close": 4560,
+  "date": "2026-10-23",
+  "ts": "20:37"
+ },
+ "POWR": {
+  "buy_status": "SIAP_BELI",
+  "buy_status_reason": "Smart money menampung, BDR +30.6% (3H)",
+  "bdr_pct": 30.59,
+  "holder_type": "SMART_MONEY",
+  "bandar_avg_buy": 922,
+  "top_buyers": "AK, YP, YB",
+  "top_sellers": "SQ, XL, CC",
+  "top_buyers_list": [
+   "AK",
+   "YP",
+   "YB"
+  ],
+  "top_sellers_list": [
+   "SQ",
+   "XL",
+   "CC"
+  ],
+  "close": 945,
+  "date": "2026-10-23",
+  "ts": "20:37"
+ },
+ "PWON": {
+  "buy_status": "SIAP_BELI",
+  "buy_status_reason": "Smart money menampung, BDR +13.0% (3H)",
+  "bdr_pct": 13.03,
+  "holder_type": "SMART_MONEY",
+  "bandar_avg_buy": 277,
+  "top_buyers": "CC, AK, KZ",
+  "top_sellers": "YU, PD, OD",
+  "top_buyers_list": [
+   "CC",
+   "AK",
+   "KZ"
+  ],
+  "top_sellers_list": [
+   "YU",
+   "PD",
+   "OD"
+  ],
+  "close": 270,
+  "date": "2026-10-23",
+  "ts": "20:37"
+ },
+ "SIDO": {
+  "buy_status": "SIAP_BELI",
+  "buy_status_reason": "Smart money menampung, BDR +16.5% (3H)",
+  "bdr_pct": 16.48,
+  "holder_type": "SMART_MONEY",
+  "bandar_avg_buy": 343,
+  "top_buyers": "PD, DX, DP",
+  "top_sellers": "QA, ZP, SQ",
+  "top_buyers_list": [
+   "PD",
+   "DX",
+   "DP"
+  ],
+  "top_sellers_list": [
+   "QA",
+   "ZP",
+   "SQ"
+  ],
+  "close": 352,
+  "date": "2026-10-23",
+  "ts": "20:37"
+ },
+ "HMSP": {
+  "buy_status": "MENUNGGU",
+  "buy_status_reason": "Campuran, BDR +5.2% (3H), tunggu konfirmasi",
+  "bdr_pct": 5.17,
+  "holder_type": "MIXED",
+  "bandar_avg_buy": 638,
+  "top_buyers": "OD, BK, AK",
+  "top_sellers": "CC, EP, SQ",
+  "top_buyers_list": [
+   "OD",
+   "BK",
+   "AK"
+  ],
+  "top_sellers_list": [
+   "CC",
+   "EP",
+   "SQ"
+  ],
+  "close": 640,
+  "date": "2026-10-23",
+  "ts": "20:37"
  }
 }

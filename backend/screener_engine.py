@@ -2114,24 +2114,46 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         "market_regime": market_regime,
     }
 
-    return {
+    res_payload = {
         "kpis": kpis,
         "stocks": stocks_result,
         "details": stocks_detail_map,
     }
+    try:
+        try:
+            from backend.broker_summary_fetcher import apply_broksum_db_to_analysis
+        except ImportError:
+            from broker_summary_fetcher import apply_broksum_db_to_analysis
+        apply_broksum_db_to_analysis(res_payload)
+    except Exception as ex:
+        print(f"[ScreenerEngine] Warning apply_broksum_db_to_analysis: {ex}")
+
+    return res_payload
 
 
 def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 15) -> list[dict[str, Any]]:
     """
     Menyaring dan memilih saham terbaik untuk menu 'Pilihan Saham Hari Ini'.
-    Strategi Swing Trading: Buy on Pullback / Koreksi Sehat + Akumulasi Broker Nyata.
-    Sesuai prinsip swing: cari saham saat koreksi sehat / harga diskon di area support/modal bandar,
-    bukan saat hijau terbang tinggi (breakout chase).
+    Strategi Swing Trading: Buy on Pullback / Koreksi Sehat + Validasi Broksum 3 Hari Bursa dari Database.
+    Hanya meloloskan saham yang sedang diakumulasi Smart Money (bukan ritel / bukan distribusi).
     """
     if not stocks:
         return []
 
-    # 1. Kriteria Primer: Koreksi Sehat & Akumulasi Broker Kuat di Dekat Modal Bandar
+    try:
+        try:
+            from backend.broker_summary_fetcher import load_broker_summary_db, enrich_stock_from_broksum_db
+        except ImportError:
+            from broker_summary_fetcher import load_broker_summary_db, enrich_stock_from_broksum_db
+        db_map = load_broker_summary_db()
+        if db_map:
+            for s in stocks:
+                if not s.get("buy_status") and str(s.get("ticker") or "").upper() in db_map:
+                    enrich_stock_from_broksum_db(s, db_map)
+    except Exception:
+        pass
+
+    # 1. Kriteria Primer: Koreksi Sehat & Validasi Broksum 3H (Smart Money / Institusi Menampung)
     primary_list = []
     for s in stocks:
         c = float(s.get("close") or 0)
@@ -2149,6 +2171,10 @@ def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 15) -
             continue
         if s.get("trigger_type") == "DISTRIBUTION_WARNING" or s.get("retail_trap"):
             continue
+        if s.get("buy_status") == "DITOLAK" or s.get("broker_holder_type") == "RETAIL":
+            continue
+        if s.get("has_real_broker_summary") and float(s.get("bdr_pct") or 0) < 3.0:
+            continue
         if s.get("tracker_status") in ("WIN", "LOSS"):
             continue
 
@@ -2165,9 +2191,10 @@ def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 15) -
         if is_pullback and has_accum:
             primary_list.append(s)
 
-    # Sort primary candidates by BDR desc, score desc
+    # Prioritaskan SIAP_BELI (Smart Money 3H), lalu BDR 3H tertinggi, lalu skor SM
     primary_list.sort(
         key=lambda x: (
+            2 if x.get("buy_status") == "SIAP_BELI" else (1 if x.get("buy_status") == "MENUNGGU" else 0),
             float(x.get("bdr_pct") or 0),
             int(x.get("smart_money_score") or 0),
             -abs(float(x.get("diff_bandar_avg_pct") or 0)),
@@ -2187,7 +2214,7 @@ def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 15) -
         if len(chosen) >= max_picks:
             break
 
-    # Fallback 1: Jika kandidat kurang dari 5, ambil dari saham akumulasi terbaik yang belum jauh dari modal bandar
+    # Fallback 1: Jika kandidat kurang dari 5, ambil dari saham akumulasi 3H terbaik yang belum jauh dari modal bandar
     if len(chosen) < 5:
         fallback_list = [
             s for s in stocks
@@ -2198,12 +2225,16 @@ def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 15) -
             and (s.get("tape_quality", {}).get("is_organic", True) if isinstance(s.get("tape_quality"), dict) else True)
             and s.get("trigger_type") != "DISTRIBUTION_WARNING"
             and not s.get("retail_trap")
+            and s.get("buy_status") != "DITOLAK"
+            and s.get("broker_holder_type") != "RETAIL"
+            and not (s.get("has_real_broker_summary") and float(s.get("bdr_pct") or 0) < 3.0)
             and s.get("tracker_status") not in ("WIN", "LOSS")
             and float(s.get("pct_change") or 0) <= 4.0
             and (-4.5 <= float(s.get("diff_bandar_avg_pct") or 0) <= 3.5)
         ]
         fallback_list.sort(
             key=lambda x: (
+                2 if x.get("buy_status") == "SIAP_BELI" else (1 if x.get("buy_status") == "MENUNGGU" else 0),
                 -abs(float(x.get("diff_bandar_avg_pct") or 0)),
                 float(x.get("bdr_pct") or 0),
                 int(x.get("smart_money_score") or 0),
@@ -2218,16 +2249,6 @@ def select_today_candidates(stocks: list[dict[str, Any]], max_picks: int = 15) -
                 seen_sectors[sec_cat] = seen_sectors.get(sec_cat, 0) + 1
                 chosen.append(s)
             if len(chosen) >= max_picks:
-                break
-
-    # Fallback 2: Jaminan minimal 3 saham jika data sangat terbatas (tetap tolak saham pucuk terbang)
-    if len(chosen) < 3:
-        for s in stocks:
-            c_val = float(s.get("close") or 0)
-            pct_val = float(s.get("pct_change") or 0)
-            if c_val >= 70 and pct_val <= 4.0 and not any(c["ticker"] == s["ticker"] for c in chosen):
-                chosen.append(s)
-            if len(chosen) >= 3:
                 break
 
     return chosen[:max_picks]

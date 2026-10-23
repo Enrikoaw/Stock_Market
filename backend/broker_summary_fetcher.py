@@ -268,89 +268,46 @@ def record_broker_sync_done(session_type: str, date_str: str) -> None:
 
 def can_run_broker_sync_now(now_dt: datetime | None = None) -> tuple[bool, str, str | None]:
     """
-    Evaluasi Aturan Ketat Penarikan Broker Summary Invezgo (Maksimal 2x Sehari):
-    1. Sesi 1 Selesai di Jam Bursa:
-       - Jumat: 11:30 WIB s/d 13:45 WIB
-       - Senin - Kamis: 12:00 WIB s/d 13:15 WIB
-       - Hanya boleh 1x sehari (jika belum pernah dijalankan untuk tanggal hari ini).
-    2. Sesi 2 Selesai Sekitar Jam 6 Sore WIB:
-       - Senin - Jumat: 18:00 WIB s/d 22:00 WIB
-       - Hanya boleh 1x sehari (jika belum pernah dijalankan untuk tanggal hari ini).
-    3. Di luar kedua jendela ini: DILARANG memanggil API Invezgo untuk proteksi kuota token.
-
-    Returns:
-        (is_allowed: bool, reason_message: str, session_type: Optional[str] ['sesi1', 'sesi2', or None])
+    Evaluasi Aturan Penarikan Database Broker Summary Invezgo (1x Sehari saat EOD Jam 18:00 WIB):
+    - Karena broksum yang dipakai saat bursa buka pagi/siang adalah data EOD hari bursa sebelumnya (akumulasi 3 hari),
+      penarikan hanya dijalankan 1x sehari setiap bursa tutup / jam update broksum keluar (18:00 - 22:00 WIB).
+    - Di jam bursa aktif, seluruh validasi kandidat & tampilan langsung membaca dari database lokal tanpa memanggil API.
     """
     now = now_dt or get_now_wib()
     today_str = now.strftime("%Y-%m-%d")
 
-    # Cek Hari Bursa (Senin - Jumat)
     if now.weekday() >= 5:
-        return False, "Hari libur akhir pekan (Sabtu/Minggu). Penarikan broksum ditiadakan.", None
+        return False, "Hari libur akhir pekan (Sabtu/Minggu). Gunakan data broksum EOD terakhir di database.", None
 
     if today_str in IDX_HOLIDAYS:
-        return False, f"Hari libur resmi bursa BEI ({today_str}). Penarikan broksum ditiadakan.", None
+        return False, f"Hari libur resmi bursa BEI ({today_str}). Gunakan data broksum EOD terakhir di database.", None
 
     cur_time = now.time()
-    is_jumat = (now.weekday() == 4)
     st = load_broker_sync_state()
 
-    # Cek Hard Cap Harian: Jika hari ini sudah mencapai 70 request, blokir total!
-    calls_today = get_today_broker_call_count(today_str)
-    if calls_today >= MAX_DAILY_BROKSUM_REQUESTS:
-        return (
-            False,
-            f"Batas Hard Cap harian ({calls_today}/{MAX_DAILY_BROKSUM_REQUESTS} request) untuk {today_str} sudah tercapai. Penarikan diblokir total demi melindungi kuota bulanan.",
-            None,
-        )
-
-    # Jendela Waktu Sesi 1:
-    sesi1_start = dtime(11, 30) if is_jumat else dtime(12, 0)
-    sesi1_end = dtime(13, 45) if is_jumat else dtime(13, 15)
-
-    # Jendela Waktu Sesi 2 (sekitar jam 6 sore WIB):
     sesi2_start = dtime(18, 0)
     sesi2_end = dtime(22, 0)
 
-    # 1. Evaluasi Jendela Sesi 1
-    if sesi1_start <= cur_time <= sesi1_end:
-        if st.get("sesi1_last_date") == today_str:
-            return (
-                False,
-                f"Broksum Sesi 1 sudah berhasil diambil hari ini ({today_str} pk {st.get('sesi1_last_ts', '-')}). Jadwal berikutnya: Pasca Sesi 2 jam 18:00 WIB.",
-                "sesi1",
-            )
-        return True, f"Jadwal Penarikan 1/2: Pasca Sesi 1 Bursa ({today_str})", "sesi1"
-
-    # 2. Evaluasi Jendela Sesi 2 (Jam 18:00 WIB)
     if sesi2_start <= cur_time <= sesi2_end:
         if st.get("sesi2_last_date") == today_str:
             return (
                 False,
-                f"Broksum Sesi 2 sudah berhasil diambil hari ini ({today_str} pk {st.get('sesi2_last_ts', '-')}). Kuota harian 2x selesai.",
+                f"Database Broksum EOD sudah diperbarui hari ini ({today_str} pk {st.get('sesi2_last_ts', '-')}).",
                 "sesi2",
             )
-        return True, f"Jadwal Penarikan 2/2: Pasca Sesi 2 Bursa Sekitar Jam 6 Sore WIB ({today_str})", "sesi2"
+        return True, f"Jadwal Penarikan Database Broksum EOD 18:00 WIB ({today_str})", "sesi2"
 
-    # 3. Di luar jadwal
-    if cur_time < sesi1_start:
+    if cur_time < sesi2_start:
         return (
             False,
-            f"Bursa masih berjalan di Sesi 1 ({cur_time.strftime('%H:%M')} WIB). Penarikan Broksum Invezgo dijadwalkan tepat setelah Sesi 1 selesai ({sesi1_start.strftime('%H:%M')} WIB).",
+            f"Jam bursa/sore ({cur_time.strftime('%H:%M')} WIB). Sistem menggunakan data Broksum 3H dari database lokal; update EOD berikutnya pukul 18:00 WIB.",
             None,
         )
-    elif cur_time < sesi2_start:
-        return (
-            False,
-            f"Bursa Sesi 2 / Sore ({cur_time.strftime('%H:%M')} WIB). Penarikan Broksum Invezgo dijadwalkan sekitar jam 6 sore WIB ({sesi2_start.strftime('%H:%M')} WIB) saat data resmi IDX diterbitkan Invezgo.",
-            None,
-        )
-    else:
-        return (
-            False,
-            f"Melewati jendela penarikan harian broksum ({cur_time.strftime('%H:%M')} WIB).",
-            None,
-        )
+    return (
+        False,
+        f"Melewati jendela penarikan harian broksum ({cur_time.strftime('%H:%M')} WIB).",
+        None,
+    )
 
 
 def analyze_broker_summary(top_buyers: list[dict], top_sellers: list[dict]) -> dict[str, Any]:
@@ -1181,7 +1138,7 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
     return s
 
 
-def compute_buy_readiness(s: dict) -> dict:
+def compute_buy_readiness(s: dict, persist: bool = True) -> dict:
     """Status akhir berbasis broksum 3 hari bursa: SIAP_BELI / MENUNGGU / DITOLAK / BELUM_CEK."""
     m = s.get("broker_analysis") or {}
     if not s.get("has_real_broker_summary") or not m:
@@ -1208,8 +1165,400 @@ def compute_buy_readiness(s: dict) -> dict:
     else:
         st, why = "MENUNGGU", f"Campuran, BDR {bdr:+.1f}% ({lb}), tunggu konfirmasi"
     s["buy_status"], s["buy_status_reason"] = st, why
-    save_buy_readiness(s)
+    if persist:
+        save_buy_readiness(s)
     return s
+
+
+# ==============================================================================
+# DATABASE BROKER SUMMARY EOD SELURUH SAHAM (JSON + SQLite tracker.db)
+# ==============================================================================
+BROKSUM_DB_JSON_PATH = Path(__file__).resolve().parent.parent / "data" / "broker_summary_db.json"
+TRACKER_SQLITE_PATH = Path(__file__).resolve().parent.parent / "data" / "tracker.db"
+_BROKSUM_MEMO: dict[str, Any] = {"mtime": 0.0, "data": {}}
+
+
+def _sync_broksum_dict_to_sqlite(records: dict[str, dict]) -> None:
+    """Sinkronkan map broksum ke tabel SQLite broker_summary_cache di data/tracker.db."""
+    if not records:
+        return
+    try:
+        import sqlite3
+        TRACKER_SQLITE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(str(TRACKER_SQLITE_PATH), timeout=15) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS broker_summary_cache (
+                    ticker TEXT PRIMARY KEY,
+                    date TEXT,
+                    range_from TEXT,
+                    bdr REAL,
+                    holder_type TEXT,
+                    status TEXT,
+                    score_modifier INTEGER,
+                    bandar_avg INTEGER,
+                    top_buyers TEXT,
+                    top_sellers TEXT,
+                    retail_trap INTEGER,
+                    payload_json TEXT,
+                    updated_at TEXT
+                )
+                """
+            )
+            rows_to_upsert = []
+            for t, r in records.items():
+                rows_to_upsert.append((
+                    t,
+                    str(r.get("date") or ""),
+                    str(r.get("range_from") or ""),
+                    float(r.get("bdr") or 0.0),
+                    str(r.get("holder_type") or "MIXED"),
+                    str(r.get("status") or "NEUTRAL"),
+                    int(r.get("score_modifier") or 0),
+                    int(r["bandar_avg"]) if r.get("bandar_avg") else None,
+                    str(r.get("top_buyers") or ""),
+                    str(r.get("top_sellers") or ""),
+                    1 if r.get("retail_trap") else 0,
+                    json.dumps(r, ensure_ascii=False),
+                    str(r.get("updated_at") or ""),
+                ))
+            conn.executemany(
+                """
+                INSERT INTO broker_summary_cache (
+                    ticker, date, range_from, bdr, holder_type, status, score_modifier,
+                    bandar_avg, top_buyers, top_sellers, retail_trap, payload_json, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ticker) DO UPDATE SET
+                    date=excluded.date,
+                    range_from=excluded.range_from,
+                    bdr=excluded.bdr,
+                    holder_type=excluded.holder_type,
+                    status=excluded.status,
+                    score_modifier=excluded.score_modifier,
+                    bandar_avg=excluded.bandar_avg,
+                    top_buyers=excluded.top_buyers,
+                    top_sellers=excluded.top_sellers,
+                    retail_trap=excluded.retail_trap,
+                    payload_json=excluded.payload_json,
+                    updated_at=excluded.updated_at
+                """,
+                rows_to_upsert,
+            )
+    except Exception as ex:
+        print(f"[BroksumDB] Warning sinkron SQLite: {ex}")
+
+
+def load_broker_summary_db() -> dict[str, dict]:
+    """Memuat seluruh data Broksum 3H dari database lokal (data/broker_summary_db.json & SQLite)."""
+    try:
+        if BROKSUM_DB_JSON_PATH.exists():
+            mt = BROKSUM_DB_JSON_PATH.stat().st_mtime
+            if _BROKSUM_MEMO["data"] and _BROKSUM_MEMO["mtime"] == mt:
+                return _BROKSUM_MEMO["data"]
+            raw = json.loads(BROKSUM_DB_JSON_PATH.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                _BROKSUM_MEMO["mtime"] = mt
+                _BROKSUM_MEMO["data"] = raw
+                _sync_broksum_dict_to_sqlite(raw)
+                return raw
+    except Exception as ex:
+        print(f"[BroksumDB] Warning baca JSON DB: {ex}")
+    return _BROKSUM_MEMO.get("data") or {}
+
+
+def save_broker_summary_db(records: dict[str, dict]) -> None:
+    """Simpan seluruh data Broksum 3H ke data/broker_summary_db.json dan tabel SQLite broker_summary_cache."""
+    try:
+        BROKSUM_DB_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+        BROKSUM_DB_JSON_PATH.write_text(
+            json.dumps(records, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        _BROKSUM_MEMO["mtime"] = BROKSUM_DB_JSON_PATH.stat().st_mtime
+        _BROKSUM_MEMO["data"] = records
+        _sync_broksum_dict_to_sqlite(records)
+    except Exception as ex:
+        print(f"[BroksumDB] Error simpan DB: {ex}")
+
+
+def enrich_stock_from_broksum_db(s: dict, db_map: dict[str, dict] | None = None) -> dict:
+    """Memperkaya 1 objek saham dari database lokal Broksum 3H (tanpa memanggil API Invezgo)."""
+    if not s:
+        return s
+    ticker = str(s.get("ticker") or "").upper().strip()
+    if not ticker:
+        return s
+    db = db_map if db_map is not None else load_broker_summary_db()
+    rec = db.get(ticker)
+    if not rec:
+        return s
+
+    top_buyers_list = rec.get("top_buyers_list") or []
+    top_sellers_list = rec.get("top_sellers_list") or []
+    has_real = bool(top_buyers_list or top_sellers_list)
+    metrics = {
+        "holder_type": rec.get("holder_type", "MIXED"),
+        "lookback_days": BROKSUM_LOOKBACK_DAYS,
+        "bdr": float(rec.get("bdr") or 0.0),
+        "score_modifier": int(rec.get("score_modifier") or 0),
+        "status": rec.get("status", "NEUTRAL"),
+        "bandar_avg": rec.get("bandar_avg"),
+        "top_buyer_code": top_buyers_list[0] if top_buyers_list else "-",
+        "top_seller_code": top_sellers_list[0] if top_sellers_list else "-",
+        "top_buyers_list": top_buyers_list,
+        "top_sellers_list": top_sellers_list,
+        "retail_trap": bool(rec.get("retail_trap", False)),
+    }
+
+    s["broker_analysis"] = metrics
+    s["has_broker_summary"] = has_real
+    s["has_real_broker_summary"] = has_real
+    s["bdr_pct"] = metrics["bdr"]
+    s["top_buyers_list"] = top_buyers_list
+    s["top_sellers_list"] = top_sellers_list
+    s["top_buyers"] = rec.get("top_buyers") or ", ".join(top_buyers_list)
+    s["top_sellers"] = rec.get("top_sellers") or ", ".join(top_sellers_list)
+    s["broker_date"] = rec.get("date")
+    s["broker_range_from"] = rec.get("range_from")
+    s["broker_holder_type"] = metrics["holder_type"]
+
+    if metrics.get("bandar_avg"):
+        s["bandar_avg_buy"] = metrics["bandar_avg"]
+        c_val = float(s.get("close") or 0)
+        if c_val > 0:
+            s["diff_bandar_avg_pct"] = round(((c_val - s["bandar_avg_buy"]) / s["bandar_avg_buy"]) * 100.0, 2)
+
+    if not s.get("_broksum_db_scored") and metrics.get("score_modifier"):
+        s["smart_money_score"] = min(100, max(5, int(s.get("smart_money_score", 50) + metrics["score_modifier"])))
+        s["_broksum_db_scored"] = True
+
+    if metrics.get("retail_trap"):
+        s["retail_trap"] = True
+        s["trigger_type"] = "DISTRIBUTION_WARNING"
+        s["trigger_label"] = "Distribusi (Ritel Trap)"
+    elif metrics.get("status") == "BIG_ACCUMULATION" and s.get("trigger_type") in ("NO_SIGNAL", "NONE", "", None):
+        s["trigger_type"] = "BIG_ACCUMULATION"
+        s["trigger_label"] = "Akumulasi Broker"
+
+    if metrics.get("bandar_avg") and s.get("trading_plan"):
+        tp_obj = s["trading_plan"]
+        tp_obj["bandar_avg_buy"] = metrics["bandar_avg"]
+        b_avg = float(metrics["bandar_avg"])
+        c_val = float(s.get("close") or 0)
+        if 0 < c_val * 0.915 <= b_avg < c_val * 0.995:
+            rev_ep = _round_idx_tick(b_avg)
+            atr_v = float(tp_obj.get("atr14") or (rev_ep * 0.03))
+            sl_dist = max(int(round(rev_ep * 0.035)), min(int(round(rev_ep * 0.045)), int(round(1.5 * atr_v))))
+            new_sl = _round_idx_tick(rev_ep - sl_dist)
+            risk_rp = max(1, rev_ep - new_sl)
+            new_tp1 = _round_idx_tick(rev_ep + 2 * risk_rp)
+            new_tp2 = _round_idx_tick(rev_ep + int(round(3.5 * risk_rp)))
+
+            tp_obj["entry_price"] = rev_ep
+            tp_obj["entry_low"] = rev_ep
+            tp_obj["entry_high"] = rev_ep
+            tp_obj["stop_loss"] = new_sl
+            tp_obj["stop_loss_pct"] = -round((risk_rp / rev_ep) * 100.0, 2)
+            tp_obj["target_1"] = new_tp1
+            tp_obj["target_1_pct"] = round(((new_tp1 - rev_ep) / rev_ep) * 100.0, 2)
+            tp_obj["target_2"] = new_tp2
+            tp_obj["target_2_pct"] = round(((new_tp2 - rev_ep) / rev_ep) * 100.0, 2)
+            tp_obj["support_label"] = "Support Avg Bandar"
+
+    if s.get("trading_plan"):
+        s["trading_plan"]["top_buyers"] = s.get("top_buyers", "")
+        s["trading_plan"]["top_buyers_list"] = s.get("top_buyers_list", [])
+        s["trading_plan"]["bdr_pct"] = s.get("bdr_pct")
+        s["trading_plan"]["has_real_broker_summary"] = s.get("has_real_broker_summary", False)
+
+    compute_buy_readiness(s, persist=False)
+    return s
+
+
+def apply_broksum_db_to_analysis(analysis: dict[str, Any] | None) -> int:
+    """Menerapkan seluruh data Broksum 3H dari database lokal ke analysis['stocks'] & analysis['details']."""
+    if not analysis:
+        return 0
+    db = load_broker_summary_db()
+    if not db:
+        return 0
+    count = 0
+    for s in analysis.get("stocks") or []:
+        t = str(s.get("ticker") or "").upper()
+        if t in db:
+            enrich_stock_from_broksum_db(s, db)
+            count += 1
+    details = analysis.get("details") or {}
+    for t, d in details.items():
+        if t.upper() in db:
+            enrich_stock_from_broksum_db(d, db)
+    for c in analysis.get("today_candidates") or []:
+        t = str(c.get("ticker") or "").upper()
+        if t in db:
+            enrich_stock_from_broksum_db(c, db)
+    return count
+
+
+def sync_all_stocks_broksum_eod(
+    date_str: str | None = None,
+    tickers: list[str] | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
+    """
+    Menarik data Broker Summary 3 Hari Bursa terakhir via API Invezgo untuk SELURUH saham terdaftar
+    dan menyimpannya ke database lokal (data/broker_summary_db.json & SQLite tracker.db).
+    Menghormati rate limit resmi Invezgo (x-ratelimit-remaining / x-ratelimit-reset: 250 req/menit).
+    """
+    import pandas as pd
+
+    cfg = load_broker_api_config()
+    api_key = cfg.get("invezgo_api_key", "").replace("Bearer ", "").strip()
+    if not api_key:
+        return {"status": "error", "message": "Token API Invezgo belum diatur."}
+
+    target_dt = date_str or get_now_wib().strftime("%Y-%m-%d")
+    # Jika akhir pekan, mundurkan ke hari Jumat terakhir
+    try:
+        from datetime import timedelta
+        dt_obj = datetime.strptime(target_dt, "%Y-%m-%d")
+        while dt_obj.weekday() >= 5 or dt_obj.strftime("%Y-%m-%d") in IDX_HOLIDAYS:
+            dt_obj -= timedelta(days=1)
+        target_dt = dt_obj.strftime("%Y-%m-%d")
+    except Exception:
+        pass
+
+    from_date = broksum_range_start(target_dt, BROKSUM_LOOKBACK_DAYS)
+
+    if not tickers:
+        root_dir = Path(__file__).resolve().parent.parent
+        csv_path = root_dir / "data" / "real_idx_market_latest.csv"
+        if csv_path.exists():
+            df = pd.read_csv(csv_path, usecols=["Ticker"])
+            tickers = sorted(df["Ticker"].dropna().astype(str).str.upper().str.strip().unique().tolist())
+        else:
+            tickers = []
+
+    db = dict(load_broker_summary_db())
+    todo = []
+    for t in tickers:
+        if not force and t in db and db[t].get("date") == target_dt and db[t].get("range_from") == from_date and db[t].get("top_buyers_list"):
+            continue
+        todo.append(t)
+
+    print(f"[BroksumEOD] Mulai penarikan Broksum 3H ({from_date} s/d {target_dt}) untuk {len(todo)}/{len(tickers)} saham terdaftar...")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "User-Agent": "SmartFlowIDX/95.7",
+        "Accept": "application/json",
+    }
+
+    import concurrent.futures
+    import threading
+
+    fetched_ok = 0
+    empty_cnt = 0
+    err_cnt = 0
+    done_cnt = 0
+    rate_lock = threading.Lock()
+    db_lock = threading.Lock()
+    next_allowed_ts = [0.0]
+
+    def _wait_rate_slot() -> None:
+        with rate_lock:
+            now_s = time.time()
+            if now_s < next_allowed_ts[0]:
+                sleep_dur = next_allowed_ts[0] - now_s
+            else:
+                sleep_dur = 0.0
+            next_allowed_ts[0] = max(now_s, next_allowed_ts[0]) + 0.255  # ~235 req/menit (aman di bawah 250/menit)
+        if sleep_dur > 0:
+            time.sleep(sleep_dur)
+
+    def _pause_until(reset_epoch: float) -> None:
+        with rate_lock:
+            target = max(time.time() + 2.0, min(time.time() + 62.0, reset_epoch + 1.2))
+            if target > next_allowed_ts[0]:
+                print(f"[BroksumEOD] Menunggu reset kuota menit Invezgo ({target - time.time():.1f}s)...")
+                next_allowed_ts[0] = target
+
+    def _fetch_one(t: str) -> tuple[str, Any, bool]:
+        url = f"https://api.invezgo.com/analysis/summary/stock/{t}?from={from_date}&to={target_dt}&investor=all&market=RG"
+        for attempt in range(3):
+            _wait_rate_slot()
+            req = urllib.request.Request(url, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=12) as resp:
+                    rem_hdr = resp.headers.get("x-ratelimit-remaining")
+                    rst_hdr = resp.headers.get("x-ratelimit-reset")
+                    body = json.loads(resp.read().decode("utf-8"))
+                    if rem_hdr is not None and int(rem_hdr) <= 4 and rst_hdr:
+                        _pause_until(float(rst_hdr))
+                    payload = body.get("data", body) if isinstance(body, dict) else body
+                    return t, payload, True
+            except urllib.error.HTTPError as he:
+                if he.code == 429:
+                    rst_hdr = he.headers.get("x-ratelimit-reset") if he.headers else None
+                    _pause_until(float(rst_hdr) if rst_hdr else (time.time() + 15.0))
+                    continue
+                return t, None, False
+            except Exception:
+                if attempt == 0:
+                    time.sleep(0.8)
+                    continue
+                return t, None, False
+        return t, None, False
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+        futures = [pool.submit(_fetch_one, t) for t in todo]
+        for fut in concurrent.futures.as_completed(futures):
+            t, raw_payload, ok_flag = fut.result()
+            with db_lock:
+                done_cnt += 1
+                if not ok_flag:
+                    err_cnt += 1
+                elif raw_payload:
+                    tb, ts = extract_brokers_from_payload(raw_payload)
+                    metrics = analyze_broker_summary(tb, ts)
+                    db[t] = {
+                        "ticker": t,
+                        "date": target_dt,
+                        "range_from": from_date,
+                        "bdr": metrics["bdr"],
+                        "holder_type": metrics.get("holder_type", "MIXED"),
+                        "status": metrics["status"],
+                        "score_modifier": metrics["score_modifier"],
+                        "bandar_avg": metrics["bandar_avg"],
+                        "top_buyers_list": metrics.get("top_buyers_list", []),
+                        "top_sellers_list": metrics.get("top_sellers_list", []),
+                        "top_buyers": ", ".join(metrics.get("top_buyers_list", [])),
+                        "top_sellers": ", ".join(metrics.get("top_sellers_list", [])),
+                        "retail_trap": bool(metrics.get("retail_trap", False)),
+                        "updated_at": get_now_wib().strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                    if metrics.get("top_buyers_list") or metrics.get("top_sellers_list"):
+                        fetched_ok += 1
+                    else:
+                        empty_cnt += 1
+                else:
+                    empty_cnt += 1
+
+                if done_cnt % 150 == 0 or done_cnt == len(todo):
+                    save_broker_summary_db(db)
+                    print(f"[BroksumEOD] Progress {done_cnt}/{len(todo)} saham (terisi={fetched_ok}, kosong={empty_cnt}, err={err_cnt})...")
+
+    save_broker_summary_db(db)
+    record_broker_sync_done("sesi2", target_dt)
+    return {
+        "status": "success",
+        "date": target_dt,
+        "range_from": from_date,
+        "total_registered": len(tickers),
+        "total_in_db": len(db),
+        "fetched_ok": fetched_ok,
+        "empty": empty_cnt,
+        "errors": err_cnt,
+    }
 
 
 BUY_READINESS_PATH = Path(__file__).resolve().parent.parent / "data" / "buy_readiness.json"
@@ -1313,52 +1662,25 @@ def filter_and_purge_watchlist_by_smart_money(
         top_buyers = []
         top_sellers = []
 
-        # Cek apakah sudah ada di details_map dengan data real
+        # Cek apakah sudah ada di details_map dengan data real atau di Database Broksum 3H
         if details_map and ticker in details_map and details_map[ticker].get("has_real_broker_summary"):
             d_item = details_map[ticker]
             metrics = d_item.get("broker_analysis")
             top_buyers = d_item.get("top_buyers_list", [])
             top_sellers = d_item.get("top_sellers_list", [])
-
-        # Jika belum ada data real, fetch langsung ke Invezgo API HANYA jika jadwal mengizinkan
         if not metrics or not top_buyers:
-            if config.get("invezgo_api_key"):
-                allowed_purge, _, _ = can_run_broker_sync_now()
-                if not allowed_purge:
-                    continue
-            time.sleep(max(0.2, config.get("delay_ms", 300) / 1000.0))
-            raw_data = None
-            for dt_c in dates_to_try:
-                try:
-                    if config.get("invezgo_api_key"):
-                        raw_data = fetch_broker_summary_invezgo(ticker, dt_c, config["invezgo_api_key"], force=True)
-                    elif provider == "stockbit" and config.get("stockbit_token"):
-                        raw_data = fetch_broker_summary_stockbit(ticker, dt_c, config["stockbit_token"])
-                    elif provider == "goapi" and config.get("goapi_key"):
-                        raw_data = fetch_broker_summary_goapi(ticker, dt_c, config["goapi_key"])
-                    if raw_data:
-                        break
-                except Exception as ex:
-                    print(f"[SmartPurge] Error fetch {ticker} on {dt_c}: {ex}")
-
-            if raw_data:
-                b_list, s_list = extract_brokers_from_payload(raw_data)
-                metrics = analyze_broker_summary(b_list, s_list)
-                top_buyers = [b["code"] for b in b_list[:3]]
-                top_sellers = [s["code"] for s in s_list[:3]]
-
-                # Update detail & stock di analysis jika ada
-                if details_map and ticker in details_map:
-                    details_map[ticker]["broker_analysis"] = metrics
-                    details_map[ticker]["has_broker_summary"] = True
-                    details_map[ticker]["has_real_broker_summary"] = True
-                    details_map[ticker]["bdr_pct"] = metrics["bdr"]
-                    details_map[ticker]["top_buyers_list"] = top_buyers
-                    details_map[ticker]["top_sellers_list"] = top_sellers
-                    details_map[ticker]["top_buyers"] = ", ".join(top_buyers)
-                    details_map[ticker]["top_sellers"] = ", ".join(top_sellers)
-                    if metrics.get("bandar_avg"):
-                        details_map[ticker]["bandar_avg_buy"] = metrics["bandar_avg"]
+            db_map = load_broker_summary_db()
+            rec = db_map.get(ticker) if db_map else None
+            if rec:
+                top_buyers = rec.get("top_buyers_list") or []
+                top_sellers = rec.get("top_sellers_list") or []
+                metrics = {
+                    "bdr": float(rec.get("bdr") or 0.0),
+                    "retail_trap": bool(rec.get("retail_trap", False)),
+                    "bandar_avg": rec.get("bandar_avg"),
+                    "holder_type": rec.get("holder_type", "MIXED"),
+                    "score_modifier": int(rec.get("score_modifier") or 0),
+                }
 
         if not metrics:
             print(f"[SmartPurge] {ticker}: Tidak ada data broker summary dari API. Dieliminasi demi kehati-hatian.")

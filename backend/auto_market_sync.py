@@ -68,17 +68,16 @@ def main() -> None:
     except Exception as exc:
         print(f"[AutoMarketSync] Warning: Gagal seleksi awal today candidates: {exc}")
 
-    # Two-Stage Smart Funneling X-Ray (Pilihan Saham Hari Ini + Watchlist Aktif + Stage 1)
-    # HANYA dijalankan maksimal 2x sehari:
-    # 1. Pasca Sesi 1 bursa selesai (11:30 WIB Jumat / 12:00 WIB Senin-Kamis).
-    # 2. Pasca Sesi 2 bursa selesai sekitar jam 6 sore WIB (18:00 WIB).
-    # DILARANG KERAS menarik broksum di luar kedua jendela ini demi proteksi kuota token Invezgo!
+    # Penarikan Broksum 3H Seluruh Saham Terdaftar ke Database (HANYA 1x sehari saat Bursa Tutup / 18:00 WIB).
+    # Saat jam bursa berlangsung, sistem langsung memvalidasi kandidat dari Database Broksum EOD (0 panggilan API).
     try:
         from broker_summary_fetcher import (
             load_broker_api_config,
-            enrich_candidates_and_watchlist,
+            sync_all_stocks_broksum_eod,
+            apply_broksum_db_to_analysis,
             can_run_broker_sync_now,
             record_broker_sync_done,
+            filter_and_purge_watchlist_by_smart_money,
         )
         broker_cfg = load_broker_api_config()
         has_api_cred = bool(
@@ -89,31 +88,32 @@ def main() -> None:
         allowed, reason, session_name = can_run_broker_sync_now()
 
         if has_api_cred and allowed:
-            print(f"[AutoMarketSync] 📡 Mengambil Broker Summary Invezgo ({reason})...")
-            enrich_candidates_and_watchlist(
-                analysis,
-                str(latest_dt),
-                tracker=tracker,
+            print(f"[AutoMarketSync] 📡 Menarik Broksum 3H Seluruh Saham ke Database ({reason})...")
+            all_reg_tickers = [str(s.get("ticker", "")).upper() for s in analysis.get("stocks", []) if s.get("ticker")]
+            sync_all_stocks_broksum_eod(
+                date_str=str(latest_dt),
+                tickers=all_reg_tickers,
                 cfg=broker_cfg,
-                max_total_candidates=broker_cfg.get("max_candidates", 35),
-                force=True,
+                force=False,
             )
             if session_name:
                 record_broker_sync_done(session_name, str(latest_dt))
-
-            # Seleksi & Eliminasi Sinyal Watchlist yang Didominasi Ritel / Distribusi
-            from broker_summary_fetcher import filter_and_purge_watchlist_by_smart_money
-            purge_res = filter_and_purge_watchlist_by_smart_money(
-                tracker,
-                analysis=analysis,
-                date_str=str(latest_dt),
-                cfg=broker_cfg,
-            )
-            print(f"[AutoMarketSync] Audit Smart Money Watchlist: {purge_res.get('retained_count')} lolos, {purge_res.get('eliminated_count')} ritel/distribusi dihapus.")
         else:
-            print(f"[AutoMarketSync] ⏱️ Skip Penarikan Broksum: {reason}. Hanya update harga pasar & evaluasi Running/SL/TP.")
+            print(f"[AutoMarketSync] ⏱️ Validasi Broksum dari Database EOD Lokal ({reason}).")
+
+        apply_broksum_db_to_analysis(analysis)
+        from screener_engine import select_today_candidates
+        analysis["today_candidates"] = select_today_candidates(analysis["stocks"])
+
+        purge_res = filter_and_purge_watchlist_by_smart_money(
+            tracker,
+            analysis=analysis,
+            date_str=str(latest_dt),
+            cfg=broker_cfg,
+        )
+        print(f"[AutoMarketSync] Audit Smart Money Database EOD: {purge_res.get('retained_count')} lolos, {purge_res.get('eliminated_count')} ritel/distribusi dihapus.")
     except Exception as exc:
-        print(f"[AutoMarketSync] Warning: Gagal enrichment broker summary: {exc}")
+        print(f"[AutoMarketSync] Warning: Gagal sinkronisasi/validasi broker summary database: {exc}")
 
     eval_res = tracker.evaluate(analysis["details"])
     added_count = tracker.auto_track(analysis)

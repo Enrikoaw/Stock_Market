@@ -1798,10 +1798,34 @@ class SignalTracker:
             existing_map = {r["ticker"].upper(): dict(r) for r in existing_rows}
             curr_count = len(existing_rows)
 
+            # Bersihkan kandidat lama di tabel hari ini jika berdasarkan Database Broksum 3H berstatus DITOLAK / Ritel / Distribusi
+            for t_old in list(existing_map.keys()):
+                s_old = stocks_pool.get(t_old)
+                if not s_old:
+                    continue
+                b_stat = str(s_old.get("buy_status") or "").upper()
+                h_type = str(s_old.get("broker_holder_type") or "").upper()
+                bdr_v = float(s_old.get("bdr_pct") or 0)
+                if (
+                    b_stat == "DITOLAK"
+                    or h_type == "RETAIL"
+                    or s_old.get("retail_trap")
+                    or (s_old.get("has_real_broker_summary") and bdr_v < 3.0)
+                ):
+                    conn.execute(
+                        delete(today_candidates_table).where(
+                            today_candidates_table.c.date == date_str,
+                            today_candidates_table.c.ticker == t_old,
+                        )
+                    )
+                    existing_map.pop(t_old, None)
+
             # Tambahkan emiten baru dari candidate_stocks yang belum ada di tabel hari ini
             for idx, c in enumerate(candidate_stocks):
                 t_up = str(c.get("ticker", "")).upper()
                 if not t_up or t_up in existing_map:
+                    continue
+                if str(c.get("buy_status") or "").upper() == "DITOLAK" or str(c.get("broker_holder_type") or "").upper() == "RETAIL":
                     continue
 
                 session_lbl = cur_session
@@ -1854,23 +1878,27 @@ class SignalTracker:
             support_entry = float(plan.get("entry_price") or plan.get("entry_high") or item.get("close") or 0)
             item["entry_price"] = support_entry
             item["support_label"] = plan.get("support_label") or "Support Terdekat"
-
-            # Wajib dicatat / disinkronkan ke Watchlist
-            self._ensure_candidate_in_watchlist(item, date_str, item["session_label"])
             merged_candidates.append(item)
 
-        # Filter ketat hasil kandidat hari ini:
+        # Filter ketat hasil kandidat hari ini berdasarkan Database Broksum 3H:
         # 1. Tolak saham pucuk yang sudah terbang tinggi (pct_change > 4.5%)
         # 2. Tolak saham yang sudah terbang jauh dari modal bandar (diff_bandar_avg_pct > 3.5% atau < -4.5%)
-        # 3. Tolak saham distribusi / retail trap
-        # 4. Batasi maksimal 8-10 saham terbaik
+        # 3. Tolak saham DITOLAK / ditampung RITEL / distribusi (BDR < 3%) / retail trap
+        # 4. Prioritaskan SIAP_BELI (akumulasi Smart Money min 3 hari)
         strict_candidates = []
         for item in merged_candidates:
             pct = float(item.get("pct_change") or 0)
             diff_bdr = float(item.get("diff_bandar_avg_pct") or 0)
+            b_stat = str(item.get("buy_status") or "").upper()
+            h_type = str(item.get("broker_holder_type") or "").upper()
+            bdr_v = float(item.get("bdr_pct") or 0)
             if pct > 4.5:
                 continue
+            if b_stat == "DITOLAK" or h_type == "RETAIL":
+                continue
             if item.get("retail_trap") or item.get("trigger_type") == "DISTRIBUTION_WARNING":
+                continue
+            if item.get("has_real_broker_summary") and bdr_v < 3.0:
                 continue
             if item.get("diff_bandar_avg_pct") is not None and (diff_bdr < -4.5 or diff_bdr > 3.5):
                 continue
@@ -1878,6 +1906,8 @@ class SignalTracker:
 
         strict_candidates.sort(
             key=lambda x: (
+                1 if str(x.get("buy_status") or "").upper() == "SIAP_BELI" else 0,
+                1 if str(x.get("broker_holder_type") or "").upper() == "SMART_MONEY" else 0,
                 -abs(float(x.get("diff_bandar_avg_pct") or 0)),
                 float(x.get("bdr_pct") or 0),
                 int(x.get("smart_money_score") or 0),
@@ -1885,7 +1915,9 @@ class SignalTracker:
             reverse=True,
         )
 
-        final_picks = strict_candidates[:10] if strict_candidates else merged_candidates[:6]
+        final_picks = strict_candidates[:10]
+        for item in final_picks:
+            self._ensure_candidate_in_watchlist(item, date_str, item.get("session_label") or "Database Broksum 3H")
         return final_picks
 
     def _ensure_candidate_in_watchlist(self, stock: dict, date_str: str, session_label: str) -> None:

@@ -2652,14 +2652,9 @@ function renderStockBroksum(d) {
         <div class="flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
           <div class="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
-            <span class="font-semibold text-slate-900 dark:text-white">Broker Summary:</span> Belum dimuat untuk ${escHtml(d.ticker)}
-            <div class="text-[10px] text-slate-500 mt-0.5">Analisa Pribadi: Klik tombol untuk cek langsung via API Invezgo</div>
+            <span class="font-semibold text-slate-900 dark:text-white">Broker Summary (3H):</span> Menunggu update database EOD (18:00 WIB) untuk ${escHtml(d.ticker)}
           </div>
         </div>
-        <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}', true)" class="text-[10px] px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold transition shrink-0 whitespace-nowrap active:scale-95 flex items-center gap-1">
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-          <span>Cek Broksum</span>
-        </button>
       </div>
     `;
     return;
@@ -2728,15 +2723,12 @@ function renderStockBroksum(d) {
       <!-- Header Broksum -->
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-1.5 flex-wrap">
-          <span class="text-[11px] font-bold text-slate-900 dark:text-white tracking-wide">Broker Summary (Bandarmology)</span>
+          <span class="text-[11px] font-bold text-slate-900 dark:text-white tracking-wide">Broker Summary 3H (Database EOD)</span>
           <span class="text-[9px] font-mono px-1.5 py-0.2 rounded text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-white/5">Top 3</span>
-          ${d.broker_date ? `<span class="text-[9px] font-mono text-slate-500 dark:text-slate-400">(${escHtml(d.broker_date)})</span>` : ''}
+          ${d.broker_date ? `<span class="text-[9px] font-mono text-slate-500 dark:text-slate-400">(${escHtml(d.broker_range_from ? d.broker_range_from + ' s/d ' + d.broker_date : d.broker_date)})</span>` : ''}
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
           ${statusBadgeHtml}
-          <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}', true)" title="Tarik data terbaru langsung dari API Invezgo untuk analisa pribadi" class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 font-semibold transition active:scale-95 flex items-center gap-1 shrink-0">
-            <span>↻</span> <span class="hidden sm:inline">Cek API</span>
-          </button>
         </div>
       </div>
 
