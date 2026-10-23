@@ -2104,8 +2104,18 @@ function showToast(msg, type = 'success') {
 // DATA LOADING: SCREENER & KPIS
 // =====================================================================
 let lastShownSyncError = null;
+let screenerRequestSeq = 0;
+let lastScreenerSearch = '';
+let screenerAbortCtrl = null;
 
 async function loadScreenerData(preserveSelection = false) {
+  // Anti race-condition: batalkan request lama & abaikan respons yang sudah basi
+  const mySeq = ++screenerRequestSeq;
+  if (screenerAbortCtrl) {
+    try { screenerAbortCtrl.abort(); } catch (_) {}
+  }
+  screenerAbortCtrl = new AbortController();
+  const myCtrl = screenerAbortCtrl;
   const trigger = document.getElementById('filterTrigger')?.value || 'ALL';
   const minVol = document.getElementById('filterVolRatio')?.value || '0.0';
   const minScore = document.getElementById('filterMinScore')?.value || '0';
@@ -2123,9 +2133,10 @@ async function loadScreenerData(preserveSelection = false) {
   });
 
   try {
-    const res = await fetchWithTimeout(`/api/screener?${params.toString()}`, { cache: 'no-store' }, 30000);
+    const res = await fetch(`/api/screener?${params.toString()}`, { cache: 'no-store', signal: myCtrl.signal });
     if (!res.ok) throw new Error('Gagal mengambil data screener');
     const data = await res.json();
+    if (mySeq !== screenerRequestSeq) return; // respons basi (sudah ada pencarian yang lebih baru)
 
     const srcBadge = document.getElementById('activeSourceBadge');
     if (srcBadge) srcBadge.textContent = data.source_name;
@@ -2155,7 +2166,8 @@ async function loadScreenerData(preserveSelection = false) {
 
     currentStocks = data.stocks || [];
     currentTodayCandidates = data.today_candidates || [];
-    if (!preserveSelection) currentPage = 1;
+    if (!preserveSelection || search !== lastScreenerSearch) currentPage = 1;
+    lastScreenerSearch = search;
     renderScreenerTable(currentStocks);
 
     // Render kartu pilihan hari ini yang konsisten antar sesi & tercatat di watchlist
@@ -2166,9 +2178,11 @@ async function loadScreenerData(preserveSelection = false) {
         preserveSelection && currentStocks.some((s) => s.ticker === selectedTicker)
           ? selectedTicker
           : currentStocks[0].ticker;
-      await selectStock(targetTicker, false, false);
+      if (mySeq === screenerRequestSeq) await selectStock(targetTicker, false, false);
     }
   } catch (err) {
+    if (err && err.name === 'AbortError') return; // dibatalkan karena ada pencarian baru
+    if (mySeq !== screenerRequestSeq) return;
     showToast(`Error: ${err.message}`, 'error');
     if (!currentStocks || currentStocks.length === 0) {
       renderTableError(err.message);
@@ -2793,8 +2807,10 @@ window.fetchBrokerSummaryForSelected = async function(ticker, force = true) {
   }
 };
 
+let selectStockSeq = 0;
 async function selectStock(ticker, isUserClick = false, scrollToTradingPlan = false) {
   selectedTicker = ticker;
+  const detailSeq = ++selectStockSeq;
 
   document.querySelectorAll('.stock-row').forEach((el) => el.classList.remove('selected-row'));
   const activeRow = document.getElementById(`row-${ticker}`);
@@ -2805,7 +2821,9 @@ async function selectStock(ticker, isUserClick = false, scrollToTradingPlan = fa
   try {
     const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}?_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`Gagal memuat detail ${ticker}`);
-    selectedStockDetail = await res.json();
+    const detailData = await res.json();
+    if (detailSeq !== selectStockSeq || selectedTicker !== ticker) return; // klik/cari lain sudah menggantikan
+    selectedStockDetail = detailData;
     renderInspectorPanel(selectedStockDetail);
     loadStockNewsCatalyst(ticker);
 
@@ -5553,7 +5571,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (searchInput) {
     searchInput.addEventListener('input', () => {
       clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => loadScreenerData(true), 200);
+      searchTimeout = setTimeout(() => loadScreenerData(true), 350);
     });
   }
 
