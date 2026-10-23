@@ -4214,6 +4214,27 @@ function formatSignalTime(dateStr) {
   return t ? `${t} WIB` : '16:00 WIB';
 }
 
+// Pantauan: "Siap Beli" HANYA untuk saham yang lolos validasi broksum 3 hari bursa (smart money menampung).
+function pantauanBuyOverride(r, defaultHtml, mobile) {
+  if (r.status !== 'WATCHLIST') return defaultHtml;
+  const why = escHtml(r.buy_status_reason || '');
+  const sub = (txt, cls) => mobile ? '' : `<div class="text-[10px] ${cls} font-medium mt-0.5">${txt}</div>`;
+  if (r.buy_status === 'SIAP_BELI') {
+    return `<span title="${why}" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>SIAP BELI</span>`
+      + sub('Lolos Broksum 3H · Smart Money', 'text-emerald-600 dark:text-emerald-400');
+  }
+  if (r.buy_status === 'DITOLAK') {
+    return `<span title="${why}" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/40">Ditolak Broksum</span>`
+      + sub(why, 'text-rose-600 dark:text-rose-400');
+  }
+  if (r.buy_status === 'MENUNGGU') {
+    return `<span title="${why}" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40">Menunggu</span>`
+      + sub(why, 'text-amber-600 dark:text-amber-400');
+  }
+  // Belum divalidasi broksum: jangan tampilkan "Siap Beli" hanya karena dekat harga entry
+  return String(defaultHtml).replace('Siap Beli (', 'Dekat Entry (').replace('Dekat Entry Support', 'Menunggu validasi broksum 3H');
+}
+
 function renderTrackerTable(rows) {
   const tbody = document.getElementById('trackerTableBody');
   const mobileList = document.getElementById('trackerMobileList');
@@ -4286,6 +4307,7 @@ function renderTrackerTable(rows) {
         }
 
         let isHighFlyer = false;
+        entryCell = pantauanBuyOverride(r, entryCell, false);
         if (r.status === 'RUNNING' && pnl !== null && pnl >= 2.0) {
           isHighFlyer = true;
         }
@@ -4426,6 +4448,7 @@ function renderTrackerTable(rows) {
         } else {
           statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">${escHtml(r.status)}</span>`;
         }
+        statusBadge = pantauanBuyOverride(r, statusBadge, true);
 
         const cardHighlight = hasDistWarning
           ? 'border-l-4 border-l-rose-500 bg-rose-500/[0.04]'

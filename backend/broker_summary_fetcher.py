@@ -928,6 +928,12 @@ def run_stage2_broker_enrichment(
                     s["trading_plan"]["top_buyers_list"] = s.get("top_buyers_list", [])
                     s["trading_plan"]["bdr_pct"] = s.get("bdr_pct")
                     s["trading_plan"]["has_real_broker_summary"] = s.get("has_real_broker_summary", False)
+            # Validasi otomatis akhir sesi: status SIAP BELI / MENUNGGU / DITOLAK (broksum 3 hari bursa)
+            s["broker_holder_type"] = metrics.get("holder_type", "MIXED")
+            compute_buy_readiness(s)
+            if details_map and ticker in details_map:
+                for _f in ("broker_holder_type", "buy_status", "buy_status_reason"):
+                    details_map[ticker][_f] = s.get(_f)
         else:
             s["has_broker_summary"] = False
 
@@ -1202,7 +1208,55 @@ def compute_buy_readiness(s: dict) -> dict:
     else:
         st, why = "MENUNGGU", f"Campuran, BDR {bdr:+.1f}% ({lb}), tunggu konfirmasi"
     s["buy_status"], s["buy_status_reason"] = st, why
+    save_buy_readiness(s)
     return s
+
+
+BUY_READINESS_PATH = Path(__file__).resolve().parent.parent / "data" / "buy_readiness.json"
+BUY_READINESS_MAX_AGE_DAYS = 4
+
+
+def _load_buy_readiness_raw() -> dict:
+    try:
+        return json.loads(BUY_READINESS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_buy_readiness(s: dict) -> None:
+    """Simpan hasil validasi broksum 3H per ticker agar bertahan setelah sync ulang & tampil di Pantauan."""
+    t = str(s.get("ticker", "")).upper().strip()
+    if not t or s.get("buy_status") in (None, "BELUM_CEK"):
+        return
+    try:
+        data = _load_buy_readiness_raw()
+        data[t] = {
+            "buy_status": s["buy_status"],
+            "buy_status_reason": s.get("buy_status_reason", ""),
+            "bdr_pct": s.get("bdr_pct"),
+            "holder_type": s.get("broker_holder_type"),
+            "bandar_avg_buy": s.get("bandar_avg_buy"),
+            "date": get_now_wib().strftime("%Y-%m-%d"),
+            "ts": get_now_wib().strftime("%H:%M"),
+        }
+        BUY_READINESS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        BUY_READINESS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception as ex:
+        print(f"[BuyReadiness] Gagal simpan: {ex}")
+
+
+def load_buy_readiness() -> dict:
+    """Ambil status valid (maks 4 hari kalender) -> {TICKER: {...}}."""
+    out = {}
+    today = get_now_wib().date()
+    for t, v in _load_buy_readiness_raw().items():
+        try:
+            age = (today - datetime.strptime(v.get("date", ""), "%Y-%m-%d").date()).days
+            if 0 <= age <= BUY_READINESS_MAX_AGE_DAYS:
+                out[t] = v
+        except Exception:
+            continue
+    return out
 
 
 def filter_and_purge_watchlist_by_smart_money(

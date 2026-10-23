@@ -1,0 +1,47 @@
+{
+ "FILM": {
+  "buy_status": "MENUNGGU",
+  "buy_status_reason": "Campuran, BDR +4.1% (3H), tunggu konfirmasi",
+  "bdr_pct": 4.06,
+  "holder_type": "MIXED",
+  "bandar_avg_buy": 405,
+  "date": "2026-10-23",
+  "ts": "19:55"
+ },
+ "SUPA": {
+  "buy_status": "MENUNGGU",
+  "buy_status_reason": "Campuran, BDR +7.0% (3H), tunggu konfirmasi",
+  "bdr_pct": 7.03,
+  "holder_type": "MIXED",
+  "bandar_avg_buy": 356,
+  "date": "2026-10-23",
+  "ts": "19:55"
+ },
+ "MKAP": {
+  "buy_status": "DITOLAK",
+  "buy_status_reason": "BDR -1.4% distribusi (3H)",
+  "bdr_pct": -1.37,
+  "holder_type": "MIXED",
+  "bandar_avg_buy": 1057,
+  "date": "2026-10-23",
+  "ts": "19:55"
+ },
+ "PTRO": {
+  "buy_status": "SIAP_BELI",
+  "buy_status_reason": "Smart money menampung, BDR +17.3% (3H)",
+  "bdr_pct": 17.28,
+  "holder_type": "SMART_MONEY",
+  "bandar_avg_buy": 3066,
+  "date": "2026-10-23",
+  "ts": "19:55"
+ },
+ "EMAS": {
+  "buy_status": "DITOLAK",
+  "buy_status_reason": "BDR -3.6% distribusi (3H)",
+  "bdr_pct": -3.64,
+  "holder_type": "MIXED",
+  "bandar_avg_buy": 6573,
+  "date": "2026-10-23",
+  "ts": "19:55"
+ }
+}

@@ -919,6 +919,9 @@ def _screener_compute(
         )
         analysis["today_candidates"] = today_cands
 
+    _apply_buy_readiness(stocks)
+    _apply_buy_readiness(today_cands or [])
+
     return {
         "source_name": STATE["source_name"],
         "last_sync_time": STATE["last_sync_time"],
@@ -930,6 +933,24 @@ def _screener_compute(
         "stocks": stocks,
         "today_candidates": today_cands or [],
     }
+
+
+def _apply_buy_readiness(items: list) -> None:
+    """Tempelkan status SIAP BELI/MENUNGGU/DITOLAK hasil validasi broksum 3H (persisten) ke daftar saham."""
+    try:
+        from broker_summary_fetcher import load_buy_readiness
+        br = load_buy_readiness()
+    except Exception:
+        return
+    if not br:
+        return
+    for it in items:
+        v = br.get(str(it.get("ticker", "")).upper())
+        if v:
+            it["buy_status"] = v.get("buy_status")
+            it["buy_status_reason"] = v.get("buy_status_reason")
+            if v.get("holder_type"):
+                it["broker_holder_type"] = v.get("holder_type")
 
 
 
@@ -1002,6 +1023,7 @@ def get_today_candidates_endpoint() -> dict:
             all_stocks=analysis["stocks"],
         )
         analysis["today_candidates"] = today_cands
+    _apply_buy_readiness(today_cands or [])
     return {
         "status": "success",
         "count": len(today_cands or []),
@@ -1594,6 +1616,9 @@ def tracker_signals(
                         r_dict[fld] = d[fld]
             enriched_rows.append(r_dict)
         rows = enriched_rows
+
+    rows = [dict(r) for r in rows]
+    _apply_buy_readiness(rows)
 
     return {"count": len(rows), "signals": rows}
 
