@@ -652,6 +652,12 @@ async def _background_fast_watchlist_poller() -> None:
         try:
             if STATE.get("is_real_market") and is_idx_market_open_now() and not STATE.get("is_syncing"):
                 res = await asyncio.to_thread(TRACKER.sync_active_signals_live, None, True)
+                try:
+                    # Deteksi otomatis antrean basi (> 3 hari tidak menyentuh zona beli) -> dihapus
+                    _kp = (STATE.get("analysis") or {}).get("kpis", {})
+                    await asyncio.to_thread(TRACKER.cleanup_stale_watchlist, 3, _kp.get("latest_date"))
+                except Exception as _ex:
+                    print(f"[FastPoller] Auto-clean basi gagal: {_ex}")
                 if any(res.get(k) for k in ("entered", "win", "loss", "expired")):
                     print(
                         f"[FastPoller] ({res.get('source', 'yfinance')}) entered={res.get('entered')} "

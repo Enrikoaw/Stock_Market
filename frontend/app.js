@@ -4586,58 +4586,6 @@ async function evaluateTracker() {
   }
 }
 
-async function cleanupStaleWatchlist() {
-  if (!confirm('Bersihkan antrean saham yang sudah lebih dari 3 hari bursa tidak menyentuh zona beli?\n\nSinyal lama akan diarsipkan ke status EXPIRED agar antrean tetap fokus.')) {
-    return;
-  }
-  const btn = document.getElementById('btnCleanupStaleTracker');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span>⏳</span><span>Membersihkan...</span>';
-  }
-  try {
-    const res = await fetch('/api/tracker/cleanup-stale', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Gagal membersihkan antrean');
-    showToast(data.message || `${data.cleaned} antrean kedaluwarsa berhasil dibersihkan.`, 'success');
-    await loadTracker();
-  } catch (err) {
-    console.error('cleanupStaleWatchlist error:', err);
-    showToast(err.message || 'Gagal membersihkan antrean.', 'error');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<span>🧹</span><span>Bersihkan Basi</span>';
-    }
-  }
-}
-
-async function purgeRetailWatchlist() {
-  if (!confirm('Audit antrean Watchlist dengan Broker Summary Invezgo?\n\nSaham yang terdeteksi distribusi atau didominasi ritel akan otomatis dihapus agar antrean hanya menyisakan saham yang diakumulasi Smart Money.')) {
-    return;
-  }
-  const btn = document.getElementById('btnPurgeRetailWatchlist');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span>Memfilter...</span>';
-  }
-  try {
-    const res = await fetch('/api/tracker/purge-retail-watchlist', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Gagal memfilter watchlist');
-    showToast(data.message || 'Audit Smart Money selesai!', 'success');
-    await loadTracker();
-  } catch (err) {
-    console.error('purgeRetailWatchlist error:', err);
-    showToast(err.message || 'Gagal memfilter watchlist.', 'error');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<span>Filter Broksum</span>';
-    }
-  }
-}
-
 async function resetTracker() {
   if (!confirm('Hapus SEMUA catatan Watchlist/Running/Win/Loss dan mulai uji dari nol?')) return;
   const res = await fetch('/api/tracker/reset', { method: 'POST' });

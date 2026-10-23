@@ -564,18 +564,10 @@ class SignalTracker:
                     px = float(r.get("last_close") or r.get("entry_high") or 0)
                     stale_items.append((int(r["id"]), px))
 
-            for sid, px in stale_items:
+            # Otomatis HAPUS antrean yang > max_days tidak menyentuh zona beli (tanpa tombol manual)
+            if stale_items:
                 conn.execute(
-                    update(signals_table)
-                    .where(signals_table.c.id == sid)
-                    .values(
-                        status="EXPIRED",
-                        exit_date=ref_date,
-                        exit_price=px,
-                        pnl_pct=0.0,
-                        note=f"Kedaluwarsa: zona entry tidak tersentuh dalam {max_days} hari bursa.",
-                        updated_at=_now_str(),
-                    )
+                    delete(signals_table).where(signals_table.c.id.in_([sid for sid, _ in stale_items]))
                 )
             removed = len(stale_items)
         return removed
