@@ -417,7 +417,18 @@ def analyze_broker_summary(top_buyers: list[dict], top_sellers: list[dict]) -> d
         score_modifier = -20
         status = "DISTRIBUTION_WARNING"
 
+    # 4. Siapa yang menampung barang (akumulasi 3 hari bursa): Smart Money / Ritel / Campuran
+    inst_buying_count = sum(1 for c in buyer_codes if c in INST_FOREIGN_BROKERS)
+    if retail_trap or retail_buying_count >= 2:
+        holder_type = "RETAIL"
+    elif inst_buying_count >= 1 and bdr >= 10.0:
+        holder_type = "SMART_MONEY"
+    else:
+        holder_type = "MIXED"
+
     return {
+        "holder_type": holder_type,
+        "lookback_days": BROKSUM_LOOKBACK_DAYS,
         "bdr": bdr,
         "score_modifier": score_modifier,
         "status": status,
@@ -541,6 +552,24 @@ def extract_brokers_from_payload(payload: Any) -> tuple[list[dict], list[dict]]:
     return norm_buyers, norm_sellers
 
 
+BROKSUM_LOOKBACK_DAYS = 3  # Jendela akumulasi broksum: 3 hari bursa terakhir (termasuk hari target)
+
+
+def broksum_range_start(date_str: str, n_days: int = BROKSUM_LOOKBACK_DAYS) -> str:
+    """Tanggal awal rentang n hari bursa (Senin-Jumat, di luar libur BEI) yang berakhir di date_str."""
+    try:
+        from datetime import timedelta
+        cur = datetime.strptime(date_str, "%Y-%m-%d")
+        counted = 1
+        while counted < max(1, n_days):
+            cur -= timedelta(days=1)
+            if cur.weekday() < 5 and cur.strftime("%Y-%m-%d") not in IDX_HOLIDAYS:
+                counted += 1
+        return cur.strftime("%Y-%m-%d")
+    except Exception:
+        return date_str
+
+
 def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str, force: bool = False, is_manual: bool = False) -> list | dict[str, Any] | None:
     """
     Mengambil data broker summary via API resmi Invezgo:
@@ -566,7 +595,9 @@ def fetch_broker_summary_invezgo(ticker: str, date_str: str, api_key: str, force
 
     clean_key = api_key.replace("Bearer ", "").strip()
     clean_ticker = ticker.upper().strip()
-    url = f"https://api.invezgo.com/analysis/summary/stock/{clean_ticker}?from={date_str}&to={date_str}&investor=all&market=RG"
+    # Akumulasi 3 hari bursa ke belakang dalam 1 request (rentang from..to) untuk melihat siapa yang menampung barang
+    from_date = broksum_range_start(date_str, BROKSUM_LOOKBACK_DAYS)
+    url = f"https://api.invezgo.com/analysis/summary/stock/{clean_ticker}?from={from_date}&to={date_str}&investor=all&market=RG"
     headers = {
         "Authorization": f"Bearer {clean_key}",
         "User-Agent": "SmartFlowIDX/94.4",
@@ -1092,6 +1123,8 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
         s["top_buyers"] = ", ".join(s["top_buyers_list"])
         s["top_sellers"] = ", ".join(s["top_sellers_list"])
         s["broker_date"] = actual_date
+        s["broker_range_from"] = broksum_range_start(actual_date, BROKSUM_LOOKBACK_DAYS)
+        s["broker_holder_type"] = metrics.get("holder_type", "MIXED")
 
         if metrics.get("bandar_avg"):
             s["bandar_avg_buy"] = metrics["bandar_avg"]
@@ -1258,6 +1291,8 @@ def filter_and_purge_watchlist_by_smart_money(
             reason_elim = f"Pembeli didominasi broker ritel ({retail_count} dari 3: {', '.join(top_buyers)})"
         elif inst_count == 0 and bdr < 10.0:
             reason_elim = f"Tidak ada jejak broker institusi di Top 3 Buyer ({', '.join(top_buyers)})"
+        elif metrics.get("holder_type") == "RETAIL":
+            reason_elim = f"Barang ditampung ritel dalam {BROKSUM_LOOKBACK_DAYS} hari bursa terakhir ({', '.join(top_buyers)})"
 
         if reason_elim:
             print(f"[SmartPurge] [ELIMINASI] {ticker} DIELIMINASI DARI WATCHLIST -> {reason_elim}")
@@ -1277,7 +1312,7 @@ def filter_and_purge_watchlist_by_smart_money(
             print(f"[SmartPurge] [LOLOS] {ticker} LOLOS SMART MONEY (BDR: +{bdr:.1f}%, Buyer: {', '.join(top_buyers)}, Bandar Avg: {bandar_avg})")
             upd_values = {
                 "score": min(100, max(5, int(s.get("score", 70) + metrics.get("score_modifier", 10)))),
-                "note": f"Smart Money Terkonfirmasi: BDR +{bdr:.1f}% (Buyer: {', '.join(top_buyers)}) · Avg Bandar: Rp {bandar_avg or '-'}",
+                "note": f"Smart Money Terkonfirmasi ({BROKSUM_LOOKBACK_DAYS} hari bursa): BDR +{bdr:.1f}% (Buyer: {', '.join(top_buyers)}) · Avg Bandar: Rp {bandar_avg or '-'}",
             }
             if bandar_avg and bandar_avg > 0:
                 rev_ep = float(_round_idx_tick(float(bandar_avg)))
