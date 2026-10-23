@@ -3014,7 +3014,7 @@ function renderInspectorPanel(d) {
           planBroksumBadge.className = 'font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30';
         }
       } else {
-        planTopBuyersEl.innerHTML = `<span class="text-slate-400 font-normal italic">Belum dimuat</span> <button onclick="fetchBrokerSummaryForSelected('${escHtml(d.ticker)}', true)" class="ml-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600/30 font-semibold">Cek Broksum</button>`;
+        planTopBuyersEl.innerHTML = '<span class="text-slate-400 font-normal italic">Belum dimuat</span>';
         planBandarAvgEl.textContent = '-';
         planBroksumBadge.textContent = 'DATA BELUM ADA';
         planBroksumBadge.className = 'font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20';

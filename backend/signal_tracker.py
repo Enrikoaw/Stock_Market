@@ -316,7 +316,7 @@ class SignalTracker:
             print(f"[SignalTracker] Berhasil memulihkan {repaired} sinyal ke status aktif (RUNNING/WATCHLIST)!")
         return repaired
 
-    def repair_and_sync_watchlist_entries(self) -> int:
+    def repair_and_sync_watchlist_entries(self, details: dict[str, dict] | None = None) -> int:
         """
         Memeriksa dan menyelaraskan seluruh sinyal (WATCHLIST, RUNNING, WIN, LOSS, TIMEOUT):
         1. Menyelaraskan harga Entry, SL, TP1, TP2 ke fraksi tick resmi BEI dengan Risk:Reward terukur.
@@ -324,6 +324,7 @@ class SignalTracker:
            otomatis mengeksekusi transisi ke RUNNING dan menghitung floating P/L riil.
         3. Menyinkronkan Harga Beli (entry_high/entry_low) dan Harga Masuk (entry_price) agar 100% sama
            pada sinyal RUNNING/WIN/LOSS/TIMEOUT, serta menghitung ulang P/L secara presisi.
+        4. Menyinkronkan antrean WATCHLIST dengan rencana trading support terkini (misal: BBCA).
         """
         repaired = 0
         today_date = now_wib().strftime("%Y-%m-%d")
@@ -341,6 +342,18 @@ class SignalTracker:
                 tp1 = float(r.get("target") or 0)
                 tp2 = float(r.get("target_2") or 0)
                 last_c = float(r.get("last_close") or e_high or 1)
+
+                if st == "WATCHLIST" and details and t_up in details and details[t_up].get("trading_plan"):
+                    tp_obj = details[t_up]["trading_plan"]
+                    tp_ep = float(tp_obj.get("entry_price") or tp_obj.get("entry_high") or 0)
+                    if tp_ep > 0:
+                        e_high = tp_ep
+                        if tp_obj.get("stop_loss"):
+                            sl = float(tp_obj["stop_loss"])
+                        if tp_obj.get("target_1"):
+                            tp1 = float(tp_obj["target_1"])
+                        if tp_obj.get("target_2"):
+                            tp2 = float(tp_obj["target_2"])
 
                 clean_ep, clean_sl, clean_tp1, clean_tp2 = align_signal_prices(e_high, sl, tp1, tp2)
                 pri_tp = clean_tp2 if self.tp_level == 2 else clean_tp1

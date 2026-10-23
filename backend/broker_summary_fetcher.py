@@ -1289,6 +1289,17 @@ def filter_and_purge_watchlist_by_smart_money(
                 upd_values["target"] = float(_round_idx_tick(rev_ep + 2.0 * risk_rp))
                 upd_values["target_2"] = float(_round_idx_tick(rev_ep + 3.5 * risk_rp))
 
+                # Sinkronkan juga langsung ke trading_plan di memory (details_map)
+                if details_map and ticker in details_map and details_map[ticker].get("trading_plan"):
+                    tp_obj = details_map[ticker]["trading_plan"]
+                    tp_obj["entry_price"] = rev_ep
+                    tp_obj["entry_high"] = rev_ep
+                    tp_obj["entry_low"] = rev_ep
+                    tp_obj["stop_loss"] = new_sl
+                    tp_obj["target_1"] = upd_values["target"]
+                    tp_obj["target_2"] = upd_values["target_2"]
+                    tp_obj["support_label"] = "Support Avg Bandar"
+
             try:
                 from sqlalchemy import update
                 from signal_tracker import signals_table, _now_str

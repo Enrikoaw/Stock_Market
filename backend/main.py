@@ -97,7 +97,8 @@ LAST_BROKSUM_SESI2_DATE: str | None = _init_broker_st.get("sesi2_last_date")
 
 def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> None:
     """Sinkronkan status sinyal tracker ke objek saham/detail TANPA menimpa harga pasar terbaru (close/history).
-    Hanya mengunci level trading_plan jika sinyal berstatus aktif (WATCHLIST/RUNNING) atau baru selesai hari ini."""
+    Mengunci level trading_plan agar 100% konsisten dengan Pantauan jika sinyal berstatus aktif (WATCHLIST/RUNNING)
+    atau baru selesai hari ini."""
     st = str(sig.get("status", "")).upper()
     exit_dt = str(sig.get("exit_date") or "")
     is_active = st in ("WATCHLIST", "RUNNING")
@@ -107,7 +108,7 @@ def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> No
         return
 
     live_close = float(item.get("close") or 0)
-    e_p = float(sig.get("entry_price") or sig.get("entry_high") or sig.get("entry_low") or 0)
+    e_p = float(sig.get("entry_high") or sig.get("entry_price") or sig.get("entry_low") or 0)
     pnl_val = sig.get("pnl_pct")
     if st == "RUNNING" and live_close > 0 and e_p > 0:
         pnl_val = round(((live_close - e_p) / e_p) * 100.0, 2)
@@ -118,33 +119,34 @@ def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> No
         item["tracker_trigger_type"] = str(sig.get("trigger_type")).upper()
         item["tracker_trigger_label"] = sig.get("trigger_label") or item["tracker_trigger_type"]
     item["tracker_pnl_pct"] = pnl_val
-    item["tracker_entry_price"] = sig.get("entry_price")
+    item["tracker_entry_price"] = e_p
     item["tracker_signal_date"] = sig.get("signal_date")
 
     plan = dict(item.get("trading_plan") or {})
     plan["status"] = st
     plan["tracker_id"] = sig["id"]
     plan["signal_date"] = sig.get("signal_date")
-    # Hanya kunci harga entry ke histori tracker jika posisi SUDAH tereksekusi (RUNNING / WIN / LOSS).
-    # Jika masih WATCHLIST (belum terbeli), gunakan harga entry Support Terdekat terbaru agar jika harga terbang otomatis direvisi ke support.
-    if st in ("RUNNING", "WIN", "LOSS"):
-        if e_p > 0:
-            plan["entry_price"] = e_p
-            plan["entry_high"] = e_p
-            plan["entry_low"] = e_p
-        if sig.get("stop_loss") is not None:
-            plan["stop_loss"] = float(sig["stop_loss"])
-        if sig.get("target") is not None:
-            plan["target_1"] = float(sig["target"])
-        if sig.get("target_2") is not None:
-            plan["target_2"] = float(sig["target_2"])
-        if e_p > 0:
-            if plan.get("stop_loss"):
-                plan["stop_loss_pct"] = round(((plan["stop_loss"] - e_p) / e_p) * 100.0, 2)
-            if plan.get("target_1"):
-                plan["target_1_pct"] = round(((plan["target_1"] - e_p) / e_p) * 100.0, 2)
-            if plan.get("target_2"):
-                plan["target_2_pct"] = round(((plan["target_2"] - e_p) / e_p) * 100.0, 2)
+
+    # KUNCI UTAMA SINKRONISASI:
+    # Seluruh sinyal yang ada di Pantauan (WATCHLIST, RUNNING, WIN, LOSS)
+    # WAJIB memiliki Harga Beli (Entry), Stop Loss, dan Target yang 100% sama persis dengan Pantauan
+    if e_p > 0:
+        plan["entry_price"] = e_p
+        plan["entry_high"] = e_p
+        plan["entry_low"] = e_p
+    if sig.get("stop_loss") is not None and float(sig["stop_loss"]) > 0:
+        plan["stop_loss"] = float(sig["stop_loss"])
+    if sig.get("target") is not None and float(sig["target"]) > 0:
+        plan["target_1"] = float(sig["target"])
+    if sig.get("target_2") is not None and float(sig["target_2"]) > 0:
+        plan["target_2"] = float(sig["target_2"])
+    if e_p > 0:
+        if plan.get("stop_loss"):
+            plan["stop_loss_pct"] = round(((plan["stop_loss"] - e_p) / e_p) * 100.0, 2)
+        if plan.get("target_1"):
+            plan["target_1_pct"] = round(((plan["target_1"] - e_p) / e_p) * 100.0, 2)
+        if plan.get("target_2"):
+            plan["target_2_pct"] = round(((plan["target_2"] - e_p) / e_p) * 100.0, 2)
     if pnl_val is not None:
         plan["pnl_pct"] = float(pnl_val)
 
@@ -161,12 +163,34 @@ def _overlay_tracker_signal_on_plan(item: dict, sig: dict, latest_dt: str) -> No
         plan["rationale"] = f"Posisi beli aktif sejak {sig.get('entry_date', sig.get('signal_date'))} @ Rp {e_p:,.0f} (Floating {pnl_str})."
     elif st == "WATCHLIST":
         plan["action_bias"] = "⏳ MENUNGGU ENTRY"
-        plan["rationale"] = f"Sinyal aktif di Watchlist sejak {sig.get('signal_date')}. Menunggu harga menyentuh area beli support."
+        plan["rationale"] = f"Sinyal aktif di Watchlist sejak {sig.get('signal_date')}. Antre beli di area support Rp {e_p:,.0f}."
     elif st == "LOSS":
         pnl_num = float(pnl_val or 0)
         pnl_str = f"{pnl_num:+.1f}%"
         plan["action_bias"] = f"🛑 CUT LOSS ({pnl_str})"
         plan["rationale"] = f"Posisi ditutup disiplin batas rugi pada {sig.get('exit_date', sig.get('signal_date'))}."
+
+    if e_p > 0 and plan.get("target_1") and plan.get("stop_loss"):
+        t1 = plan["target_1"]
+        t2 = plan.get("target_2", t1)
+        sl_p = plan["stop_loss"]
+        t1_pct = plan.get("target_1_pct", 0)
+        t2_pct = plan.get("target_2_pct", 0)
+        sl_pct = plan.get("stop_loss_pct", 0)
+        plan["auto_order_text"] = (
+            f"[Trading Plan Swing - #{item.get('ticker')}]\n"
+            f"1. Antre Beli: Rp {e_p:,.0f} (Buy Limit)\n"
+            f"2. Kunci Cuan TP1 (50% Lot): Rp {t1:,.0f} ({t1_pct:+.1f}%)\n"
+            f"3. Kawal Trend TP2 (50% Lot): Rp {t2:,.0f} ({t2_pct:+.1f}%)\n"
+            f"4. Batas Rugi (SL): Rp {sl_p:,.0f} ({sl_pct:.1f}%)\n"
+            f"Strategi: Begitu TP1 tercapai, geser Stop Loss sisa lot ke Rp {e_p:,.0f} (BEP/Modal) untuk mengunci cuan bebas risiko."
+        )
+        plan["worker_guidance"] = {
+            "leg1_label": f"Jual 50% Lot @ Rp {t1:,.0f} ({t1_pct:+.1f}%)",
+            "leg2_label": f"Kawal 50% Lot @ Rp {t2:,.0f} ({t2_pct:+.1f}%)",
+            "sl_label": f"SL Closing @ Rp {sl_p:,.0f} ({sl_pct:.1f}%)",
+            "mode": "Set-and-Forget (Bebas pantau bursa saat kerja)",
+        }
     item["trading_plan"] = plan
 
 
@@ -1021,6 +1045,12 @@ def get_stock_detail(ticker: str) -> dict:
     if key not in details_map:
         raise HTTPException(status_code=404, detail=f"Saham '{key}' tidak ditemukan pada dataset aktif.")
 
+    # Sinkronkan status dan level harga terkini dari tracker ke trading_plan agar 100% konsisten
+    sig_map = TRACKER.get_latest_signals_map()
+    if key in sig_map:
+        latest_dt = str(STATE["analysis"].get("kpis", {}).get("latest_date", ""))
+        _overlay_tracker_signal_on_plan(details_map[key], sig_map[key], latest_dt)
+
     return details_map[key]
 
 
@@ -1451,6 +1481,38 @@ def tracker_signals(
             t_up = str(r.get("ticker", "")).upper()
             if t_up in details_map:
                 d = details_map[t_up]
+                # Jika masih di antrean WATCHLIST, pastikan Harga Beli sinkron dengan Trading Plan terkini
+                if r_dict.get("status") == "WATCHLIST" and d.get("trading_plan"):
+                    tp = d["trading_plan"]
+                    tp_ep = float(tp.get("entry_price") or tp.get("entry_high") or 0)
+                    cur_h = float(r_dict.get("entry_high") or 0)
+                    if tp_ep > 0 and (tp_ep != cur_h or cur_h != _round_idx_tick(cur_h)):
+                        clean_ep, clean_sl, clean_tp1, clean_tp2 = align_signal_prices(
+                            tp_ep, float(tp.get("stop_loss") or 0), float(tp.get("target_1") or 0), float(tp.get("target_2") or 0)
+                        )
+                        r_dict["entry_high"] = clean_ep
+                        r_dict["entry_low"] = clean_ep
+                        r_dict["entry_price_target"] = clean_ep
+                        r_dict["stop_loss"] = clean_sl
+                        r_dict["target"] = clean_tp2 if TRACKER.tp_level == 2 else clean_tp1
+                        r_dict["target_2"] = clean_tp2
+                        try:
+                            from signal_tracker import signals_table
+                            with TRACKER._lock, TRACKER.engine.begin() as conn:
+                                conn.execute(
+                                    update(signals_table)
+                                    .where(signals_table.c.id == r["id"])
+                                    .values(
+                                        entry_high=clean_ep,
+                                        entry_low=clean_ep,
+                                        stop_loss=clean_sl,
+                                        target=r_dict["target"],
+                                        target_2=clean_tp2,
+                                        updated_at=_now_str(),
+                                    )
+                                )
+                        except Exception:
+                            pass
                 for fld in (
                     "bdr_pct", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list",
                     "bandar_avg_buy", "diff_bandar_avg_pct", "retail_trap", "has_real_broker_summary",
@@ -1485,9 +1547,11 @@ def tracker_repair() -> dict:
     """Hapus paksa duplicate sinyal, perbaiki sinyal aktif, dan perbarui data pasar."""
     deleted = TRACKER.cleanup_duplicate_signals(force_delete=True)
     repaired = TRACKER.repair_corrupted_loss_signals()
-    sync_w = TRACKER.repair_and_sync_watchlist_entries()
+    details_map = STATE.get("analysis", {}).get("details") if STATE.get("analysis") else None
+    sync_w = TRACKER.repair_and_sync_watchlist_entries(details=details_map)
     if STATE.get("analysis") and "details" in STATE["analysis"]:
         TRACKER.evaluate(STATE["analysis"]["details"])
+        sync_tracker_to_analysis(STATE["analysis"])
     return {
         "success": True,
         "deleted_duplicates": deleted,
