@@ -4140,7 +4140,7 @@ function renderTrackerStats(data) {
     TIMEOUT: s.timeout,
   };
   const TAB_LABELS = {
-    PRIORITY: 'Top 3 Siap Beli',
+    PRIORITY: 'Siap Beli',
     ALL: 'Semua Sinyal',
     WATCHLIST: 'Menunggu',
     RUNNING: 'Berjalan',
@@ -4197,7 +4197,7 @@ function renderTrackerTable(rows) {
 
   if (!rows.length) {
     const emptyMsg = trackerTab === 'PRIORITY'
-      ? 'Belum ada saham antrean yang memenuhi kriteria Top 3 Siap Beli saat ini. Pantau tab Menunggu.'
+      ? 'Belum ada saham antrean yang memenuhi kriteria Siap Beli saat ini. Pantau tab Menunggu.'
       : 'Belum ada sinyal pada kategori ini. Sinyal akumulasi dengan score tinggi akan otomatis tercatat setelah sinkronisasi data real.';
     if (tbody) {
       tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">${emptyMsg}</td></tr>`;
@@ -4288,7 +4288,7 @@ function renderTrackerTable(rows) {
               <div>
                 <div class="font-sans font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 flex items-center gap-1.5 transition">
                   <span>${safeTicker}</span>
-                  ${trackerTab === 'PRIORITY' ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/25 text-amber-300 border border-amber-400/40 tracking-wider">TOP 3</span>' : ''}
+                  ${trackerTab === 'PRIORITY' ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 tracking-wider">SIAP BELI</span>' : ''}
                 </div>
                 <div class="text-[11px] text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 truncate max-w-[150px] mt-0.5">${safeSector}</div>
               </div>
@@ -4422,7 +4422,7 @@ function renderTrackerTable(rows) {
                 <div class="min-w-0">
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="font-sans font-black text-sm text-slate-900 dark:text-white leading-tight">${safeTicker}</span>
-                    ${trackerTab === 'PRIORITY' ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/30">TOP 3</span>' : ''}
+                    ${trackerTab === 'PRIORITY' ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30">SIAP BELI</span>' : ''}
                     ${hasDistWarning ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-400/30">Awas Distribusi</span>' : ''}
                   </div>
                   <div class="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[140px] leading-tight mt-0.5">${safeSector}</div>

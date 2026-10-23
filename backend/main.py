@@ -327,16 +327,19 @@ def _sync_buy_readiness_to_tracker() -> None:
                 base["retail_trap"] = False
                 d["retail_trap"] = False
             b_avg = float(d["bandar_avg_buy"])
+            cur_c = float(base.get("close") or d.get("close") or 0)
+            # HANYA jadikan Modal Bandar sebagai harga Antre Beli jika berada di BAWAH harga pasar (sebagai support)!
             if base.get("trading_plan") and b_avg > 0 and d.get("buy_status") in ("SIAP_BELI", "MENUNGGU"):
-                rev_ep, rev_sl, rev_tp1, rev_tp2 = align_signal_prices(b_avg)
-                base["trading_plan"]["entry_price"] = rev_ep
-                base["trading_plan"]["entry_low"] = rev_ep
-                base["trading_plan"]["entry_high"] = rev_ep
-                base["trading_plan"]["stop_loss"] = rev_sl
-                base["trading_plan"]["target_1"] = rev_tp1
-                base["trading_plan"]["target_2"] = rev_tp2
-                base["trading_plan"]["support_label"] = "Support Avg Bandar"
-                d["trading_plan"] = base["trading_plan"]
+                if cur_c > 0 and b_avg < cur_c:
+                    rev_ep, rev_sl, rev_tp1, rev_tp2 = align_signal_prices(b_avg)
+                    base["trading_plan"]["entry_price"] = rev_ep
+                    base["trading_plan"]["entry_low"] = rev_ep
+                    base["trading_plan"]["entry_high"] = rev_ep
+                    base["trading_plan"]["stop_loss"] = rev_sl
+                    base["trading_plan"]["target_1"] = rev_tp1
+                    base["trading_plan"]["target_2"] = rev_tp2
+                    base["trading_plan"]["support_label"] = "Support Avg Bandar"
+                    d["trading_plan"] = base["trading_plan"]
 
         try:
             TRACKER._ensure_candidate_in_watchlist(d, latest_dt, "Database Broksum 3H")
@@ -1070,9 +1073,23 @@ def _screener_memo_key(args: tuple) -> tuple:
     return (args, id(a), STATE.get("last_sync_time"), STATE.get("last_tracker_run"), NEWS_CACHE.get("timestamp"))
 
 
-def _screener_cached(trigger, min_score, min_vol_ratio, search, sort_by, min_value_b) -> dict:
+def _unwrap_query(v: Any, default: Any) -> Any:
+    """Ekstrak nilai default bila argumen berupa FastAPI Query object saat dipanggil internal."""
+    if hasattr(v, "default"):
+        d = v.default
+        return d if d is not ... else default
+    return v if v is not None else default
+
+
+def _screener_cached(trigger="ALL", min_score=0, min_vol_ratio=0.0, search="", sort_by="score", min_value_b=0.0) -> dict:
     import time as _t
-    args = (str(trigger), int(min_score), float(min_vol_ratio), str(search or ""), str(sort_by), float(min_value_b))
+    t_clean = _unwrap_query(trigger, "ALL")
+    s_clean = _unwrap_query(min_score, 0)
+    v_clean = _unwrap_query(min_vol_ratio, 0.0)
+    q_clean = _unwrap_query(search, "")
+    o_clean = _unwrap_query(sort_by, "score")
+    b_clean = _unwrap_query(min_value_b, 0.0)
+    args = (str(t_clean), int(s_clean), float(v_clean), str(q_clean or ""), str(o_clean), float(b_clean))
     key = _screener_memo_key(args)
     hit = SCREENER_MEMO.get(key)
     if hit and (_t.time() - hit[0]) < SCREENER_MEMO_TTL:
@@ -1668,11 +1685,13 @@ def tracker_signals(
     sort_by: str = Query(default="id_desc", description="Urutkan sinyal: pnl_desc, pnl_asc, score_desc, date_desc, ticker_asc, distance_asc"),
 ) -> dict:
     _sync_buy_readiness_to_tracker()
-    st_up = status.upper()
+    status_clean = str(_unwrap_query(status, "ALL"))
+    sort_clean = str(_unwrap_query(sort_by, "id_desc"))
+    st_up = status_clean.upper()
     if st_up == "PRIORITY":
         rows = TRACKER.list_signals(status="WATCHLIST", sort_by="distance_asc")
     else:
-        rows = TRACKER.list_signals(status=status, sort_by=sort_by)
+        rows = TRACKER.list_signals(status=status_clean, sort_by=sort_clean)
 
     # Memperkaya data sinyal dengan metrik broker summary terkini dari memori/analisis
     details_map = STATE.get("analysis", {}).get("details", {}) if STATE.get("analysis") else {}
@@ -2100,8 +2119,9 @@ def _get_live_prices_map() -> dict[str, float]:
 @app.get("/api/portfolio")
 def get_portfolio_trades(status: str = Query(default="ALL")) -> dict:
     """Daftar riil transaksi portofolio pengguna beserta live floating P/L."""
+    status_clean = str(_unwrap_query(status, "ALL"))
     live_prices = _get_live_prices_map()
-    trades = PORTFOLIO.list_trades(status=status, live_prices_map=live_prices)
+    trades = PORTFOLIO.list_trades(status=status_clean, live_prices_map=live_prices)
     summary = PORTFOLIO.summary(live_prices_map=live_prices)
     return {"status": "success", "summary": summary, "trades": trades}
 

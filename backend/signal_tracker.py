@@ -1937,6 +1937,17 @@ class SignalTracker:
                     continue
                 sl_val = float(r.get("stop_loss") or 0)
                 if sl_val > 0 and last_c <= sl_val:
+                    # Jika harga sudah jebol di bawah Stop Loss sebelum terbeli, batalkan antrean
+                    conn.execute(
+                        update(signals_table)
+                        .where(signals_table.c.id == r["id"])
+                        .values(
+                            status="CANCELLED",
+                            note=f"Dibatalkan otomatis: harga terakhir (Rp {last_c:,.0f}) sudah menembus Stop Loss (Rp {sl_val:,.0f}).",
+                            updated_at=_now_str(),
+                        )
+                    )
+                    filled += 1
                     continue
                 fill = round(last_c, 2)
                 conn.execute(
@@ -1956,7 +1967,7 @@ class SignalTracker:
                 )
                 filled += 1
         if filled:
-            print(f"[SignalTracker] {filled} antrean Watchlist otomatis tereksekusi (harga terakhir <= Antre Beli).")
+            print(f"[SignalTracker] {filled} antrean Watchlist otomatis disinkronkan (eksekusi/batal).")
         return filled
 
     def _ensure_candidate_in_watchlist(self, stock: dict, date_str: str, session_label: str) -> None:
@@ -1993,9 +2004,10 @@ class SignalTracker:
                 trig_type = "PULLBACK_ACCUM"
                 trig_lbl = "Pullback Support"
 
-            raw_ep = float(plan.get("entry_price") or plan.get("entry_high") or (c_p * 0.98))
+            raw_ep = float(plan.get("entry_price") or plan.get("entry_high") or (c_p * 0.98 if c_p > 0 else 0))
             sup_lbl = str(plan.get("support_label") or "Support Terdekat")
-            if b_avg > 0 and (buy_st in ("SIAP_BELI", "MENUNGGU") or c_p <= 0 or (0 < c_p * 0.915 <= b_avg <= c_p)):
+            # HANYA jadikan Modal Bandar sebagai harga Antre Beli jika berada di BAWAH harga penutupan pasar saat ini (c_p)!
+            if b_avg > 0 and (c_p <= 0 or 0 < b_avg < c_p):
                 raw_ep = b_avg
                 sup_lbl = "Support Avg Bandar"
                 raw_sl = raw_ep * 0.965
@@ -2007,6 +2019,13 @@ class SignalTracker:
                 raw_tp2 = float(plan.get("target_2") or plan.get("tp2") or (raw_ep * 1.12))
 
             e_p, sl, tp1, tp2 = align_signal_prices(raw_ep, raw_sl, raw_tp1, raw_tp2)
+
+            # JAMINAN KONSISTENSI MUTLAK: Sinyal antre di WATCHLIST HARUS memiliki harga antrean (e_p) di bawah harga pasar (c_p)
+            if c_p > 0 and e_p >= c_p:
+                from screener_engine import _round_idx_tick
+                step = 1 if c_p < 200 else (2 if c_p < 500 else (5 if c_p < 2000 else (10 if c_p < 5000 else 25)))
+                e_p = _round_idx_tick(max(50, c_p - step))
+                sl = _round_idx_tick(min(sl, e_p * 0.965))
             score = int(stock.get("smart_money_score") or 70)
             if trig_type in ("NO_SIGNAL", "", "NONE"):
                 trig_type = "BIG_ACCUMULATION" if buy_st == "SIAP_BELI" else "PULLBACK_ACCUM"

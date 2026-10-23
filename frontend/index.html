@@ -1323,7 +1323,7 @@
         <!-- Tracker Toolbar: Tabs, Search & Sort -->
         <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
           <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap sm:overflow-visible" id="trackerTabs">
-            <button data-tab="PRIORITY" onclick="setTrackerTab('PRIORITY')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-400/30 flex items-center gap-1 flex-shrink-0 whitespace-nowrap">Top 3 Siap Beli</button>
+            <button data-tab="PRIORITY" onclick="setTrackerTab('PRIORITY')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-400/30 flex items-center gap-1 flex-shrink-0 whitespace-nowrap">Siap Beli</button>
             <button data-tab="ALL" onclick="setTrackerTab('ALL')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0 whitespace-nowrap">Semua Sinyal</button>
             <button data-tab="WATCHLIST" onclick="setTrackerTab('WATCHLIST')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 flex-shrink-0 whitespace-nowrap">Menunggu</button>
             <button data-tab="RUNNING" onclick="setTrackerTab('RUNNING')" class="tracker-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 flex-shrink-0 whitespace-nowrap">Berjalan</button>
@@ -1371,10 +1371,10 @@
                 <th class="py-3 pl-4 pr-2 cursor-pointer hover:text-white" onclick="toggleTrackerSort('ticker')">Saham <span id="sortIconTicker" class="text-[10px] text-emerald-400 font-mono"></span></th>
                 <th class="py-3 px-3 cursor-pointer hover:text-white" onclick="toggleTrackerSort('score')">Sinyal &amp; Skor <span id="sortIconScore" class="text-[10px] text-emerald-400 font-mono"></span></th>
                 <th class="py-3 px-3 cursor-pointer hover:text-white" onclick="toggleTrackerSort('date')">Waktu &amp; Tanggal Sinyal <span id="sortIconDate" class="text-[10px] text-emerald-400 font-mono"></span></th>
-                <th class="py-3 px-3 text-right">Harga Beli</th>
+                <th class="py-3 px-3 text-right">Antre Beli (Plan)</th>
                 <th class="py-3 px-3 text-right">SL / TP</th>
-                <th class="py-3 px-3 text-center">Status Simulasi</th>
-                <th class="py-3 px-3 text-right">Harga Masuk</th>
+                <th class="py-3 px-3 text-center">Status</th>
+                <th class="py-3 px-3 text-right">Kesiapan / Masuk</th>
                 <th class="py-3 px-3 text-right">Harga Terkini</th>
                 <th class="py-3 px-3 text-right cursor-pointer hover:text-white" onclick="toggleTrackerSort('pnl')">Hasil (P/L) <span id="sortIconPnl" class="text-[10px] text-emerald-400 font-mono"></span></th>
                 <th class="py-3 pl-1 pr-3 text-right"></th>
@@ -2299,6 +2299,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=95.7"></script>
+  <script src="/static/app.js?v=95.9"></script>
 </body>
 </html>

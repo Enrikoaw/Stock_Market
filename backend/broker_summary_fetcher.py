@@ -1728,25 +1728,28 @@ def filter_and_purge_watchlist_by_smart_money(
                 "note": f"Smart Money Terkonfirmasi ({BROKSUM_LOOKBACK_DAYS} hari bursa): BDR +{bdr:.1f}% (Buyer: {', '.join(top_buyers)}) · Avg Bandar: Rp {bandar_avg or '-'}",
             }
             if bandar_avg and bandar_avg > 0:
-                rev_ep = float(_round_idx_tick(float(bandar_avg)))
-                new_sl = float(_round_idx_tick(rev_ep * 0.965))
-                risk_rp = max(1.0, rev_ep - new_sl)
-                upd_values["entry_low"] = rev_ep
-                upd_values["entry_high"] = rev_ep
-                upd_values["stop_loss"] = new_sl
-                upd_values["target"] = float(_round_idx_tick(rev_ep + 2.0 * risk_rp))
-                upd_values["target_2"] = float(_round_idx_tick(rev_ep + 3.5 * risk_rp))
+                cur_px = float(details_map[ticker].get("close") or s.get("last_close") or 0) if details_map and ticker in details_map else float(s.get("last_close") or 0)
+                # HANYA revisi Antre Beli ke Modal Bandar jika Modal Bandar benar-benar berada di BAWAH harga penutupan pasar!
+                if cur_px > 0 and float(bandar_avg) < cur_px:
+                    rev_ep = float(_round_idx_tick(float(bandar_avg)))
+                    new_sl = float(_round_idx_tick(rev_ep * 0.965))
+                    risk_rp = max(1.0, rev_ep - new_sl)
+                    upd_values["entry_low"] = rev_ep
+                    upd_values["entry_high"] = rev_ep
+                    upd_values["stop_loss"] = new_sl
+                    upd_values["target"] = float(_round_idx_tick(rev_ep + 2.0 * risk_rp))
+                    upd_values["target_2"] = float(_round_idx_tick(rev_ep + 3.5 * risk_rp))
 
-                # Sinkronkan juga langsung ke trading_plan di memory (details_map)
-                if details_map and ticker in details_map and details_map[ticker].get("trading_plan"):
-                    tp_obj = details_map[ticker]["trading_plan"]
-                    tp_obj["entry_price"] = rev_ep
-                    tp_obj["entry_high"] = rev_ep
-                    tp_obj["entry_low"] = rev_ep
-                    tp_obj["stop_loss"] = new_sl
-                    tp_obj["target_1"] = upd_values["target"]
-                    tp_obj["target_2"] = upd_values["target_2"]
-                    tp_obj["support_label"] = "Support Avg Bandar"
+                    # Sinkronkan juga langsung ke trading_plan di memory (details_map)
+                    if details_map and ticker in details_map and details_map[ticker].get("trading_plan"):
+                        tp_obj = details_map[ticker]["trading_plan"]
+                        tp_obj["entry_price"] = rev_ep
+                        tp_obj["entry_high"] = rev_ep
+                        tp_obj["entry_low"] = rev_ep
+                        tp_obj["stop_loss"] = new_sl
+                        tp_obj["target_1"] = upd_values["target"]
+                        tp_obj["target_2"] = upd_values["target_2"]
+                        tp_obj["support_label"] = "Support Avg Bandar"
 
             try:
                 from sqlalchemy import update
