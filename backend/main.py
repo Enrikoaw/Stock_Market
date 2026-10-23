@@ -1483,24 +1483,30 @@ def tracker_signals(
                 d = details_map[t_up]
                 # Jika masih di antrean WATCHLIST, pastikan Harga Beli sinkron dengan Trading Plan terkini
                 if r_dict.get("status") == "WATCHLIST" and d.get("trading_plan"):
-                    tp = d["trading_plan"]
-                    tp_ep = float(tp.get("entry_price") or tp.get("entry_high") or 0)
-                    cur_h = float(r_dict.get("entry_high") or 0)
-                    if tp_ep > 0 and (tp_ep != cur_h or cur_h != _round_idx_tick(cur_h)):
-                        clean_ep, clean_sl, clean_tp1, clean_tp2 = align_signal_prices(
-                            tp_ep, float(tp.get("stop_loss") or 0), float(tp.get("target_1") or 0), float(tp.get("target_2") or 0)
-                        )
-                        r_dict["entry_high"] = clean_ep
-                        r_dict["entry_low"] = clean_ep
-                        r_dict["entry_price_target"] = clean_ep
-                        r_dict["stop_loss"] = clean_sl
-                        r_dict["target"] = clean_tp2 if TRACKER.tp_level == 2 else clean_tp1
-                        r_dict["target_2"] = clean_tp2
-                        try:
-                            from signal_tracker import signals_table
+                    try:
+                        from sqlalchemy import update as sa_update
+                        from signal_tracker import signals_table, align_signal_prices, _now_str
+                        from screener_engine import _round_idx_tick
+
+                        tp = d["trading_plan"]
+                        tp_ep = float(tp.get("entry_price") or tp.get("entry_high") or 0)
+                        cur_h = float(r_dict.get("entry_high") or 0)
+                        if tp_ep > 0 and (tp_ep != cur_h or cur_h != _round_idx_tick(cur_h)):
+                            clean_ep, clean_sl, clean_tp1, clean_tp2 = align_signal_prices(
+                                tp_ep, float(tp.get("stop_loss") or 0), float(tp.get("target_1") or 0), float(tp.get("target_2") or 0)
+                            )
+                            r_dict["entry_high"] = clean_ep
+                            r_dict["entry_low"] = clean_ep
+                            r_dict["entry_price_target"] = clean_ep
+                            r_dict["stop_loss"] = clean_sl
+                            r_dict["target"] = clean_tp2 if TRACKER.tp_level == 2 else clean_tp1
+                            r_dict["target_2"] = clean_tp2
+                            last_c = float(r_dict.get("last_close") or 0)
+                            if last_c > 0:
+                                r_dict["dist_to_entry_pct"] = round((last_c - clean_ep) / clean_ep * 100.0, 2)
                             with TRACKER._lock, TRACKER.engine.begin() as conn:
                                 conn.execute(
-                                    update(signals_table)
+                                    sa_update(signals_table)
                                     .where(signals_table.c.id == r["id"])
                                     .values(
                                         entry_high=clean_ep,
@@ -1511,8 +1517,8 @@ def tracker_signals(
                                         updated_at=_now_str(),
                                     )
                                 )
-                        except Exception:
-                            pass
+                    except Exception as ex:
+                        print(f"[TrackerSignals] Gagal sinkron watchlist {t_up}: {ex}")
                 for fld in (
                     "bdr_pct", "top_buyers", "top_sellers", "top_buyers_list", "top_sellers_list",
                     "bandar_avg_buy", "diff_bandar_avg_pct", "retail_trap", "has_real_broker_summary",
