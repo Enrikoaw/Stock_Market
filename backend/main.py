@@ -640,14 +640,38 @@ async def _background_news_alert_worker() -> None:
         await asyncio.sleep(180)
 
 
+FAST_POLL_INTERVAL_SECONDS = int(os.environ.get("FAST_POLL_INTERVAL", "60"))
+
+
+async def _background_fast_watchlist_poller() -> None:
+    """Polling cepat (default 60 detik) harga saham Watchlist/Running via TradingView Scanner
+    selama jam bursa, agar entry/TP/SL tercatat lebih responsif dibanding sync penuh yfinance."""
+    print("[FastPoller] TradingView Fast Watchlist Poller aktif.")
+    await asyncio.sleep(20)
+    while True:
+        try:
+            if STATE.get("is_real_market") and is_idx_market_open_now() and not STATE.get("is_syncing"):
+                res = await asyncio.to_thread(TRACKER.sync_active_signals_live, None, True)
+                if any(res.get(k) for k in ("entered", "win", "loss", "expired")):
+                    print(
+                        f"[FastPoller] ({res.get('source', 'yfinance')}) entered={res.get('entered')} "
+                        f"win={res.get('win')} loss={res.get('loss')} expired={res.get('expired')}"
+                    )
+        except Exception as exc:
+            print(f"[FastPoller] Error: {exc}")
+        await asyncio.sleep(max(30, FAST_POLL_INTERVAL_SECONDS))
+
+
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     """Mengelola siklus hidup server: Menjalankan worker market session cerdas secara otomatis."""
     market_task = asyncio.create_task(_background_market_session_worker())
     news_alert_task = asyncio.create_task(_background_news_alert_worker())
+    fast_poll_task = asyncio.create_task(_background_fast_watchlist_poller())
     yield
     market_task.cancel()
     news_alert_task.cancel()
+    fast_poll_task.cancel()
     try:
         TRACKER.engine.dispose()
         PORTFOLIO.engine.dispose()

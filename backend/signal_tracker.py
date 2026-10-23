@@ -873,12 +873,29 @@ class SignalTracker:
                     result[t] = dict(r)
             return result
 
-    def sync_active_signals_live(self, extra_tickers: list[str] | None = None) -> dict:
+    def sync_active_signals_live(self, extra_tickers: list[str] | None = None, prefer_tradingview: bool = False) -> dict:
         """Tarik harga & candle intraday/live terbaru secara cepat (< 3 detik) untuk saham yang aktif di Watchlist & Running (+ top screener), lalu evaluasi."""
         active_tickers = self.get_active_tickers()
         combined_tickers = list(dict.fromkeys(active_tickers + [t.upper() for t in (extra_tickers or []) if t]))
         if not combined_tickers:
             return {"entered": 0, "win": 0, "loss": 0, "expired": 0, "timeout": 0, "tickers_checked": 0}
+
+        # Jalur Cepat: TradingView Scanner (hanya saat jam bursa, bar hari ini). Fallback ke yfinance.
+        if prefer_tradingview:
+            try:
+                try:
+                    from backend.tv_live_fetcher import fetch_tv_live_details
+                except ImportError:
+                    from tv_live_fetcher import fetch_tv_live_details
+                tv_details = fetch_tv_live_details(combined_tickers)
+                if tv_details:
+                    changes = self.evaluate(tv_details)
+                    changes["tickers_checked"] = len(tv_details)
+                    changes["live_details"] = tv_details
+                    changes["source"] = "tradingview"
+                    return changes
+            except Exception as exc:
+                print(f"[TrackerLive] TradingView gagal, fallback yfinance: {exc}")
 
         try:
             import yfinance as yf
