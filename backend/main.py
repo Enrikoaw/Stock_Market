@@ -354,6 +354,12 @@ def _sync_buy_readiness_to_tracker() -> None:
         except Exception:
             pass
 
+    # 4. Konsistensi Antre Beli vs Harga Terakhir: harga terakhir <= Antre Beli -> otomatis RUNNING
+    try:
+        TRACKER.fill_touched_watchlist(latest_dt)
+    except Exception as ex:
+        print(f"[SyncBroksumDB] Warning fill watchlist: {ex}")
+
 
 def _process_tracker(analysis: dict, sync_live_network: bool = False, force_auto_track: bool = False) -> dict:
     """Evaluasi sinyal aktif dengan candle baru, lalu catat sinyal akumulasi baru ke Watchlist.
@@ -759,6 +765,12 @@ async def _background_fast_watchlist_poller() -> None:
         try:
             if STATE.get("is_real_market") and is_idx_market_open_now() and not STATE.get("is_syncing"):
                 res = await asyncio.to_thread(TRACKER.sync_active_signals_live, None, True)
+                try:
+                    _filled = await asyncio.to_thread(TRACKER.fill_touched_watchlist, None)
+                    if _filled:
+                        res["entered"] = int(res.get("entered") or 0) + _filled
+                except Exception as _exf:
+                    print(f"[FastPoller] Fill watchlist gagal: {_exf}")
                 try:
                     # Deteksi otomatis antrean basi (> 3 hari tidak menyentuh zona beli) -> dihapus
                     _kp = (STATE.get("analysis") or {}).get("kpis", {})
@@ -1681,6 +1693,9 @@ def tracker_signals(
                         tp = d["trading_plan"]
                         tp_ep = float(tp.get("entry_price") or tp.get("entry_high") or 0)
                         cur_h = float(r_dict.get("entry_high") or 0)
+                        last_c_chk = float(r_dict.get("last_close") or 0)
+                        if last_c_chk > 0 and tp_ep >= last_c_chk:
+                            tp_ep = 0  # Jangan set Antre Beli di atas harga terakhir (sudah terisi / tidak konsisten)
                         if tp_ep > 0 and (tp_ep != cur_h or cur_h != _round_idx_tick(cur_h)):
                             clean_ep, clean_sl, clean_tp1, clean_tp2 = align_signal_prices(
                                 tp_ep, float(tp.get("stop_loss") or 0), float(tp.get("target_1") or 0), float(tp.get("target_2") or 0)

@@ -1920,6 +1920,45 @@ class SignalTracker:
             self._ensure_candidate_in_watchlist(item, date_str, item.get("session_label") or "Database Broksum 3H")
         return final_picks
 
+    def fill_touched_watchlist(self, ref_date: str | None = None) -> int:
+        """Konsistensi Antre Beli vs Harga Terakhir: jika harga terakhir sudah <= harga Antre Beli
+        (entry_high) sementara status masih WATCHLIST, berarti Buy Limit sudah terisi -> ubah ke RUNNING
+        dengan harga fill = harga terakhir (lebih murah/sama dengan antrean)."""
+        filled = 0
+        today = ref_date or now_wib().strftime("%Y-%m-%d")
+        with self._lock, self.engine.begin() as conn:
+            rows = conn.execute(
+                select(signals_table).where(signals_table.c.status == "WATCHLIST")
+            ).mappings().all()
+            for r in rows:
+                e_high = float(r.get("entry_high") or 0)
+                last_c = float(r.get("last_close") or 0)
+                if e_high <= 0 or last_c <= 0 or last_c > e_high:
+                    continue
+                sl_val = float(r.get("stop_loss") or 0)
+                if sl_val > 0 and last_c <= sl_val:
+                    continue
+                fill = round(last_c, 2)
+                conn.execute(
+                    update(signals_table)
+                    .where(signals_table.c.id == r["id"])
+                    .values(
+                        status="RUNNING",
+                        entry_date=max(str(r.get("signal_date") or today), today),
+                        entry_price=fill,
+                        entry_low=fill,
+                        entry_high=fill,
+                        bars_held=0,
+                        pnl_pct=0.0,
+                        note=f"Entry tereksekusi @ Rp {fill:,.0f} (Harga terakhir Rp {last_c:,.0f} <= Antre Beli Rp {e_high:,.0f}).",
+                        updated_at=_now_str(),
+                    )
+                )
+                filled += 1
+        if filled:
+            print(f"[SignalTracker] {filled} antrean Watchlist otomatis tereksekusi (harga terakhir <= Antre Beli).")
+        return filled
+
     def _ensure_candidate_in_watchlist(self, stock: dict, date_str: str, session_label: str) -> None:
         """Memastikan saham pilihan hari ini tercatat di Watchlist (signals_table)."""
         ticker = str(stock.get("ticker", "")).upper()
