@@ -518,6 +518,42 @@ function formatBrokerPills(brokerCodes, isBuyer = true) {
 
 let currentTodayCandidates = [];
 
+function buyStatusBadgeHtml(s) {
+  const map = {
+    SIAP_BELI: ['SIAP BELI', 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50'],
+    MENUNGGU: ['MENUNGGU', 'bg-amber-500/15 text-amber-300 border-amber-400/40'],
+    BELUM_CEK: ['BELUM CEK', 'bg-slate-500/15 text-slate-300 border-slate-400/30'],
+  };
+  const [label, cls] = map[s.buy_status] || map.BELUM_CEK;
+  return `<span title="${escHtml(s.buy_status_reason || 'Broksum 3 hari belum dicek')}" class="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${cls}">${label}</span> `;
+}
+
+async function checkCandidatesBroksum() {
+  const btn = document.getElementById('btnCheckCandBroksum');
+  const list = (currentTodayCandidates.length > 0 ? currentTodayCandidates : currentStocks) || [];
+  const tickers = list.filter(s => s.buy_status !== 'DITOLAK').slice(0, 12).map(s => s.ticker);
+  if (!tickers.length) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Mengecek...'; }
+  try {
+    const res = await fetch('/api/candidates/check-broksum', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tickers }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Gagal cek broksum');
+    const apply = (arr) => (arr || []).forEach(s => {
+      const r = data.results[s.ticker];
+      if (r) { s.buy_status = r.buy_status; s.buy_status_reason = r.buy_status_reason; s.bdr_pct = r.bdr_pct; }
+    });
+    apply(currentTodayCandidates); apply(currentStocks);
+    renderTodayCandidates(currentTodayCandidates.length > 0 ? currentTodayCandidates : currentStocks);
+  } catch (e) {
+    alert('Cek Broksum 3H gagal: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Cek Broksum 3H'; }
+  }
+}
+
 function renderTodayCandidates(stocks) {
   const container = document.getElementById('todayCandidatesGrid');
   if (!container) return;
@@ -553,7 +589,7 @@ function renderTodayCandidates(stocks) {
   }
 
   // Saring ketat kandidat: HANYA saham yang diakum Smart Money & BELUM JAUH DARI MODAL BANDAR
-  const pool = Array.isArray(stocks) ? stocks : [];
+  const pool = (Array.isArray(stocks) ? stocks : []).filter(s => s.buy_status !== 'DITOLAK');
   let validPool = pool.filter(s => {
     const pct = Number(s.pct_change || 0);
     const diffBdr = s.diff_bandar_avg_pct != null ? Number(s.diff_bandar_avg_pct) : 0;
@@ -586,6 +622,9 @@ function renderTodayCandidates(stocks) {
 
   // Urutkan: 1. Paling dekat dengan Modal Bandar -> 2. BDR Akumulasi Tertinggi -> 3. Skor Smart Money
   validPool.sort((a, b) => {
+    const rk = { SIAP_BELI: 0, MENUNGGU: 1, BELUM_CEK: 2 };
+    const ra = rk[a.buy_status] ?? 2, rb = rk[b.buy_status] ?? 2;
+    if (ra !== rb) return ra - rb;
     const diffA = Math.abs(a.diff_bandar_avg_pct != null ? a.diff_bandar_avg_pct : 0);
     const diffB = Math.abs(b.diff_bandar_avg_pct != null ? b.diff_bandar_avg_pct : 0);
     const bdrA = a.bdr_pct != null ? a.bdr_pct : 0;
@@ -622,7 +661,7 @@ function renderTodayCandidates(stocks) {
     const safeSecCat = escHtml(s.sector_category || s.sector || 'General');
     const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
     const reasons = getWhyCandidateReason(s);
-    const reasonsMobileHtml = reasons.map(r => `
+    const reasonsMobileHtml = buyStatusBadgeHtml(s) + reasons.map(r => `
       <span class="inline-block px-1.5 py-0.2 rounded text-[9px] font-mono font-medium border ${r.color}">
         ${escHtml(r.text)}
       </span>
@@ -666,7 +705,7 @@ function renderTodayCandidates(stocks) {
     const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
 
     const reasons = getWhyCandidateReason(s);
-    const reasonsHtml = reasons.map((r) => `
+    const reasonsHtml = buyStatusBadgeHtml(s) + reasons.map((r) => `
       <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-medium border ${r.color}">
         ${escHtml(r.text)}
       </span>
@@ -732,8 +771,9 @@ function renderTodayCandidates(stocks) {
           <span class="text-xs font-bold text-slate-800 dark:text-slate-200">Kandidat Saham Pilihan Hari Ini</span>
           <span class="px-1.5 py-0.2 rounded font-mono text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">${candidates.length} Emiten</span>
         </div>
-        <div class="text-[11px] text-slate-500 dark:text-slate-400">
-          Klik emiten untuk membuka Trading Plan
+        <div class="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+          <span class="hidden sm:inline">Klik emiten untuk membuka Trading Plan</span>
+          <button id="btnCheckCandBroksum" onclick="checkCandidatesBroksum()" class="px-2.5 py-1 rounded-md text-[10px] font-bold text-sky-700 bg-sky-100 hover:bg-sky-200 dark:text-sky-300 dark:bg-sky-500/15 dark:hover:bg-sky-500/25 border border-sky-300 dark:border-sky-500/30" title="Cek broksum 3 hari bursa untuk semua kandidat">Cek Broksum 3H</button>
         </div>
       </div>
 

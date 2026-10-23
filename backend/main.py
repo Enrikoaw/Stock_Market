@@ -1109,18 +1109,7 @@ def fetch_single_stock_broker_endpoint(ticker: str, force: bool = Query(True)) -
 
     enrich_single_stock_broker(item, latest_dt, cfg, force=True, is_manual=True)
 
-    # Sinkronisasi ke list analysis["stocks"]
-    for s in STATE["analysis"].get("stocks", []):
-        if s.get("ticker", "").upper() == key:
-            for field in (
-                "broker_analysis", "has_broker_summary", "has_real_broker_summary", "bdr_pct",
-                "top_buyers_list", "top_sellers_list", "top_buyers", "top_sellers",
-                "bandar_avg_buy", "diff_bandar_avg_pct", "smart_money_score", "retail_trap",
-                "trigger_type", "trigger_label", "broker_date", "trading_plan"
-            ):
-                if field in item:
-                    s[field] = item[field]
-            break
+    _sync_broker_fields_to_stocks(key, item)
 
     if not _has_real_broker_codes(item):
         raise HTTPException(
@@ -1129,6 +1118,59 @@ def fetch_single_stock_broker_endpoint(ticker: str, force: bool = Query(True)) -
         )
 
     return item
+
+
+_BROKER_SYNC_FIELDS = (
+    "broker_analysis", "has_broker_summary", "has_real_broker_summary", "bdr_pct",
+    "top_buyers_list", "top_sellers_list", "top_buyers", "top_sellers",
+    "bandar_avg_buy", "diff_bandar_avg_pct", "smart_money_score", "retail_trap",
+    "trigger_type", "trigger_label", "broker_date", "trading_plan",
+    "broker_holder_type", "broker_range_from", "buy_status", "buy_status_reason",
+)
+
+
+def _sync_broker_fields_to_stocks(key: str, item: dict) -> None:
+    for lst_name in ("stocks", "today_candidates"):
+        for s in STATE["analysis"].get(lst_name, []) or []:
+            if str(s.get("ticker", "")).upper() == key:
+                for field in _BROKER_SYNC_FIELDS:
+                    if field in item:
+                        s[field] = item[field]
+                break
+
+
+class CandidateBroksumRequest(BaseModel):
+    tickers: list[str]
+
+
+@app.post("/api/candidates/check-broksum")
+def check_candidates_broksum(req: CandidateBroksumRequest) -> dict:
+    """Cek manual broksum 3 hari bursa untuk kandidat hari ini (analisa pribadi, bypass jadwal 2 sesi).
+    Mengembalikan status SIAP_BELI / MENUNGGU / DITOLAK per saham (maks 12 ticker)."""
+    import time as _t
+    if STATE["analysis"] is None:
+        init_default_state()
+    cfg = load_broker_api_config()
+    if not cfg.get("invezgo_api_key") and not cfg.get("stockbit_token") and not cfg.get("goapi_key"):
+        raise HTTPException(status_code=400, detail="Token Invezgo belum diatur.")
+    from broker_summary_fetcher import get_now_wib
+    details_map = STATE["analysis"]["details"]
+    latest_dt = str(STATE["analysis"].get("kpis", {}).get("latest_date") or get_now_wib().strftime("%Y-%m-%d"))
+    results = {}
+    for t in list(dict.fromkeys(x.strip().upper() for x in req.tickers if x))[:12]:
+        item = details_map.get(t)
+        if not item:
+            continue
+        enrich_single_stock_broker(item, latest_dt, cfg, force=True, is_manual=True)
+        _sync_broker_fields_to_stocks(t, item)
+        results[t] = {
+            "buy_status": item.get("buy_status", "BELUM_CEK"),
+            "buy_status_reason": item.get("buy_status_reason", ""),
+            "bdr_pct": item.get("bdr_pct"),
+            "holder_type": item.get("broker_holder_type"),
+        }
+        _t.sleep(0.3)
+    return {"results": results}
 
 
 TICKER_CANDLE_CACHE: dict[tuple[str, str], dict] = {}

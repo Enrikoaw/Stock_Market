@@ -1170,6 +1170,38 @@ def enrich_single_stock_broker(s: dict, date_str: str, cfg: dict[str, Any] | Non
             s["trading_plan"]["bdr_pct"] = s.get("bdr_pct")
             s["trading_plan"]["has_real_broker_summary"] = s.get("has_real_broker_summary", False)
 
+        compute_buy_readiness(s)
+
+    return s
+
+
+def compute_buy_readiness(s: dict) -> dict:
+    """Status akhir berbasis broksum 3 hari bursa: SIAP_BELI / MENUNGGU / DITOLAK / BELUM_CEK."""
+    m = s.get("broker_analysis") or {}
+    if not s.get("has_real_broker_summary") or not m:
+        s["buy_status"], s["buy_status_reason"] = "BELUM_CEK", "Broksum 3 hari belum dicek"
+        return s
+    bdr = float(m.get("bdr") or 0.0)
+    buyers = [str(c).upper() for c in (m.get("top_buyers_list") or [])][:3]
+    inst = sum(1 for c in buyers if c in INST_FOREIGN_BROKERS)
+    holder = m.get("holder_type", "MIXED")
+    diff = s.get("diff_bandar_avg_pct")
+    diff = float(diff) if diff is not None else None
+    lb = f"{BROKSUM_LOOKBACK_DAYS}H"
+
+    if m.get("retail_trap") or holder == "RETAIL":
+        st, why = "DITOLAK", f"Ditampung ritel ({lb})"
+    elif bdr < 3.0:
+        st, why = "DITOLAK", f"BDR {bdr:+.1f}% distribusi ({lb})"
+    elif inst == 0 and bdr < 10.0:
+        st, why = "DITOLAK", f"Tanpa broker institusi ({lb})"
+    elif holder == "SMART_MONEY" and (diff is None or -4.5 <= diff <= 3.5):
+        st, why = "SIAP_BELI", f"Smart money menampung, BDR {bdr:+.1f}% ({lb})"
+    elif holder == "SMART_MONEY":
+        st, why = "MENUNGGU", f"Smart money OK tapi harga {diff:+.1f}% dari avg bandar, tunggu pullback"
+    else:
+        st, why = "MENUNGGU", f"Campuran, BDR {bdr:+.1f}% ({lb}), tunggu konfirmasi"
+    s["buy_status"], s["buy_status_reason"] = st, why
     return s
 
 
