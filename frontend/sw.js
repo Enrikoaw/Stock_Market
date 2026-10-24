@@ -1,12 +1,12 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'radarbandar-idx-v96.5';
+const CACHE_NAME = 'radarbandar-idx-v96.6';
 const ASSETS_TO_CACHE = [
   '/static/styles.css?v=95.0',
   '/static/app.js?v=95.0',
   '/manifest.json',
   '/static/icons/icon.svg',
-  '/static/icons/icon-192.svg',
-  '/static/icons/icon-512.svg'
+  '/static/icons/icon-192.png?v=96.6',
+  '/static/icons/icon-512.png?v=96.6'
 ];
 
 self.addEventListener('install', (event) => {
@@ -50,8 +50,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: '/static/icons/icon-192.svg',
-      badge: '/static/icons/icon-192.svg',
+      icon: '/static/icons/icon-192.png?v=96.6',
+      badge: '/static/icons/icon-192.png?v=96.6',
       data: { url: data.url || '/' },
       vibrate: [200, 100, 200],
       tag: data.tag || ('smartflow-' + Date.now()),
@@ -118,7 +118,7 @@ self.addEventListener('fetch', (event) => {
   // Asset static (styles, script, icons): Network-first dengan fallback cache offline
   if (url.pathname.startsWith('/static/') || url.pathname === '/manifest.json') {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-cache' })
         .then((response) => {
           if (response && response.status === 200) {
             const copy = response.clone();

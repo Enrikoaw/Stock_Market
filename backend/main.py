@@ -2369,12 +2369,28 @@ def broker_quota_status() -> dict:
 # ===================== PROGRESSIVE WEB APP (PWA) =====================
 
 
+@app.get("/favicon.ico")
+def serve_favicon() -> FileResponse:
+    ico_file = FRONTEND_DIR / "icons" / "favicon.ico"
+    if not ico_file.exists():
+        raise HTTPException(status_code=404, detail="favicon.ico tidak ditemukan")
+    return FileResponse(
+        str(ico_file),
+        media_type="image/x-icon",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
+
 @app.get("/manifest.json")
 def serve_manifest() -> FileResponse:
     manifest_file = FRONTEND_DIR / "manifest.json"
     if not manifest_file.exists():
         raise HTTPException(status_code=404, detail="manifest.json tidak ditemukan")
-    return FileResponse(str(manifest_file), media_type="application/manifest+json")
+    return FileResponse(
+        str(manifest_file),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @app.get("/sw.js")

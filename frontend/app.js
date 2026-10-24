@@ -1608,8 +1608,8 @@ async function sendSystemNotification(title, body, url = '/', tag = '') {
         if (reg && reg.showNotification) {
           await reg.showNotification(title, {
             body: body,
-            icon: '/static/icons/icon-192.svg',
-            badge: '/static/icons/icon-192.svg',
+            icon: '/static/icons/icon-192.png?v=96.6',
+            badge: '/static/icons/icon-192.png?v=96.6',
             data: { url: url },
             vibrate: [200, 100, 200],
             tag: tag || ('news-alert-' + Date.now()),
@@ -1625,7 +1625,7 @@ async function sendSystemNotification(title, body, url = '/', tag = '') {
     // 2. Fallback: Window Notification
     const n = new Notification(title, {
       body: body,
-      icon: '/static/icons/icon-192.svg',
+      icon: '/static/icons/icon-192.png?v=96.6',
       data: { url: url },
       tag: tag || undefined,
     });
@@ -4666,7 +4666,8 @@ if ('serviceWorker' in navigator) {
     if ('Notification' in window && Notification.permission === 'granted') {
       setTimeout(() => { subscribeWebPush().catch(() => {}); }, 3000);
     }
-    navigator.serviceWorker.register('/sw.js').then((reg) => {
+    navigator.serviceWorker.register('/sw.js?v=96.6').then((reg) => {
+      try { reg.update(); } catch (_) {}
       reg.update().catch(() => {});
     }).catch((err) => {
       console.warn('[PWA] Service Worker registration failed:', err);
