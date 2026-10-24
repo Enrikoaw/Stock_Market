@@ -98,10 +98,10 @@ function setAppTheme(mode, renderChart = true) {
     if (label) label.textContent = 'Gelap';
     if (badge) {
       badge.textContent = 'Gelap';
-      badge.className = 'text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+      badge.className = 'text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30';
     }
     if (btnDark) {
-      btnDark.className = 'py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 border bg-emerald-500/20 text-emerald-300 border-emerald-400/40 shadow-sm';
+      btnDark.className = 'py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 border bg-sky-500/20 text-sky-300 border-sky-400/40 shadow-sm';
     }
     if (btnLight) {
       btnLight.className = 'py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 border bg-white/[0.04] text-slate-400 border-white/5 hover:text-white';

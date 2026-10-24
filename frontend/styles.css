@@ -1,12 +1,13 @@
-/* SmartFlow IDX - Premium Glassmorphism UI & Dual Theme Engine (v14.0) */
+/* RadarBandarIDX - Obsidian Black & Electric Sky Blue Glassmorphism UI (v97.0) */
 
 :root {
-  --bg-primary: #060a12;
-  --bg-card: rgba(15, 23, 42, 0.45);
-  --bg-card-hover: rgba(30, 41, 59, 0.55);
-  --border-subtle: rgba(255, 255, 255, 0.08);
+  --bg-primary: #060911;
+  --bg-card: rgba(12, 20, 36, 0.72);
+  --bg-card-hover: rgba(17, 29, 53, 0.80);
+  --border-subtle: rgba(56, 189, 248, 0.16);
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
+  --sky: #38bdf8;
   --emerald: #10b981;
   --amber: #f59e0b;
   --blue: #3b82f6;
@@ -43,33 +44,41 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(6, 10, 18, 0.6);
+  background: rgba(6, 9, 17, 0.8);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(56, 189, 248, 0.25);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(56, 189, 248, 0.45);
 }
 
-/* Primary Glassmorphism Panel */
+/* Primary Glassmorphism Panel (Obsidian Black + Midnight Sky Blue Glass) */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.42), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  background: rgba(12, 20, 36, 0.72);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(56, 189, 248, 0.16);
+  box-shadow: 0 10px 36px -4px rgba(0, 0, 0, 0.65), inset 0 1px 0 0 rgba(56, 189, 248, 0.08);
   transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-/*KPI Cards with Translucent Gradient & Ambient Hover Glow */
+.glass-subcard {
+  background: rgba(17, 29, 53, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.12);
+  box-shadow: inset 0 1px 0 0 rgba(56, 189, 248, 0.05);
+}
+
+/* KPI Cards with Translucent Gradient & Ambient Sky Blue Hover Glow */
 .kpi-card {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.35) 100%);
+  background: linear-gradient(135deg, rgba(17, 29, 53, 0.68) 0%, rgba(12, 20, 36, 0.55) 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(56, 189, 248, 0.16);
+  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.45), inset 0 1px 0 0 rgba(56, 189, 248, 0.08);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   position: relative;
@@ -77,26 +86,26 @@ body {
 }
 .kpi-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.55), 0 0 20px rgba(16, 185, 129, 0.08);
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.12);
 }
 .kpi-card.active-filter {
-  border-color: rgba(16, 185, 129, 0.65);
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.5), 0 8px 28px -4px rgba(16, 185, 129, 0.22);
+  border-color: rgba(56, 189, 248, 0.65);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5), 0 8px 28px -4px rgba(56, 189, 248, 0.22);
 }
 
-/* Screener Table Rows: Transparent with Silky Hover */
+/* Screener Table Rows: Transparent with Silky Sky Blue Hover & Selection */
 .stock-row {
   background: transparent;
   transition: background-color 0.18s ease, box-shadow 0.18s ease;
   cursor: pointer;
 }
 .stock-row:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(56, 189, 248, 0.06);
 }
 .stock-row.selected-row {
-  background: linear-gradient(90deg, rgba(16, 185, 129, 0.16) 0%, rgba(16, 185, 129, 0.03) 100%);
-  border-left: 3px solid #10b981;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.16) 0%, rgba(56, 189, 248, 0.03) 100%);
+  border-left: 3px solid #38bdf8;
 }
 
 /* Trigger Badges (Refined Glass & Subtle Glow) */
@@ -154,34 +163,34 @@ body {
 }
 
 .dropzone-active {
-  border-color: #10b981 !important;
-  background: rgba(16, 185, 129, 0.08) !important;
+  border-color: #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.08) !important;
 }
 
-/* Signal Tracker Glass Tabs (Matching Reference Design) */
+/* Signal Tracker Glass Tabs (Obsidian Black + Sky Blue) */
 .tracker-tab {
   padding: 7px 18px;
   border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
   color: #cbd5e1;
-  background: rgba(19, 28, 49, 0.85);
+  background: rgba(12, 20, 36, 0.85);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.14);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: inline-flex;
   align-items: center;
 }
 .tracker-tab:hover {
   color: #ffffff;
-  background: rgba(30, 41, 66, 0.9);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(17, 29, 53, 0.9);
+  border-color: rgba(56, 189, 248, 0.3);
 }
 .tracker-tab.active {
-  color: #ffffff;
-  background: rgba(30, 41, 66, 0.95);
-  border: 1.5px solid rgba(148, 163, 184, 0.65);
-  box-shadow: 0 0 18px rgba(148, 163, 184, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  color: #e0f2fe;
+  background: rgba(14, 165, 233, 0.18);
+  border: 1.5px solid rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.2), inset 0 1px 0 rgba(125, 211, 252, 0.25);
 }
 .tracker-tab .tab-count {
   display: none;
@@ -547,11 +556,11 @@ html.light .fixed-risk-banner {
   align-items: center;
   gap: 0.5rem;
   border-radius: 9999px;
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(12, 20, 36, 0.82);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.25), inset 0 -2px 6px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  box-shadow: inset 0 1px 1px rgba(125, 211, 252, 0.2), inset 0 -2px 6px rgba(0, 0, 0, 0.65);
   padding: 0.35rem 0.85rem 0.35rem 0.42rem;
   font-size: 0.75rem;
   font-weight: 600;
@@ -652,19 +661,22 @@ html.light .liquid-glass-btn .neon-icon-badge {
   stroke-linejoin: round;
 }
 
-/* 1. Emerald (Hari Ini) */
+/* 1. Electric Sky Blue (Hari Ini - Primary Brand Accent in Dark Mode) */
 .liquid-glass-btn.neon-emerald .neon-icon-badge {
+  background: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.85), 0 0 20px rgba(56, 189, 248, 0.4);
+}
+html.light .liquid-glass-btn.neon-emerald .neon-icon-badge {
   background: #10b981;
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.85), 0 0 20px rgba(16, 185, 129, 0.4);
 }
 .liquid-glass-btn.neon-emerald:hover {
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 6px 16px -2px rgba(16, 185, 129, 0.45);
+  box-shadow: inset 0 1px 1px rgba(125, 211, 252, 0.3), inset 0 -2px 6px rgba(0, 0, 0, 0.65), 0 6px 16px -2px rgba(56, 189, 248, 0.45);
 }
 .liquid-glass-btn.neon-emerald.active {
-  color: #34d399;
-  border-color: rgba(16, 185, 129, 0.55);
-  background: rgba(16, 185, 129, 0.12);
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.4), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 8px 24px -2px rgba(16, 185, 129, 0.65);
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.6);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.28) 0%, rgba(2, 132, 199, 0.14) 100%);
+  box-shadow: inset 0 1px 2px rgba(125, 211, 252, 0.35), inset 0 -2px 6px rgba(0, 0, 0, 0.65), 0 8px 24px -2px rgba(56, 189, 248, 0.5);
 }
 
 /* 2. Cyan (Jelajah) */
@@ -746,11 +758,11 @@ html.light .liquid-glass-btn .neon-icon-badge {
    STANDARD FLAT RECTANGULAR MOBILE BOTTOM NAVIGATION (NATIVE APP STYLE)
    ===================================================================== */
 #mobileBottomNav {
-  background: rgba(10, 15, 29, 0.96) !important;
+  background: rgba(6, 9, 17, 0.96) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5) !important;
+  border-top: 1px solid rgba(56, 189, 248, 0.18) !important;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.65) !important;
   padding: 0 !important;
 }
 
@@ -813,16 +825,24 @@ html.light .mobile-nav-item .mobile-nav-text {
 
 /* Tab Aktif di Mobile: Ikon Neon Menyala & Teks Berwarna Terang */
 .mobile-nav-item.active .mobile-nav-icon.neon-emerald {
-  background: #10b981 !important;
-  color: #090d16 !important;
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.85), 0 0 24px rgba(16, 185, 129, 0.4) !important;
+  background: #38bdf8 !important;
+  color: #060911 !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.85), 0 0 24px rgba(56, 189, 248, 0.4) !important;
 }
 .mobile-nav-item.active .mobile-nav-icon.neon-emerald svg {
-  stroke: #090d16 !important;
+  stroke: #060911 !important;
 }
 .mobile-nav-item.active .mobile-nav-icon.neon-emerald + .mobile-nav-text {
-  color: #34d399 !important;
+  color: #7dd3fc !important;
   font-weight: 700 !important;
+}
+html.light .mobile-nav-item.active .mobile-nav-icon.neon-emerald {
+  background: #10b981 !important;
+  color: #090d16 !important;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.45) !important;
+}
+html.light .mobile-nav-item.active .mobile-nav-icon.neon-emerald + .mobile-nav-text {
+  color: #047857 !important;
 }
 
 .mobile-nav-item.active .mobile-nav-icon.neon-cyan {
