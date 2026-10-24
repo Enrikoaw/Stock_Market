@@ -4631,8 +4631,7 @@ async function shareStockPlan(ticker, e = null) {
   const tp2 = plan.target_2 || Math.round(entryPrice * (1 + APP_TRADING_RULES.DEFAULT_TP2_PCT / 100));
   const sl = plan.stop_loss || Math.round(entryPrice * (1 - APP_TRADING_RULES.DEFAULT_SL_PCT / 100));
   const score = (s && s.smart_money_score) || '-';
-  const topBuyers = (s && s.top_buyers) ? `? Buyer Dominan: ${s.top_buyers}
-` : '';
+  const topBuyers = (s && s.top_buyers) ? `? Buyer Dominan: ${s.top_buyers}` : '';
   const originUrl = window.location.origin;
 
   const shareText = [
@@ -4646,8 +4645,7 @@ async function shareStockPlan(ticker, e = null) {
     topBuyers ? topBuyers.trimEnd() : null,
     `?? Cek analisa live di: ${originUrl}/?ticker=${cleanTicker}`,
     `?? Grup Telegram: https://t.me/D7Em9myKqonwwNzQ1`
-  ].filter(Boolean).join('
-');
+  ].filter(Boolean).join('\n');
 
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
