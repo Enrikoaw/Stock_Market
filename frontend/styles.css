@@ -1071,3 +1071,133 @@ html.light .sector-pill.active {
   box-shadow: 0 2px 6px rgba(2, 132, 199, 0.2) !important;
 }
 
+/* =====================================================================
+   MINI CYBER DRONE / ROBOT RADAR AI ASSISTANT (v98.0)
+   ===================================================================== */
+@keyframes cyberDroneFloat {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(1.5deg);
+  }
+}
+
+@keyframes cyberThrusterPulse {
+  0%, 100% {
+    transform: scaleX(0.85);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scaleX(1.18);
+    opacity: 0.95;
+  }
+}
+
+@keyframes cyberDroneBlink {
+  0%, 92%, 96%, 100% {
+    transform: scaleY(1);
+  }
+  94% {
+    transform: scaleY(0.08);
+  }
+}
+
+@keyframes cyberBeaconPulse {
+  0%, 100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 6px #38bdf8);
+  }
+  50% {
+    opacity: 0.45;
+    filter: drop-shadow(0 0 2px #0284c7);
+  }
+}
+
+@keyframes cyberVisorScan {
+  0% {
+    transform: translateX(-14px);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateX(14px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-14px);
+    opacity: 0.2;
+  }
+}
+
+.cyber-drone-body {
+  animation: cyberDroneFloat 3.2s ease-in-out infinite;
+  filter: drop-shadow(0 8px 20px rgba(56, 189, 248, 0.32));
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.cyber-drone-btn:hover .cyber-drone-body {
+  filter: drop-shadow(0 10px 26px rgba(56, 189, 248, 0.55));
+}
+
+.cyber-drone-thruster {
+  animation: cyberThrusterPulse 1.6s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.cyber-drone-eyelid {
+  animation: cyberDroneBlink 4.2s infinite;
+  transform-origin: center 33px;
+}
+
+.cyber-drone-beacon {
+  animation: cyberBeaconPulse 1.8s ease-in-out infinite;
+}
+
+.cyber-drone-scanline {
+  opacity: 0;
+}
+
+#aiDroneContainer.is-scanning .cyber-drone-scanline {
+  opacity: 1;
+  animation: cyberVisorScan 0.9s ease-in-out infinite;
+}
+
+#aiChatPanel {
+  background: rgba(8, 14, 26, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  box-shadow: 0 16px 48px -6px rgba(0, 0, 0, 0.75), 0 0 24px rgba(56, 189, 248, 0.14);
+}
+
+#aiDroneBubble {
+  background: rgba(12, 20, 36, 0.94);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 15px rgba(56, 189, 248, 0.15);
+}
+
+html.light #aiChatPanel {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border: 1px solid #bae6fd !important;
+  box-shadow: 0 16px 40px -6px rgba(15, 23, 42, 0.18) !important;
+}
+
+html.light #aiDroneBubble {
+  background: #ffffff !important;
+  border: 1px solid #7dd3fc !important;
+  color: #0f172a !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12) !important;
+}
+
+html.light .ai-msg-bot {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  color: #0f172a !important;
+}
+
+html.light .ai-msg-user {
+  background: #0284c7 !important;
+  color: #ffffff !important;
+}
+

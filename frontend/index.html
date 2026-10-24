@@ -18,7 +18,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png?v=96.6" />
   <link rel="icon" type="image/png" sizes="512x512" href="/static/icons/icon-512.png?v=96.6" />
   <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192.png?v=96.6" />
-  <link rel="stylesheet" href="/static/styles.css?v=97.2" />
+  <link rel="stylesheet" href="/static/styles.css?v=98.0" />
   <style>
     .glass-panel {
       background: rgba(12, 20, 36, 0.72);
@@ -2364,6 +2364,174 @@
   </div>
 
 
+  <!-- =====================================================================
+       MINI CYBER DRONE / ROBOT RADAR AI COPILOT (AKTIF, INTERAKTIF & DRAGGABLE)
+       ===================================================================== -->
+  <div
+    id="aiDroneContainer"
+    class="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40 flex flex-col items-end select-none"
+    style="touch-action: none;"
+  >
+    <!-- Balon Sapaan Proaktif (Speech Bubble) -->
+    <div
+      id="aiDroneBubble"
+      class="mb-2 max-w-[235px] px-3 py-2 rounded-2xl rounded-br-sm text-[11px] text-slate-100 leading-snug relative transition-all duration-300 cursor-pointer group"
+      onclick="toggleAiChatPanel(true)"
+    >
+      <button
+        type="button"
+        onclick="event.stopPropagation(); dismissAiDroneBubble()"
+        class="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-slate-800 text-slate-300 hover:text-white border border-sky-400/30 flex items-center justify-center text-[10px] leading-none"
+        title="Tutup sapaan"
+      >&times;</button>
+      <div id="aiDroneBubbleText" class="font-medium">
+        Halo! Klik saya untuk mencari saham akumulasi atau navigasi cepat.
+      </div>
+    </div>
+
+    <!-- Karakter Robot Drone Radar (SVG Aktif Bergerak & Melirik Kursor) -->
+    <button
+      type="button"
+      id="aiDroneBtn"
+      aria-label="Buka Asisten RadarBot AI"
+      title="Klik untuk membuka Asisten Navigasi AI (Bisa digeser)"
+      class="cyber-drone-btn relative flex flex-col items-center justify-center cursor-pointer focus:outline-none group"
+    >
+      <div class="cyber-drone-body w-16 h-16 sm:w-[70px] sm:h-[70px] relative flex items-center justify-center">
+        <svg viewBox="0 0 80 80" class="w-full h-full overflow-visible">
+          <defs>
+            <linearGradient id="droneShellGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#1e293b" />
+              <stop offset="55%" stop-color="#0c1424" />
+              <stop offset="100%" stop-color="#060911" />
+            </linearGradient>
+            <linearGradient id="droneRimGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#7dd3fc" />
+              <stop offset="100%" stop-color="#0284c7" />
+            </linearGradient>
+            <radialGradient id="thrusterGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.95" />
+              <stop offset="100%" stop-color="#38bdf8" stop-opacity="0" />
+            </radialGradient>
+          </defs>
+
+          <!-- Baling-Baling Magnetik Bawah (Anti-Gravity Thruster) -->
+          <g class="cyber-drone-thruster">
+            <ellipse cx="40" cy="68" rx="16" ry="4" fill="url(#thrusterGlow)" />
+            <ellipse cx="40" cy="65" rx="9" ry="2" fill="#7dd3fc" opacity="0.85" />
+          </g>
+
+          <!-- Antena Radar Atas -->
+          <line x1="40" y1="15" x2="40" y2="6" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" />
+          <path d="M33 9 Q40 4 47 9" fill="none" stroke="#7dd3fc" stroke-width="1.5" stroke-linecap="round" opacity="0.8" />
+          <circle cx="40" cy="5" r="3" fill="#38bdf8" class="cyber-drone-beacon" />
+
+          <!-- Sayap Stabilizer Kiri & Kanan -->
+          <path d="M14 32 L8 27 L8 43 L14 40 Z" fill="#0f172a" stroke="#38bdf8" stroke-width="1.4" stroke-linejoin="round" />
+          <path d="M66 32 L72 27 L72 43 L66 40 Z" fill="#0f172a" stroke="#38bdf8" stroke-width="1.4" stroke-linejoin="round" />
+
+          <!-- Bodi Utama Kapsul Cyber Drone -->
+          <rect x="14" y="15" width="52" height="44" rx="20" fill="url(#droneShellGrad)" stroke="url(#droneRimGrad)" stroke-width="2.2" />
+          <!-- Pantulan Kaca Atas -->
+          <path d="M24 19 Q40 16 56 19" fill="none" stroke="#bae6fd" stroke-width="1.5" stroke-linecap="round" opacity="0.45" />
+
+          <!-- Layar Visor Gelap -->
+          <rect x="20" y="23" width="40" height="22" rx="10" fill="#04070e" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.55" />
+
+          <!-- Mata Cyber & Laser Scanner (Bergerak Mengikuti Kursor + Berkedip) -->
+          <g class="cyber-drone-eyelid">
+            <g id="aiDroneEyes">
+              <!-- Mata Kiri -->
+              <rect x="27" y="29" width="8" height="10" rx="4" fill="#38bdf8" />
+              <circle cx="30" cy="32" r="1.6" fill="#e0f2fe" />
+              <!-- Mata Kanan -->
+              <rect x="45" y="29" width="8" height="10" rx="4" fill="#38bdf8" />
+              <circle cx="48" cy="32" r="1.6" fill="#e0f2fe" />
+            </g>
+          </g>
+
+          <!-- Garis Scanner Radar Saat Berpikir -->
+          <rect x="36" y="25" width="8" height="18" rx="2" fill="#38bdf8" opacity="0.65" class="cyber-drone-scanline" />
+
+          <!-- Indikator Dada / Core -->
+          <rect x="33" y="50" width="14" height="3.5" rx="1.75" fill="#38bdf8" opacity="0.8" />
+        </svg>
+      </div>
+      <span class=" -mt-1 px-2 py-0.5 rounded-full bg-slate-950/90 border border-sky-400/40 text-[10px] font-mono font-bold text-sky-300 shadow-md group-hover:bg-sky-500 group-hover:text-slate-950 transition">
+        RadarBot AI
+      </span>
+    </button>
+  </div>
+
+  <!-- JENDELA CHAT ASISTEN NAVIGASI AI (DOCKED PANEL) -->
+  <div
+    id="aiChatPanel"
+    class="hidden fixed bottom-20 right-3 sm:right-6 md:bottom-24 z-50 w-[calc(100vw-1.5rem)] max-w-[370px] rounded-2xl flex flex-col overflow-hidden transition-all duration-200"
+    style="max-height: min(520px, 78vh);"
+  >
+    <!-- Header Panel AI -->
+    <div class="px-4 py-3 border-b border-sky-400/20 bg-slate-950/60 flex items-center justify-between gap-2 shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-400/40 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 40 40" class="w-6 h-6">
+            <rect x="6" y="8" width="28" height="24" rx="11" fill="#0c1424" stroke="#38bdf8" stroke-width="2" />
+            <rect x="10" y="13" width="20" height="11" rx="5" fill="#04070e" />
+            <circle cx="16" cy="18.5" r="2.5" fill="#38bdf8" />
+            <circle cx="24" cy="18.5" r="2.5" fill="#38bdf8" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <h4 class="text-xs font-extrabold text-white tracking-wide">RadarBot AI</h4>
+            <span class="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30">Aktif</span>
+          </div>
+          <p class="text-[10px] text-slate-400">Asisten Navigasi &amp; Analisis Kuantitatif</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onclick="toggleAiChatPanel(false)"
+        class="w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.14] text-slate-400 hover:text-white flex items-center justify-center text-base leading-none transition cursor-pointer"
+        title="Tutup"
+      >&times;</button>
+    </div>
+
+    <!-- Tombol Pintasan Perintah Cepat (Quick Prompts) -->
+    <div class="px-3 py-2 border-b border-white/[0.06] bg-slate-900/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+      <button type="button" onclick="sendAiQuickPrompt('Saham pilihan hari ini')" class="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-[10px] font-semibold whitespace-nowrap transition cursor-pointer">Saham Pilihan</button>
+      <button type="button" onclick="sendAiQuickPrompt('Peta rotasi sektor hari ini')" class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[10px] font-medium whitespace-nowrap transition cursor-pointer">Peta Sektor</button>
+      <button type="button" onclick="sendAiQuickPrompt('Tampilkan sektor energi')" class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[10px] font-medium whitespace-nowrap transition cursor-pointer">Sektor Energi</button>
+      <button type="button" onclick="sendAiQuickPrompt('Kondisi pasar IHSG hari ini')" class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[10px] font-medium whitespace-nowrap transition cursor-pointer">Kondisi IHSG</button>
+      <button type="button" onclick="sendAiQuickPrompt('Hitung lot modal 10 juta')" class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[10px] font-medium whitespace-nowrap transition cursor-pointer">Hitung Lot</button>
+    </div>
+
+    <!-- Area Percakapan -->
+    <div id="aiChatMessages" class="p-3 space-y-2.5 overflow-y-auto flex-1 text-xs">
+      <div class="ai-msg-bot p-3 rounded-xl rounded-tl-sm bg-slate-900/90 border border-sky-400/20 text-slate-200 leading-relaxed space-y-1.5">
+        <div class="font-bold text-sky-300 text-[11px]">RadarBot Siap Membantu</div>
+        <p class="text-[11px]">Ketik kode saham (misal: <strong class="text-white font-mono">BBCA</strong>, <strong class="text-white font-mono">ADRO</strong>), nama sektor (misal: <strong class="text-white">Sektor Energi</strong>), atau perintah seperti <strong class="text-white">Hitung lot modal 15 juta</strong>. Saya akan mengarahkan layar Anda secara otomatis.</p>
+      </div>
+    </div>
+
+    <!-- Input Bar -->
+    <form id="aiChatForm" onsubmit="handleAiChatSubmit(event)" class="p-2.5 border-t border-white/[0.08] bg-slate-950/70 flex items-center gap-2 shrink-0">
+      <input
+        id="aiChatInput"
+        type="text"
+         autocomplete="off"
+        placeholder="Ketik kode saham atau perintah navigasi..."
+        class="flex-1 px-3 py-2 rounded-xl bg-slate-900/90 border border-sky-400/25 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400"
+      />
+      <button
+        type="submit"
+        id="aiChatSubmitBtn"
+        class="px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs transition active:scale-95 cursor-pointer shrink-0"
+      >
+        Kirim
+      </button>
+    </form>
+  </div>
+
   <!-- STANDARD NATIVE MOBILE BOTTOM NAVIGATION BAR (md:hidden - FLAT RECTANGULAR APP STYLE) -->
   <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 inset-x-0 h-14 bg-slate-950/95 backdrop-blur-xl border-t border-white/10 grid grid-cols-3 z-40 shadow-2xl" aria-label="Navigasi Mobile">
     <button
@@ -2408,6 +2576,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=97.2"></script>
+  <script src="/static/app.js?v=98.0"></script>
 </body>
 </html>

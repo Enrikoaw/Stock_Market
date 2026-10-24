@@ -6116,3 +6116,275 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 });
+
+// =====================================================================
+// MINI CYBER DRONE / ROBOT RADAR AI COPILOT CONTROLLER (v98.0)
+// =====================================================================
+let isAiChatOpen = false;
+let isAiBubbleDismissed = false;
+let aiDroneDragState = { dragging: false, moved: false, startX: 0, startY: 0, origRight: 16, origBottom: 80 };
+
+function toggleAiChatPanel(forceState = null) {
+  const panel = document.getElementById('aiChatPanel');
+  const bubble = document.getElementById('aiDroneBubble');
+  if (!panel) return;
+
+  isAiChatOpen = forceState !== null ? Boolean(forceState) : panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !isAiChatOpen);
+
+  if (isAiChatOpen) {
+    if (bubble) bubble.classList.add('hidden');
+    setTimeout(() => {
+      const inp = document.getElementById('aiChatInput');
+      if (inp) inp.focus();
+    }, 80);
+  }
+}
+
+function dismissAiDroneBubble() {
+  isAiBubbleDismissed = true;
+  const bubble = document.getElementById('aiDroneBubble');
+  if (bubble) bubble.classList.add('hidden');
+}
+
+function formatAiMarkdown(text) {
+  const safe = escHtml(text || '');
+  return safe
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-bold">$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em class="text-sky-300 not-italic">$1</em>')
+    .replace(/\n/g, '<br/>');
+}
+
+function appendAiChatMessage(role, htmlContent, actions = []) {
+  const box = document.getElementById('aiChatMessages');
+  if (!box) return;
+
+  const wrapper = document.createElement('div');
+  if (role === 'user') {
+    wrapper.className = 'flex justify-end';
+    wrapper.innerHTML = `
+      <div class="ai-msg-user max-w-[85%] px-3 py-2 rounded-xl rounded-tr-sm bg-sky-500/25 border border-sky-400/40 text-white text-[11px] font-medium leading-snug">
+        ${escHtml(htmlContent)}
+      </div>
+    `;
+  } else {
+    let actionBtnsHtml = '';
+    if (Array.isArray(actions) && actions.length > 0) {
+      const btns = actions.map(act => {
+        if (act.type === 'select_stock' && act.ticker) {
+          return `<button type="button" onclick="selectStockAndGoToInspector('${escHtml(act.ticker)}')" class="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 text-sky-300 border border-sky-400/40 text-[10px] font-bold transition cursor-pointer">Buka Detail ${escHtml(act.ticker)} &rarr;</button>`;
+        }
+        if (act.type === 'filter_sector' && act.sector) {
+          const lbl = getSectorIndoLabel(act.sector);
+          return `<button type="button" onclick="filterScreenerBySector('${escHtml(act.sector)}', true)" class="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 text-sky-300 border border-sky-400/40 text-[10px] font-bold transition cursor-pointer">Lihat Sektor ${escHtml(lbl)} &rarr;</button>`;
+        }
+        if (act.type === 'open_modal' && act.modal === 'sector') {
+          return `<button type="button" onclick="openSectorModal()" class="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 text-sky-300 border border-sky-400/40 text-[10px] font-bold transition cursor-pointer">Buka Peta Sektor &rarr;</button>`;
+        }
+        return '';
+      }).filter(Boolean).join('');
+      if (btns) {
+        actionBtnsHtml = `<div class="pt-1.5 flex flex-wrap gap-1.5">${btns}</div>`;
+      }
+    }
+
+    wrapper.className = 'flex justify-start';
+    wrapper.innerHTML = `
+      <div class="ai-msg-bot max-w-[92%] p-3 rounded-xl rounded-tl-sm bg-slate-900/90 border border-sky-400/20 text-slate-200 text-[11px] leading-relaxed space-y-1">
+        <div>${formatAiMarkdown(htmlContent)}</div>
+        ${actionBtnsHtml}
+      </div>
+    `;
+  }
+
+  box.appendChild(wrapper);
+  box.scrollTop = box.scrollHeight;
+}
+
+function executeAiNavigationActions(actions) {
+  if (!Array.isArray(actions)) return;
+  for (const act of actions) {
+    if (!act || !act.type) continue;
+    if (act.type === 'select_stock' && act.ticker) {
+      selectStockAndGoToInspector(act.ticker);
+    } else if (act.type === 'filter_sector' && act.sector) {
+      filterScreenerBySector(act.sector, true);
+    } else if (act.type === 'switch_tab' && act.tab) {
+      switchMainTab(act.tab);
+    } else if (act.type === 'open_modal') {
+      if (act.modal === 'sector') openSectorModal();
+      else if (act.modal === 'regime') openMarketRegimeModal();
+      else if (act.modal === 'glossary') openGlossaryModal('all');
+    } else if (act.type === 'calc_lot') {
+      const capEl = document.getElementById('calcModalCapital');
+      if (capEl && act.capital) capEl.value = act.capital;
+      openLotCalculatorForStockDetails(act.ticker || selectedTicker || 'BBCA', act.entry || 1000, act.sl || 960);
+    }
+  }
+}
+
+function sendAiQuickPrompt(text) {
+  const inp = document.getElementById('aiChatInput');
+  if (inp) inp.value = text;
+  handleAiChatSubmit(null, text);
+}
+
+async function handleAiChatSubmit(e, overrideText = null) {
+  if (e && typeof e.preventDefault === 'function') e.preventDefault();
+  const inp = document.getElementById('aiChatInput');
+  const msg = String(overrideText !== null ? overrideText : (inp ? inp.value : '')).trim();
+  if (!msg) return;
+  if (inp && overrideText === null) inp.value = '';
+
+  appendAiChatMessage('user', msg);
+
+  const droneContainer = document.getElementById('aiDroneContainer');
+  if (droneContainer) droneContainer.classList.add('is-scanning');
+
+  try {
+    const res = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: msg,
+        active_ticker: selectedTicker || null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Gagal memproses perintah');
+    }
+    executeAiNavigationActions(data.actions || []);
+    appendAiChatMessage('bot', data.reply || 'Navigasi selesai dijalankan.', data.actions || []);
+  } catch (err) {
+    appendAiChatMessage('bot', `Info: ${err.message || 'Periksa kembali koneksi Anda.'}`);
+  } finally {
+    if (droneContainer) droneContainer.classList.remove('is-scanning');
+  }
+}
+
+function initCyberDroneInteractive() {
+  const container = document.getElementById('aiDroneContainer');
+  const btn = document.getElementById('aiDroneBtn');
+  const eyes = document.getElementById('aiDroneEyes');
+  if (!container || !btn) return;
+
+  // 1. Mata Robot Melirik Mengikuti Kursor Mouse / Sentuhan
+  const handlePointerLook = (clientX, clientY) => {
+    if (!eyes) return;
+    const rect = btn.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = Math.max(-3.5, Math.min(3.5, (clientX - cx) / 45));
+    const dy = Math.max(-2.2, Math.min(2.2, (clientY - cy) / 55));
+    eyes.setAttribute('transform', `translate(${dx.toFixed(2)}, ${dy.toFixed(2)})`);
+  };
+
+  window.addEventListener('mousemove', (ev) => {
+    handlePointerLook(ev.clientX, ev.clientY);
+    if (!aiDroneDragState.dragging) return;
+    const dx = ev.clientX - aiDroneDragState.startX;
+    const dy = ev.clientY - aiDroneDragState.startY;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+      aiDroneDragState.moved = true;
+    }
+    if (aiDroneDragState.moved) {
+      const newRight = Math.max(8, Math.min(window.innerWidth - 76, aiDroneDragState.origRight - dx));
+      const newBottom = Math.max(64, Math.min(window.innerHeight - 84, aiDroneDragState.origBottom - dy));
+      container.style.right = `${newRight}px`;
+      container.style.bottom = `${newBottom}px`;
+    }
+  }, { passive: true });
+
+  // 2. Drag & Click Handler (Mouse & Touch)
+  btn.addEventListener('mousedown', (ev) => {
+    const cs = window.getComputedStyle(container);
+    aiDroneDragState = {
+      dragging: true,
+      moved: false,
+      startX: ev.clientX,
+      startY: ev.clientY,
+      origRight: parseFloat(cs.right) || 16,
+      origBottom: parseFloat(cs.bottom) || 80,
+    };
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (aiDroneDragState.dragging) {
+      const wasMoved = aiDroneDragState.moved;
+      aiDroneDragState.dragging = false;
+      if (!wasMoved) {
+        toggleAiChatPanel();
+      }
+    }
+  });
+
+  btn.addEventListener('touchstart', (ev) => {
+    if (!ev.touches || !ev.touches[0]) return;
+    const t = ev.touches[0];
+    handlePointerLook(t.clientX, t.clientY);
+    const cs = window.getComputedStyle(container);
+    aiDroneDragState = {
+      dragging: true,
+      moved: false,
+      startX: t.clientX,
+      startY: t.clientY,
+      origRight: parseFloat(cs.right) || 16,
+      origBottom: parseFloat(cs.bottom) || 80,
+    };
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (ev) => {
+    if (!aiDroneDragState.dragging || !ev.touches || !ev.touches[0]) return;
+    const t = ev.touches[0];
+    handlePointerLook(t.clientX, t.clientY);
+    const dx = t.clientX - aiDroneDragState.startX;
+    const dy = t.clientY - aiDroneDragState.startY;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+      aiDroneDragState.moved = true;
+    }
+    if (aiDroneDragState.moved) {
+      const newRight = Math.max(8, Math.min(window.innerWidth - 76, aiDroneDragState.origRight - dx));
+      const newBottom = Math.max(64, Math.min(window.innerHeight - 84, aiDroneDragState.origBottom - dy));
+      container.style.right = `${newRight}px`;
+      container.style.bottom = `${newBottom}px`;
+    }
+  }, { passive: true });
+
+  window.addEventListener('touchend', () => {
+    if (aiDroneDragState.dragging) {
+      const wasMoved = aiDroneDragState.moved;
+      aiDroneDragState.dragging = false;
+      if (!wasMoved) {
+        toggleAiChatPanel();
+      }
+    }
+  });
+
+  // 3. Rotasi Balon Sapaan Proaktif (Kontekstual dari Data Pasar Live)
+  let tipIdx = 0;
+  setInterval(() => {
+    if (isAiChatOpen || isAiBubbleDismissed) return;
+    const bubble = document.getElementById('aiDroneBubble');
+    const bubbleTxt = document.getElementById('aiDroneBubbleText');
+    if (!bubble || !bubbleTxt) return;
+
+    const sectors = computeSectorRotationStats(universeSectorStocks.length ? universeSectorStocks : currentStocks);
+    const topSec = sectors[0];
+    const topCand = (currentTodayCandidates && currentTodayCandidates[0]) || (currentStocks && currentStocks[0]);
+
+    const tips = [
+      topSec ? `Sektor ${topSec.label} memimpin aliran dana hari ini. Klik saya untuk menyaring.` : 'Klik saya untuk melihat peta rotasi sektor hari ini.',
+      topCand ? `Kandidat ${topCand.ticker} (Skor ${topCand.smart_money_score}) dekat modal bandar. Mau cek plan-nya?` : 'Ketik kode saham untuk membuka Trading Plan instan.',
+      'Mau hitung kapasitas lot aman maksimal 2% risiko? Klik saya.',
+    ];
+    tipIdx = (tipIdx + 1) % tips.length;
+    bubbleTxt.textContent = tips[tipIdx];
+    bubble.classList.remove('hidden');
+  }, 24000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initCyberDroneInteractive();
+});
+

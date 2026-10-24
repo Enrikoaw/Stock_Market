@@ -2384,6 +2384,276 @@ def broker_quota_status() -> dict:
     }
 
 
+
+
+# ===================== AI NAVIGATION & QUANTITATIVE COPILOT (v98.0) =====================
+
+import time as _ai_time
+import json as _ai_json
+import re as _ai_re
+import urllib.request as _ai_urlreq
+import urllib.error as _ai_urlerr
+
+AI_CHAT_CACHE: dict[str, tuple[float, dict]] = {}
+AI_IP_LAST_CALL: dict[str, float] = {}
+AI_CONFIG_FILE = DATA_DIR / "ai_config.json"
+
+
+class AIChatRequest(BaseModel):
+    message: str
+    active_ticker: Optional[str] = None
+
+
+def _load_ai_keys() -> dict[str, str]:
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if AI_CONFIG_FILE.exists():
+        try:
+            cfg = _ai_json.loads(AI_CONFIG_FILE.read_text(encoding="utf-8"))
+            if not gemini_key:
+                gemini_key = str(cfg.get("gemini_api_key") or "").strip()
+            if not groq_key:
+                groq_key = str(cfg.get("groq_api_key") or "").strip()
+        except Exception:
+            pass
+    return {"gemini": gemini_key, "groq": groq_key}
+
+
+def _call_cloud_llm(system_prompt: str, user_msg: str) -> Optional[str]:
+    keys = _load_ai_keys()
+    # 1. Try Google Gemini 1.5 Flash (Free Tier)
+    if keys["gemini"]:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={keys['gemini']}"
+            payload = {
+                "system_instruction": {"parts": [{"text": system_prompt}]},
+                "contents": [{"role": "user", "parts": [{"text": user_msg}]}],
+                "generationConfig": {"temperature": 0.25, "maxOutputTokens": 320},
+            }
+            req = _ai_urlreq.Request(
+                url,
+                data=_ai_json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with _ai_urlreq.urlopen(req, timeout=6.0) as resp:
+                data = _ai_json.loads(resp.read().decode("utf-8"))
+                parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                if parts and parts[0].get("text"):
+                    return str(parts[0]["text"]).strip()
+        except Exception as e:
+            print(f"[AICopilot] Gemini fallback: {e}")
+
+    # 2. Fallback to Groq Cloud Llama 3.3 (Free Tier)
+    if keys["groq"]:
+        try:
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            payload = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg},
+                ],
+                "temperature": 0.25,
+                "max_tokens": 320,
+            }
+            req = _ai_urlreq.Request(
+                url,
+                data=_ai_json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {keys['groq']}",
+                },
+                method="POST",
+            )
+            with _ai_urlreq.urlopen(req, timeout=6.0) as resp:
+                data = _ai_json.loads(resp.read().decode("utf-8"))
+                choices = data.get("choices", [])
+                if choices and choices[0].get("message", {}).get("content"):
+                    return str(choices[0]["message"]["content"]).strip()
+        except Exception as e:
+            print(f"[AICopilot] Groq fallback: {e}")
+
+    return None
+
+
+@app.post("/api/ai/chat")
+def ai_copilot_chat(payload: AIChatRequest, request: Request) -> dict:
+    """
+    Endpoint Asisten Navigasi & Analisis AI (RadarBot).
+    Dilengkapi 4 lapisan proteksi anti-limit:
+    1. Cooldown anti-spam per IP
+    2. Cache jawaban pintar 10 menit
+    3. Eksekusi navigasi & analisis kuantitatif instan dari memori server
+    4. Opsional Cloud LLM (Gemini 1.5 Flash -> Fallback Groq Llama 3 -> Fallback Kuantitatif Lokal)
+    """
+    client_ip = (request.client.host if request.client else "unknown")
+    now = _ai_time.time()
+    last_ts = AI_IP_LAST_CALL.get(client_ip, 0.0)
+    if now - last_ts < 1.2:
+        raise HTTPException(status_code=429, detail="Mohon tunggu sejenak sebelum mengirim pesan berikutnya.")
+    AI_IP_LAST_CALL[client_ip] = now
+
+    raw_msg = str(payload.message or "").strip()
+    if not raw_msg:
+        raise HTTPException(status_code=400, detail="Pesan tidak boleh kosong.")
+
+    if STATE["analysis"] is None:
+        init_default_state()
+    analysis = STATE["analysis"] or {}
+    all_stocks = analysis.get("stocks") or []
+    kpis = analysis.get("kpis") or {}
+    today_cands = analysis.get("today_candidates") or select_today_candidates(all_stocks[:100])
+
+    norm_key = f"{raw_msg.lower()}|{payload.active_ticker or ''}|{STATE.get('last_sync_time', '')}"
+    cached = AI_CHAT_CACHE.get(norm_key)
+    if cached and (now - cached[0]) < 600.0:
+        return cached[1]
+
+    msg_lower = raw_msg.lower()
+    actions: list[dict] = []
+    stock_map = {str(s.get("ticker", "")).upper(): s for s in all_stocks}
+
+    # Deteksi kode saham 4 huruf di pesan
+    tokens = _ai_re.findall(r"\b[A-Za-z]{4}\b", raw_msg.upper())
+    stop_words = {
+        "CARA", "BUKA", "CARI", "APA", "YANG", "DARI", "HARI", "BISA", "SAYA", "UNTUK",
+        "BELI", "JUAL", "LOT", "PLAN", "DANA", "KUAT", "SAJA", "LIAT", "CEK", "INFO",
+        "BANK", "BATU", "BARA", "EMIT", "MAIN", "PADA", "KALO", "JIKA", "MAU", "TANYA",
+        "BERI", "DATA", "SKOR", "RATA", "ATAS", "BAWA", "NAIK", "TURU", "RUGI", "TP1",
+        "IHSG", "MODE", "TEMA", "PETA", "UANG", "GIMN", "MANA",
+    }
+    matched_ticker = None
+    for tk in tokens:
+        if tk not in stop_words and tk in stock_map:
+            matched_ticker = tk
+            break
+
+    # Deteksi sektor
+    sector_aliases = [
+        ("Energy", ["energi", "energy", "batubara", "coal", "migas", "minyak", "gas"]),
+        ("Basic Materials", ["bahan baku", "basic", "tambang", "emas", "nikel", "logam", "semen", "kimia", "mineral"]),
+        ("Financials", ["keuangan", "bank", "perbankan", "financial", "asuransi", "leasing"]),
+        ("Consumer Non-Cyclicals", ["konsumer primer", "makanan", "minuman", "sawit", "cpo", "rokok", "poultry", "primer"]),
+        ("Consumer Cyclicals", ["konsumer non", "ritel", "otomotif", "media", "non-primer", "cyclical"]),
+        ("Infrastructures", ["infrastruktur", "telko", "telekomunikasi", "menara", "tower", "konstruksi", "jalan tol"]),
+        ("Properties & Real Estate", ["properti", "property", "real estate", "kawasan industri", "perumahan"]),
+        ("Healthcare", ["kesehatan", "farmasi", "rumah sakit", "health", "obat", "medis"]),
+        ("Technology", ["teknologi", "tech", "digital", "data center", "internet", "software"]),
+        ("Industrials", ["perindustrian", "industri", "alat berat", "kabel", "keramik"]),
+        ("Transportation & Logistics", ["transportasi", "logistik", "pelayaran", "kapal", "maskapai", "pengiriman"]),
+    ]
+    matched_sector = None
+    matched_sector_indo = None
+    for sec_code, kw_list in sector_aliases:
+        if any(kw in msg_lower for kw in kw_list):
+            matched_sector = sec_code
+            matched_sector_indo = {
+                "Energy": "Energi",
+                "Basic Materials": "Bahan Baku",
+                "Financials": "Keuangan",
+                "Consumer Non-Cyclicals": "Konsumer Primer",
+                "Consumer Cyclicals": "Konsumer Non-Primer",
+                "Infrastructures": "Infrastruktur",
+                "Properties & Real Estate": "Properti",
+                "Healthcare": "Kesehatan",
+                "Technology": "Teknologi",
+                "Industrials": "Perindustrian",
+                "Transportation & Logistics": "Transportasi",
+            }.get(sec_code, sec_code)
+            break
+
+    # Bangun respon kuantitatif presisi & daftar aksi navigasi UI
+    reply_lines: list[str] = []
+
+    if any(k in msg_lower for k in ["hitung lot", "kalkulator", "berapa lot"]) or ("modal" in msg_lower and "juta" in msg_lower):
+        cap_match = _ai_re.search(r"(\d+(?:[.,]\d+)?)\s*juta", msg_lower)
+        cap_rp = int(float(cap_match.group(1).replace(",", ".")) * 1_000_000) if cap_match else 10_000_000
+        tk = matched_ticker or (payload.active_ticker if payload.active_ticker in stock_map else (today_cands[0]["ticker"] if today_cands else "BBCA"))
+        st = stock_map.get(tk, {})
+        plan = st.get("trading_plan") or {}
+        entry = int(plan.get("entry_price") or st.get("close") or 1000)
+        sl = int(plan.get("stop_loss") or round(entry * 0.965))
+        actions.append({"type": "calc_lot", "ticker": tk, "capital": cap_rp, "entry": entry, "sl": sl})
+        per_share_risk = max(1.0, (entry - sl) + (entry * 0.004))
+        lots_by_risk = int((cap_rp * 0.02) // (per_share_risk * 100))
+        lots_by_cap = int((cap_rp * 0.20) // (entry * 1.0015 * 100))
+        rec_lots = max(0, min(lots_by_risk, lots_by_cap))
+        reply_lines.append(f"Saya telah membuka **Kalkulator Lot** untuk **{tk}** dengan modal **Rp {cap_rp:,.0f}**.".replace(",", "."))
+        reply_lines.append(f"• Harga Antre Beli: **Rp {entry:,.0f}** | Stop Loss: **Rp {sl:,.0f}**".replace(",", "."))
+        reply_lines.append(f"• Kapasitas Aman (Maks 20% Modal / Risiko 2%): **{rec_lots} Lot**")
+    elif matched_ticker:
+        st = stock_map[matched_ticker]
+        plan = st.get("trading_plan") or {}
+        entry = int(plan.get("entry_price") or st.get("close") or 0)
+        tp1 = int(plan.get("target_1") or round(entry * 1.07))
+        tp2 = int(plan.get("target_2") or round(entry * 1.12))
+        sl = int(plan.get("stop_loss") or round(entry * 0.965))
+        bdr = st.get("bdr_pct", 0)
+        buyers = st.get("top_buyers") or "-"
+        actions.append({"type": "select_stock", "ticker": matched_ticker})
+        reply_lines.append(f"Menampilkan analisis & grafik **{matched_ticker}** di panel detail:")
+        reply_lines.append(f"• Harga: **Rp {int(st.get('close', 0)):,.0f}** ({st.get('pct_change', 0):+.2f}%) | Skor Aliran Dana: **{st.get('smart_money_score', 0)}/100**".replace(",", "."))
+        reply_lines.append(f"• Status: **{st.get('trigger_label', '-')}** | Modal Bandar (VWAP 5H): **Rp {int(st.get('bandar_avg_buy', 0)):,.0f}** ({st.get('diff_bandar_avg_pct', 0):+.1f}%)".replace(",", "."))
+        if st.get("has_broker_summary") or buyers != "-":
+            reply_lines.append(f"• Broker Summary 3H: Buyer **{buyers}** (BDR {bdr:+.1f}%)")
+        reply_lines.append(f"• Trading Plan: Antre Beli **Rp {entry:,.0f}** | TP1 **Rp {tp1:,.0f}** | TP2 **Rp {tp2:,.0f}** | SL **Rp {sl:,.0f}**".replace(",", "."))
+    elif matched_sector:
+        actions.append({"type": "filter_sector", "sector": matched_sector})
+        sec_stocks = [s for s in all_stocks if s.get("sector_category") == matched_sector]
+        sec_stocks.sort(key=lambda x: (x.get("smart_money_score", 0), x.get("value_b_idr", 0)), reverse=True)
+        top_names = ", ".join(f"**{s['ticker']}** (Skor {s['smart_money_score']})" for s in sec_stocks[:4]) or "-"
+        reply_lines.append(f"Layar telah diarahkan ke **Tab Jelajah** dengan filter sektor **{matched_sector_indo}** ({len(sec_stocks)} emiten).")
+        reply_lines.append(f"• Saham unggulan di sektor ini: {top_names}.")
+    elif any(k in msg_lower for k in ["sektor", "rotasi", "peta sektor"]):
+        actions.append({"type": "open_modal", "modal": "sector"})
+        reply_lines.append("Membuka **Peta Rotasi & Aliran Dana Sektor BEI**.")
+        reply_lines.append("Anda dapat melihat peringkat 11 sektor beserta rasio akumulasi dan saham penggerak utamanya.")
+    elif any(k in msg_lower for k in ["ihsg", "kondisi pasar", "rezim", "breadth", "market"]):
+        reg = kpis.get("market_regime") or {}
+        actions.append({"type": "open_modal", "modal": "regime"})
+        reply_lines.append(f"**Kondisi Pasar IHSG Saat Ini:** {reg.get('label', 'Konsolidasi')}")
+        reply_lines.append(f"• Market Breadth MA20: **{reg.get('breadth_ma20_pct', 50)}%** | MA50: **{reg.get('breadth_ma50_pct', 50)}%**")
+        reply_lines.append(f"• Panduan: {reg.get('regime_note', 'Disiplin antre di area support terdekat.')}")
+    elif any(k in msg_lower for k in ["pantauan", "watchlist", "favorit", "win rate", "portofolio", "tracker"]):
+        actions.append({"type": "switch_tab", "tab": "watchlist"})
+        reply_lines.append("Membuka halaman **Pantauan (Favorit, Uji Sinyal Forward-Test & Portofolio Riil)**.")
+    elif any(k in msg_lower for k in ["pilihan hari ini", "kandidat", "rekomendasi", "saham bagus", "siap beli", "hari ini"]):
+        actions.append({"type": "switch_tab", "tab": "today"})
+        top_list = ", ".join(f"**{c['ticker']}** (Rp {int(c.get('close',0)):,.0f})".replace(",", ".") for c in (today_cands or [])[:5])
+        reply_lines.append("Menampilkan **Kandidat Saham Pilihan Hari Ini** (dekat rata-rata modal bandar & terverifikasi akumulasi):")
+        reply_lines.append(f"• Kandidat Utama: {top_list or 'Memuat kandidat...'}")
+        reply_lines.append("• Klik salah satu saham untuk melihat titik Antre Beli, Target TP1/TP2, dan Stop Loss.")
+    else:
+        # Pertanyaan umum / edukasi -> Coba panggil Cloud LLM jika API Key tersedia, atau jawab cerdas
+        top_cands_str = ", ".join(f"{c['ticker']} (Skor {c.get('smart_money_score',0)}, Close {c.get('close',0)})" for c in (today_cands or [])[:5])
+        reg_label = (kpis.get("market_regime") or {}).get("label", "Normal")
+        sys_prompt = (
+            "Anda adalah RadarBot, asisten AI kuantitatif di aplikasi RadarBandarIDX (Screener Smart Money & Bandarmologi BEI). "
+            "Jawab singkat (maksimal 3-4 kalimat), padat, profesional dalam Bahasa Indonesia tanpa emoji berlebihan. "
+            f"Data live bursa saat ini: Rezim IHSG={reg_label}, Saham Pilihan Hari Ini={top_cands_str}. "
+            "Selalu ingatkan disiplin antre di support/modal bandar dan Stop Loss (DYOR, bukan ajakan beli/jual)."
+        )
+        llm_reply = _call_cloud_llm(sys_prompt, raw_msg)
+        if llm_reply:
+            reply_lines.append(llm_reply)
+        else:
+            reply_lines.append("Saya **RadarBot**, asisten navigasi & analisis kuantitatif RadarBandarIDX. Anda dapat memerintahkan saya untuk:")
+            reply_lines.append("• **Cek Saham:** ketik kode saham (contoh: *'Analisis BBCA'* atau *'Cek ADRO'*)")
+            reply_lines.append("• **Saring Sektor:** ketik *'Tampilkan sektor energi'* atau *'Peta sektor'*")
+            reply_lines.append("• **Kandidat & Risiko:** ketik *'Saham pilihan hari ini'* atau *'Hitung lot ANTM modal 15 juta'*")
+
+    resp_obj = {
+        "status": "success",
+        "reply": "\n".join(reply_lines),
+        "actions": actions,
+    }
+    if len(AI_CHAT_CACHE) > 200:
+        AI_CHAT_CACHE.clear()
+    AI_CHAT_CACHE[norm_key] = (now, resp_obj)
+    return resp_obj
+
+
 # ===================== PROGRESSIVE WEB APP (PWA) =====================
 
 
