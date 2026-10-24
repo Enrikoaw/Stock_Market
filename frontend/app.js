@@ -684,13 +684,22 @@ function renderTodayCandidates(stocks) {
 
         <!-- Aksi -->
         <td class="py-1.5 pr-3 pl-2 text-right whitespace-nowrap">
-          <button
-            onclick="event.stopPropagation(); selectStockAndGoToInspector('${safeTicker}')"
-            class="px-2.5 py-0.5 rounded text-[10px] font-bold transition text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 border border-emerald-300 dark:border-emerald-500/30"
-            title="Buka Trading Plan ${safeTicker}"
-          >
-            Plan
-          </button>
+          <div class="inline-flex items-center gap-1">
+            <button
+              onclick="event.stopPropagation(); shareStockPlan('${safeTicker}', event)"
+              class="px-2 py-0.5 rounded text-[10px] font-bold transition text-sky-700 bg-sky-100 hover:bg-sky-200 dark:text-sky-300 dark:bg-sky-500/15 dark:hover:bg-sky-500/25 border border-sky-300 dark:border-sky-500/30"
+              title="Salin &amp; Bagikan Plan ${safeTicker} ke WA / Telegram"
+            >
+              ??
+            </button>
+            <button
+              onclick="event.stopPropagation(); selectStockAndGoToInspector('${safeTicker}')"
+              class="px-2.5 py-0.5 rounded text-[10px] font-bold transition text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 border border-emerald-300 dark:border-emerald-500/30"
+              title="Buka Trading Plan ${safeTicker}"
+            >
+              Plan
+            </button>
+          </div>
         </td>
       </tr>
     `;
@@ -4448,17 +4457,12 @@ function renderTrackerTable(rows) {
           <td class="py-3.5 px-3 text-right font-mono text-slate-900 dark:text-white font-semibold text-xs">${exitOrLast}</td>
 
           <!-- Hasil (P/L) -->
-          <td class="py-3.5 px-3 text-right font-mono">
+          <td class="py-3.5 pl-3 pr-4 text-right font-mono">
             ${pnl !== null ? `
               <span class="inline-block min-w-[66px] text-center px-3 py-1 rounded-full text-xs font-extrabold font-mono ${pnl >= 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/70 shadow-[0_0_16px_rgba(16,185,129,0.1)]' : 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-400/70 shadow-[0_0_16px_rgba(244,63,94,0.1)]'}">
                 ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%
               </span>
             ` : '<span class="text-slate-400 dark:text-slate-500">-</span>'}
-          </td>
-
-          <!-- Action / Delete -->
-          <td class="py-3.5 pl-1 pr-3 text-right">
-            <button onclick="deleteSignal(${Number(r.id)})" class="text-slate-500 hover:text-rose-400 text-base font-bold transition px-1" title="Hapus sinyal">&times;</button>
           </td>
         </tr>`;
       })
@@ -4538,7 +4542,6 @@ function renderTrackerTable(rows) {
               </div>
               <div class="flex items-center gap-1.5 flex-shrink-0">
                 ${statusBadge}
-                <button onclick="event.stopPropagation(); deleteSignal(${Number(r.id)})" class="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-sm font-bold" title="Hapus sinyal">&times;</button>
               </div>
             </div>
 
@@ -4607,15 +4610,71 @@ async function addToWatchlist() {
     showToast('Pilih saham terlebih dahulu dari tabel screener.', 'error');
     return;
   }
-  try {
-    const res = await fetch(`/api/tracker/add/${encodeURIComponent(selectedTicker)}`, { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Gagal menambahkan ke watchlist');
-    showToast(data.message);
-    await loadTracker();
-  } catch (err) {
-    showToast(err.message, 'error');
+  toggleFavorite(selectedTicker);
+}
+
+async function shareStockPlan(ticker, e = null) {
+  if (e) e.stopPropagation();
+  const cleanTicker = String(ticker || selectedTicker || '').trim().toUpperCase();
+  if (!cleanTicker) {
+    showToast('Pilih saham terlebih dahulu untuk dibagikan.', 'error');
+    return;
   }
+  const s = (currentStocks || []).find(item => item.ticker === cleanTicker)
+    || (currentTodayCandidates || []).find(item => item.ticker === cleanTicker)
+    || (selectedStockDetail && selectedStockDetail.ticker === cleanTicker ? selectedStockDetail : null);
+
+  const plan = (s && s.trading_plan) || {};
+  const closePrice = (s && s.close) || 0;
+  const entryPrice = plan.entry_price || plan.entry_low || closePrice;
+  const tp1 = plan.target_1 || Math.round(entryPrice * (1 + APP_TRADING_RULES.DEFAULT_TP1_PCT / 100));
+  const tp2 = plan.target_2 || Math.round(entryPrice * (1 + APP_TRADING_RULES.DEFAULT_TP2_PCT / 100));
+  const sl = plan.stop_loss || Math.round(entryPrice * (1 - APP_TRADING_RULES.DEFAULT_SL_PCT / 100));
+  const score = (s && s.smart_money_score) || '-';
+  const topBuyers = (s && s.top_buyers) ? `? Buyer Dominan: ${s.top_buyers}
+` : '';
+  const originUrl = window.location.origin;
+
+  const shareText = [
+    `?? *RadarBandarIDX ? Sinyal & Trading Plan #${cleanTicker}*`,
+    `? Harga Terkini: ${fmtPrice(closePrice)}`,
+    `? Area Antre Beli (Support): ${fmtPrice(entryPrice)}`,
+    `? Target Profit 1 (TP1): ${fmtPrice(tp1)} (+${APP_TRADING_RULES.DEFAULT_TP1_PCT}%)`,
+    `? Target Profit 2 (TP2): ${fmtPrice(tp2)} (+${APP_TRADING_RULES.DEFAULT_TP2_PCT}%)`,
+    `? Batas Risiko (SL): ${fmtPrice(sl)} (-${APP_TRADING_RULES.DEFAULT_SL_PCT}%)`,
+    `? Skor Aliran Dana: ${score}/100`,
+    topBuyers ? topBuyers.trimEnd() : null,
+    `?? Cek analisa live di: ${originUrl}/?ticker=${cleanTicker}`,
+    `?? Grup Telegram: https://t.me/D7Em9myKqonwwNzQ1`
+  ].filter(Boolean).join('
+');
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(shareText);
+      showToast(`?? Plan #${cleanTicker} berhasil disalin! Siap ditempel ke WhatsApp / Telegram.`, 'success');
+      return;
+    }
+  } catch (_) {}
+
+  const ta = document.createElement('textarea');
+  ta.value = shareText;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showToast(`?? Plan #${cleanTicker} berhasil disalin! Siap ditempel ke WhatsApp / Telegram.`, 'success');
+  } catch (_) {
+    showToast('Gagal menyalin teks secara otomatis.', 'error');
+  } finally {
+    document.body.removeChild(ta);
+  }
+}
+
+function shareSelectedStockPlan() {
+  shareStockPlan(selectedTicker);
 }
 
 async function deleteSignal(id) {

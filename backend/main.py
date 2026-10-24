@@ -1828,8 +1828,23 @@ def tracker_purge_retail_watchlist() -> dict:
     }
 
 
+
+def _require_admin_token(request: Request) -> None:
+    admin_secret = os.environ.get("ADMIN_SECRET_TOKEN", "").strip()
+    token = (
+        request.headers.get("X-Admin-Token", "").strip()
+        or request.query_params.get("admin_token", "").strip()
+    )
+    if not admin_secret or token != admin_secret:
+        raise HTTPException(
+            status_code=403,
+            detail="Akses ditolak: Operasi modifikasi database ini dikunci khusus Admin RadarBandarIDX.",
+        )
+
+
 @app.post("/api/tracker/add/{ticker}")
-def tracker_add(ticker: str) -> dict:
+def tracker_add(ticker: str, request: Request) -> dict:
+    _require_admin_token(request)
     key = ticker.strip().upper()
     details = STATE["analysis"]["details"] if STATE["analysis"] else {}
     if key not in details:
@@ -1856,14 +1871,16 @@ async def tracker_evaluate() -> dict:
 
 
 @app.delete("/api/tracker/signals/{signal_id}")
-def tracker_delete(signal_id: int) -> dict:
+def tracker_delete(signal_id: int, request: Request) -> dict:
+    _require_admin_token(request)
     if not TRACKER.delete_signal(signal_id):
         raise HTTPException(status_code=404, detail="Sinyal tidak ditemukan.")
     return {"status": "success", "message": "Sinyal dihapus."}
 
 
 @app.post("/api/tracker/reset")
-def tracker_reset() -> dict:
+def tracker_reset(request: Request) -> dict:
+    _require_admin_token(request)
     if not REAL_CACHE_CSV.exists():
         n = TRACKER.reset_all()
         return {"status": "success", "message": f"{n} catatan sinyal dihapus. Cache pasar belum tersedia."}
@@ -2224,7 +2241,8 @@ def get_broker_api_config_endpoint() -> dict:
 
 
 @app.post("/api/broker/config")
-def save_broker_api_config_endpoint(req: BrokerApiConfigRequest) -> dict:
+def save_broker_api_config_endpoint(req: BrokerApiConfigRequest, request: Request) -> dict:
+    _require_admin_token(request)
     cfg = load_broker_api_config()
     if req.provider:
         cfg["provider"] = req.provider.strip().lower()

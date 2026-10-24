@@ -342,6 +342,25 @@
       <span>Platform analisis kuantitatif independen untuk riset mandiri (DYOR). <strong>Bukan rekomendasi transaksi efek atau penasihat investasi berlisensi OJK.</strong></span>
     </div>
 
+    <!-- Banner Komunitas & Masukan Telegram RadarBandarIDX (Tampil Jelas di Halaman Utama) -->
+    <div class="px-3 sm:px-6 py-1.5 bg-gradient-to-r from-sky-950/70 via-slate-900/90 to-emerald-950/70 border-b border-sky-400/20 text-xs flex flex-wrap items-center justify-center gap-2 text-center">
+      <span class="inline-flex items-center gap-1.5 text-slate-200 text-[11px]">
+        <svg class="w-3.5 h-3.5 text-sky-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+        </svg>
+        <span>Punya saran fitur, laporan bug, atau diskusi saham?</span>
+      </span>
+      <a
+        href="https://t.me/D7Em9myKqonwwNzQ1"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-500/20 hover:bg-sky-500/35 text-sky-300 border border-sky-400/40 text-[11px] font-bold transition active:scale-95 shadow-sm"
+      >
+        <span>Gabung Grup Telegram RadarBandarIDX</span>
+        <span>&nearr;</span>
+      </a>
+    </div>
+
   <!-- MAIN WORKSPACE CONTAINER -->
   <main class="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 py-4 space-y-4">
 
@@ -1101,20 +1120,20 @@
             </div>
 
 
-            <!-- Tombol Aksi: Masuk Watchlist Tracker & Hitung Lot -->
+            <!-- Tombol Aksi: Favorit Pribadi, Hitung Lot, & Bagikan Plan -->
             <div class="grid grid-cols-2 gap-2 pt-1">
               <button
                 id="btnAddToWatchlist"
                 onclick="addToWatchlist()"
-                class="liquid-glass-btn neon-blue py-2 px-3 justify-center active:scale-95 w-full"
-                title="Masukkan saham ini ke Watchlist Tracker"
+                class="liquid-glass-btn neon-amber py-2 px-3 justify-center active:scale-95 w-full"
+                title="Simpan saham ini ke Daftar Favorit Saya"
               >
                 <span class="neon-icon-badge">
                   <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                   </svg>
                 </span>
-                <span>Masuk Watchlist</span>
+                <span>Simpan Favorit</span>
               </button>
               <button
                 onclick="openLotCalculatorModal()"
@@ -1129,6 +1148,15 @@
                   </svg>
                 </span>
                 <span>Hitung Lot</span>
+              </button>
+              <button
+                type="button"
+                onclick="shareSelectedStockPlan()"
+                class="col-span-2 py-2 px-3 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                title="Salin ringkasan Trading Plan untuk dibagikan ke WhatsApp atau Telegram"
+              >
+                <span>??</span>
+                <span>Bagikan Trading Plan (WA / Telegram)</span>
               </button>
             </div>
           </div>
@@ -1382,14 +1410,7 @@
               <option value="date_desc">Urutkan: Sinyal Terbaru</option>
               <option value="score_desc">Urutkan: Skor Tertinggi</option>
             </select>
-            <button
-              id="btnEvalTracker"
-              onclick="evaluateTracker()"
-              class="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 text-xs font-semibold transition flex items-center gap-1 active:scale-95 flex-shrink-0 whitespace-nowrap"
-              title="Evaluasi status sinyal simulasi sekarang"
-            >
-              <span>Evaluasi</span>
-            </button>
+
           </div>
         </div>
 
@@ -1409,8 +1430,7 @@
                 <th class="py-3 px-3 text-center">Status</th>
                 <th class="py-3 px-3 text-right">Kesiapan / Masuk</th>
                 <th class="py-3 px-3 text-right">Harga Terkini</th>
-                <th class="py-3 px-3 text-right cursor-pointer hover:text-white" onclick="toggleTrackerSort('pnl')">Hasil (P/L) <span id="sortIconPnl" class="text-[10px] text-emerald-400 font-mono"></span></th>
-                <th class="py-3 pl-1 pr-3 text-right"></th>
+                <th class="py-3 pl-3 pr-4 text-right cursor-pointer hover:text-white" onclick="toggleTrackerSort('pnl')">Hasil (P/L) <span id="sortIconPnl" class="text-[10px] text-emerald-400 font-mono"></span></th>
               </tr>
             </thead>
             <tbody id="trackerTableBody" class="divide-y divide-white/[0.06]"></tbody>
@@ -2332,6 +2352,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=96.8"></script>
+  <script src="/static/app.js?v=96.9"></script>
 </body>
 </html>
