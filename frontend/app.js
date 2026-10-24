@@ -16,9 +16,12 @@ let activeChartTab = 'price';
 let chartInstance = null;
 let isSyncingFast = false;
 
-// State Baru: Mode Navigasi, Mode Mahir, & Favorit Pribadi (localStorage)
+// State Baru: Mode Navigasi, Mode Pemula Default Permanen, & Favorit Pribadi (localStorage)
 let activeMainTab = localStorage.getItem('smartflow_active_tab') || 'today';
-let isExpertMode = localStorage.getItem('smartflow_expert_mode') === 'true';
+let isExpertMode = false;
+try {
+  localStorage.setItem('smartflow_expert_mode', 'false');
+} catch (e) {}
 let favoriteTickers = [];
 try {
   favoriteTickers = JSON.parse(localStorage.getItem('smartflow_favorites') || '[]');
@@ -186,92 +189,58 @@ function switchMainTab(tabName, isInitialLoad = false) {
 }
 
 // =====================================================================
-// SAKLAR MODE PEMULA VS MODE MAHIR
+// MODE PEMULA PERMANEN (DEFAULT)
 // =====================================================================
 function applyExpertModeUI() {
+  isExpertMode = false;
   const modeIcon = document.getElementById('modeIcon');
   const modeLabel = document.getElementById('modeLabel');
   const kpiContainer = document.getElementById('kpiContainer');
 
-  if (isExpertMode) {
-    if (modeIcon) modeIcon.textContent = '⚡';
-    if (modeLabel) modeLabel.textContent = 'Mode Mahir';
-    if (kpiContainer) kpiContainer.classList.remove('hidden');
-    document.querySelectorAll('.expert-only').forEach(el => el.classList.remove('hidden'));
+  if (modeIcon) modeIcon.textContent = '🌱';
+  if (modeLabel) modeLabel.textContent = 'Mode Pemula';
+  if (kpiContainer) kpiContainer.classList.add('hidden');
+  document.querySelectorAll('.expert-only').forEach(el => el.classList.add('hidden'));
 
-    // 1. Kolom Tabel Screener (Mode Mahir: Istilah Teknis Asli)
-    const colVol = document.getElementById('colHeaderVolume');
-    if (colVol) colVol.textContent = 'Volume / Sinyal';
-    const colScore = document.getElementById('colHeaderScore');
-    if (colScore) colScore.textContent = 'Skor VSA';
-    const colProf = document.getElementById('colHeaderProfile');
-    if (colProf) colProf.textContent = 'Profil VSA & VWAP 5H';
+  // 1. Kolom Tabel Screener (Mode Pemula: Bahasa Sehari-hari Ramah)
+  const colVol = document.getElementById('colHeaderVolume');
+  if (colVol) colVol.textContent = 'Lonjakan Volume / Sinyal';
+  const colScore = document.getElementById('colHeaderScore');
+  if (colScore) colScore.textContent = 'Skor Aliran Dana (0-100)';
+  const colProf = document.getElementById('colHeaderProfile');
+  if (colProf) colProf.textContent = 'Rata-Rata Harga 5H & Transaksi';
 
-    // 2. Rincian 5 Pilar Kuantitatif (Mode Mahir)
-    const p1 = document.getElementById('p1Label');
-    if (p1) p1.textContent = 'P1: Volume Spike & VSA';
-    const p2 = document.getElementById('p2Label');
-    if (p2) p2.textContent = 'P2: Tren & Struktur MA20/MA50';
-    const p3 = document.getElementById('p3Label');
-    if (p3) p3.textContent = 'P3: Kompresi Volatilitas (Squeeze)';
-    const p4 = document.getElementById('p4Label');
-    if (p4) p4.textContent = 'P4: Likuiditas & Turnover Riil';
-    const p5 = document.getElementById('p5Label');
-    if (p5) p5.textContent = 'P5: Posisi Harga vs 5-Day VWAP';
+  // 2. Rincian 5 Pilar Kuantitatif (Mode Pemula: Ramah & Jelas)
+  const p1 = document.getElementById('p1Label');
+  if (p1) p1.textContent = 'P1: Lonjakan Volume & Respon Harga';
+  const p2 = document.getElementById('p2Label');
+  if (p2) p2.textContent = 'P2: Tren Rata-Rata 20/50 Hari (MA)';
+  const p3 = document.getElementById('p3Label');
+  if (p3) p3.textContent = 'P3: Rentang Harga Menyempit (Squeeze)';
+  const p4 = document.getElementById('p4Label');
+  if (p4) p4.textContent = 'P4: Nilai Transaksi Harian (Turnover)';
+  const p5 = document.getElementById('p5Label');
+  if (p5) p5.textContent = 'P5: Posisi vs Harga Rata-Rata 5 Hari';
 
-    // 3. Opsi Dropdown Pengurutan
-    const optVwap = document.querySelector('#filterSortBy option[value="vwap"]');
-    if (optVwap) optVwap.textContent = 'Urutkan: Jarak VWAP Terdekat';
-  } else {
-    if (modeIcon) modeIcon.textContent = '🌱';
-    if (modeLabel) modeLabel.textContent = 'Mode Pemula';
-    if (kpiContainer) kpiContainer.classList.add('hidden');
-    document.querySelectorAll('.expert-only').forEach(el => el.classList.add('hidden'));
-
-    // 1. Kolom Tabel Screener (Mode Pemula: Bahasa Sehari-hari Ramah)
-    const colVol = document.getElementById('colHeaderVolume');
-    if (colVol) colVol.textContent = 'Lonjakan Volume / Sinyal';
-    const colScore = document.getElementById('colHeaderScore');
-    if (colScore) colScore.textContent = 'Skor Aliran Dana (0-100)';
-    const colProf = document.getElementById('colHeaderProfile');
-    if (colProf) colProf.textContent = 'Rata-Rata Harga 5H & Transaksi';
-
-    // 2. Rincian 5 Pilar Kuantitatif (Mode Pemula: Ramah & Jelas)
-    const p1 = document.getElementById('p1Label');
-    if (p1) p1.textContent = 'P1: Lonjakan Volume & Respon Harga';
-    const p2 = document.getElementById('p2Label');
-    if (p2) p2.textContent = 'P2: Tren Rata-Rata 20/50 Hari (MA)';
-    const p3 = document.getElementById('p3Label');
-    if (p3) p3.textContent = 'P3: Rentang Harga Menyempit (Squeeze)';
-    const p4 = document.getElementById('p4Label');
-    if (p4) p4.textContent = 'P4: Nilai Transaksi Harian (Turnover)';
-    const p5 = document.getElementById('p5Label');
-    if (p5) p5.textContent = 'P5: Posisi vs Harga Rata-Rata 5 Hari';
-
-    // 3. Opsi Dropdown Pengurutan
-    const optVwap = document.querySelector('#filterSortBy option[value="vwap"]');
-    if (optVwap) optVwap.textContent = 'Urutkan: Dekat Harga Rata-Rata 5H';
-  }
+  // 3. Opsi Dropdown Pengurutan
+  const optVwap = document.querySelector('#filterSortBy option[value="vwap"]');
+  if (optVwap) optVwap.textContent = 'Urutkan: Dekat Harga Rata-Rata 5H';
 
   // Update teks dinamis baris tabel jika sudah ter-render
   document.querySelectorAll('.lbl-vwap-text').forEach(el => {
-    el.textContent = isExpertMode ? 'VWAP 5H' : 'Rata2 5H';
+    el.textContent = 'Modal Bandar';
   });
   document.querySelectorAll('.lbl-val-text').forEach(el => {
-    el.textContent = isExpertMode ? 'Turnover' : 'Transaksi';
+    el.textContent = 'Transaksi';
   });
 }
 
 function toggleExpertMode() {
-  isExpertMode = !isExpertMode;
-  localStorage.setItem('smartflow_expert_mode', isExpertMode ? 'true' : 'false');
+  isExpertMode = false;
+  try {
+    localStorage.setItem('smartflow_expert_mode', 'false');
+  } catch (e) {}
   applyExpertModeUI();
-  showToast(
-    isExpertMode
-      ? 'Beralih ke Mode Mahir (seluruh kartu KPI & filter teknis aktif).'
-      : 'Beralih ke Mode Pemula (antarmuka bersih & ramah risiko).',
-    'success'
-  );
 }
 
 // =====================================================================

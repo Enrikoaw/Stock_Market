@@ -146,17 +146,6 @@
       <div class="flex items-center gap-2">
         <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" multiple class="hidden" />
 
-        <!-- Saklar Mode Pemula / Mode Mahir -->
-        <button
-          id="btnToggleMode"
-          onclick="toggleExpertMode()"
-          class="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-slate-900/60 hover:bg-white/[0.08] border border-white/[0.08] text-xs font-semibold text-slate-200 transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-          title="Beralih antara Mode Pemula (ramah &amp; sederhana) dan Mode Mahir (indikator teknis lengkap)"
-        >
-          <span id="modeIcon">🌱</span>
-          <span id="modeLabel" class="text-xs">Mode Pemula</span>
-        </button>
-
         <!-- Dropdown Menu Pengaturan (⚙️) Memuat Sync, Gelap/Terang, Notifikasi, Alat -->
         <div class="relative" id="settingsDropdownContainer">
           <button
@@ -583,7 +572,7 @@
 
 
       <!-- 4 KPI SUMMARY CARDS (Ditampilkan di Mode Mahir atau disembunyikan di Mode Pemula) -->
-      <div id="kpiContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div id="kpiContainer" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- KPI 1: Total Emiten -->
         <div id="kpiAll" onclick="applyQuickFilter('ALL')" class="kpi-card active-filter rounded-2xl p-4 sm:p-5 flex flex-col justify-between bg-[#091122]/80 border border-white/[0.08]" role="button" tabindex="0">
           <div class="flex items-center gap-3.5">
@@ -774,7 +763,7 @@
               <select id="filterSortBy" class="col-span-2 sm:col-span-1 w-full sm:w-auto px-2.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/70 transition">
                 <option value="score" class="bg-slate-900 text-white">Urutkan: Skor Tertinggi</option>
                 <option value="vol_ratio" class="bg-slate-900 text-white">Urutkan: Lonjakan Volume</option>
-                <option value="vwap" class="bg-slate-900 text-white">Urutkan: Jarak VWAP Terdekat</option>
+                <option value="vwap" class="bg-slate-900 text-white">Urutkan: Dekat Harga Rata-Rata 5H</option>
                 <option value="pct_change" class="bg-slate-900 text-white">Urutkan: % Kenaikan</option>
               </select>
             </div>
@@ -789,15 +778,15 @@
                   <th class="py-3 px-2 text-right whitespace-nowrap">Harga</th>
                   <th class="py-3 px-2 text-right whitespace-nowrap">Perubahan</th>
                   <th class="py-3 px-2 text-center whitespace-nowrap">
-                    <span id="colHeaderVolume">Volume / Sinyal</span>
+                    <span id="colHeaderVolume">Lonjakan Volume / Sinyal</span>
                     <button type="button" class="term-tip ml-1 text-slate-400 hover:text-emerald-300 font-normal inline-flex items-center" onclick="openGlossaryModal('vsa')" title="VSA: Volume Spread Analysis.">ⓘ</button>
                   </th>
                   <th class="py-3 px-2 text-right whitespace-nowrap">
-                    <span id="colHeaderScore">Skor VSA</span>
+                    <span id="colHeaderScore">Skor Aliran Dana (0-100)</span>
                     <button type="button" class="term-tip ml-1 text-slate-400 hover:text-emerald-300 font-normal inline-flex items-center" onclick="openGlossaryModal('smart_money')" title="Skor gabungan 5 pilar kuantitatif aliran dana besar.">ⓘ</button>
                   </th>
                   <th class="py-3 pl-2 pr-4 text-left whitespace-nowrap">
-                    <span id="colHeaderProfile">Profil VSA &amp; VWAP 5H</span>
+                    <span id="colHeaderProfile">Rata-Rata Harga 5H &amp; Transaksi</span>
                     <button type="button" class="term-tip ml-1 text-slate-400 hover:text-emerald-300 font-normal inline-flex items-center" onclick="openGlossaryModal('vwap')" title="VWAP 5H: Volume-Weighted Average Price 5 hari sebagai jangkar support.">ⓘ</button>
                   </th>
                 </tr>
@@ -1102,7 +1091,7 @@
               <div class="space-y-1.5 text-xs" id="pScoresList">
                 <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px]">
                   <div class="flex items-center gap-1">
-                    <span id="p1Label">P1: Volume Spike &amp; VSA</span>
+                    <span id="p1Label">P1: Lonjakan Volume &amp; Respon Harga</span>
                     <button type="button" class="term-tip text-slate-400 hover:text-emerald-300" onclick="openGlossaryModal('vsa')" title="VSA: Volume Spread Analysis &amp; lonjakan volume beli.">ⓘ</button>
                   </div>
                   <span id="p1Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
@@ -1113,7 +1102,7 @@
 
                 <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
                   <div class="flex items-center gap-1">
-                    <span id="p2Label">P2: Tren &amp; Struktur MA20/MA50</span>
+                    <span id="p2Label">P2: Tren Rata-Rata 20/50 Hari (MA)</span>
                     <button type="button" class="term-tip text-slate-400 hover:text-emerald-300" onclick="openGlossaryModal('ma')" title="Moving Average: Garis tren rata-rata 20 dan 50 hari.">ⓘ</button>
                   </div>
                   <span id="p2Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
@@ -1124,7 +1113,7 @@
 
                 <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
                   <div class="flex items-center gap-1">
-                    <span id="p3Label">P3: Kompresi Volatilitas (Squeeze)</span>
+                    <span id="p3Label">P3: Rentang Harga Menyempit (Squeeze)</span>
                     <button type="button" class="term-tip text-slate-400 hover:text-emerald-300" onclick="openGlossaryModal('squeeze')" title="Squeeze: Bollinger Bands masuk Keltner Channel (harga istirahat sebelum ledakan).">ⓘ</button>
                   </div>
                   <span id="p3Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
@@ -1135,7 +1124,7 @@
 
                 <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
                   <div class="flex items-center gap-1">
-                    <span id="p4Label">P4: Likuiditas &amp; Turnover Riil</span>
+                    <span id="p4Label">P4: Nilai Transaksi Harian (Turnover)</span>
                     <button type="button" class="term-tip text-slate-400 hover:text-emerald-300" onclick="openGlossaryModal('turnover')" title="Turnover: Total nilai transaksi Rupiah harian emiten.">ⓘ</button>
                   </div>
                   <span id="p4Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
@@ -1146,7 +1135,7 @@
 
                 <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px] pt-1">
                   <div class="flex items-center gap-1">
-                    <span id="p5Label">P5: Posisi Harga vs 5-Day VWAP</span>
+                    <span id="p5Label">P5: Posisi vs Harga Rata-Rata 5 Hari</span>
                     <button type="button" class="term-tip text-slate-400 hover:text-emerald-300" onclick="openGlossaryModal('vwap')" title="VWAP 5H: Rata-rata modal tertimbang volume 5 hari.">ⓘ</button>
                   </div>
                   <span id="p5Score" class="font-mono text-slate-900 dark:text-white font-bold">-</span>
@@ -2299,6 +2288,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=95.9"></script>
+  <script src="/static/app.js?v=96.0"></script>
 </body>
 </html>
