@@ -1,5 +1,5 @@
 /**
- * SmartFlow IDX - Frontend Controller (app.js)
+ * RadarBandarIDX - Frontend Controller (app.js)
  * Antarmuka Ramah Pemula & Mahir, Kalkulator Lot, Glosarium, Favorit Pribadi,
  * Live Market Sync, Candlestick Chart.js, dan Forward-Test Signal Tracker.
  */
@@ -365,7 +365,7 @@ function exportFavoritesData() {
     return;
   }
   const exportPayload = {
-    app: 'SmartFlow IDX',
+    app: 'RadarBandarIDX',
     type: 'smartflow_favorites_backup',
     version: '1.0',
     exported_at: new Date().toISOString(),

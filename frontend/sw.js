@@ -1,5 +1,5 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'smartflow-idx-v95.0';
+const CACHE_NAME = 'radarbandar-idx-v96.5';
 const ASSETS_TO_CACHE = [
   '/static/styles.css?v=95.0',
   '/static/app.js?v=95.0',
@@ -41,7 +41,7 @@ self.addEventListener('activate', (event) => {
 
 // Web Push: tampilkan notifikasi di bar notifikasi HP (meski aplikasi/browser tertutup)
 self.addEventListener('push', (event) => {
-  let data = { title: 'SmartFlow IDX', body: '', url: '/' };
+  let data = { title: 'RadarBandarIDX', body: '', url: '/' };
   try {
     if (event.data) data = Object.assign(data, event.data.json());
   } catch (_) {

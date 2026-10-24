@@ -808,7 +808,7 @@ async def lifespan(app_instance: FastAPI):
 
 
 app = FastAPI(
-    title="SmartFlow IDX - On-Demand Smart Money Stock Screener API",
+    title="RadarBandarIDX - On-Demand Smart Money Stock Screener API",
     description="API Backend On-Demand untuk deteksi pergerakan Smart Money dari seluruh saham IDX",
     version="4.2.0",
     lifespan=lifespan,

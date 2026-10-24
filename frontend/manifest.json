@@ -1,13 +1,19 @@
 {
-  "name": "SmartFlow IDX - Smart Money Stock Screener",
-  "short_name": "SmartFlow",
-  "description": "Platform Analisis Kuantitatif & Forward Testing Saham Bursa Efek Indonesia",
+  "name": "RadarBandarIDX - Smart Money Stock Screener",
+  "short_name": "RadarBandarIDX",
+  "description": "Platform Analisis Kuantitatif & Radar Akumulasi Bandar Saham Bursa Efek Indonesia",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#090d16",
   "theme_color": "#0f172a",
   "icons": [
+    {
+      "src": "/static/icons/logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
     {
       "src": "/static/icons/icon.svg",
       "sizes": "any",
