@@ -4699,9 +4699,11 @@ function renderTrackerTable(rows) {
         }
 
         const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT', 'CANCELLED'].includes(r.status);
+        const livePx = r.live_close || r.last_close;
+        const liveDt = r.live_date || r.last_eval_date || r.signal_date || 'last';
         const exitOrLast = isClosed && r.exit_price
-          ? `${fmtNumber(r.exit_price)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(r.exit_date || '')}</div>`
-          : `${fmtNumber(r.last_close)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">last</div>`;
+          ? `${fmtNumber(livePx)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">Exit: ${fmtNumber(r.exit_price)} (${escHtml(r.exit_date || '')})</div>`
+          : `${fmtNumber(livePx)}<div class="text-[10px] text-slate-500 font-medium dark:text-slate-400">${escHtml(liveDt)}</div>`;
 
         const syncedEntryPrice = r.entry_high || r.entry_low || r.entry_price;
         let entryCell = '<span class="text-slate-400 dark:text-slate-500">-</span>';
@@ -4843,8 +4845,9 @@ function renderTrackerTable(rows) {
         const hasDistWarning = noteText.includes('DISTRIBUSI') || noteText.includes('Awas Distribusi') || noteText.startsWith('⚠️');
 
         const isClosed = ['WIN', 'LOSS', 'EXPIRED', 'TIMEOUT', 'CANCELLED'].includes(r.status);
-        const exitOrLast = isClosed && r.exit_price ? r.exit_price : r.last_close;
-        const exitOrLastLabel = isClosed && r.exit_price ? 'Exit' : 'Terkini';
+        const livePx = r.live_close || r.last_close;
+        const exitOrLast = livePx;
+        const exitOrLastLabel = isClosed && r.exit_price ? `Terkini (Exit ${fmtNumber(r.exit_price)})` : 'Terkini';
 
         // Readiness or Status Badge for Mobile
         let statusBadge = '';

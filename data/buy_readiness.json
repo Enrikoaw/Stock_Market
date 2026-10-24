@@ -328,5 +328,27 @@
   "close": 640,
   "date": "2026-10-23",
   "ts": "20:37"
+ },
+ "SGER": {
+  "buy_status": "MENUNGGU",
+  "buy_status_reason": "Campuran, BDR +6.3% (3H), tunggu konfirmasi",
+  "bdr_pct": 6.32,
+  "holder_type": "MIXED",
+  "bandar_avg_buy": 779,
+  "top_buyers": "BK, AK, XA",
+  "top_sellers": "GR, MG, YP",
+  "top_buyers_list": [
+   "BK",
+   "AK",
+   "XA"
+  ],
+  "top_sellers_list": [
+   "GR",
+   "MG",
+   "YP"
+  ],
+  "close": 840.0,
+  "date": "2026-10-23",
+  "ts": "20:37"
  }
 }

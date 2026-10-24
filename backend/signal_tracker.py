@@ -262,14 +262,95 @@ class SignalTracker:
             print(f"[SignalTracker] Berhasil menghapus paksa {deleted_count} sinyal duplikat/invalid dari database!")
         return deleted_count
 
-    def repair_corrupted_loss_signals(self) -> int:
+    def repair_corrupted_loss_signals(self, details: dict[str, dict] | None = None) -> int:
         """
-        Memperbaiki sinyal yang salah ditutup sebagai LOSS akibat candle masa lalu (exit_date < signal_date atau exit_date < entry_date).
-        Mengembalikan status ke RUNNING (atau WATCHLIST), menghapus exit_date & exit_price yang salah,
-        serta menghitung ulang floating P/L berdasarkan entry_price dan last_close.
+        Memperbaiki sinyal yang salah ditutup sebagai LOSS akibat candle masa lalu (exit_date < signal_date atau exit_date < entry_date),
+        serta menyinkronkan/membersihkan sinyal tanggal lama (<= 2026-10-15) akibat rollback CSV sementara ke data terbaru.
         """
         repaired = 0
         with self._lock, self.engine.begin() as conn:
+            # 1. Bersihkan entri today_candidates dari rollback CSV tanggal <= 2026-10-15
+            try:
+                conn.execute(
+                    delete(today_candidates_table).where(
+                        today_candidates_table.c.date <= "2026-10-15"
+                    )
+                )
+            except Exception:
+                pass
+
+            # 2. Perbaiki sinyal dari tanggal rollback CSV (signal_date <= 2026-10-15, misal SGER & FILM dari 2026-10-12)
+            old_rollback_rows = conn.execute(
+                select(signals_table).where(
+                    signals_table.c.signal_date <= "2026-10-15"
+                )
+            ).mappings().all()
+
+            for r in old_rollback_rows:
+                t_up = str(r.get("ticker") or "").upper()
+                newer_row = conn.execute(
+                    select(signals_table.c.id).where(
+                        and_(
+                            signals_table.c.ticker == t_up,
+                            signals_table.c.signal_date > "2026-10-15",
+                        )
+                    )
+                ).first()
+                if newer_row:
+                    conn.execute(delete(signals_table).where(signals_table.c.id == r["id"]))
+                    repaired += 1
+                    continue
+
+                if details and t_up in details:
+                    d = details[t_up]
+                    latest_dt = str(d.get("date") or "")
+                    cur_c = float(d.get("close") or 0)
+                    if latest_dt > "2026-10-15" and cur_c > 0:
+                        tp = d.get("trading_plan") or {}
+                        b_avg = float(d.get("bandar_avg_buy") or tp.get("bandar_avg_buy") or 0)
+                        raw_ep = float(tp.get("entry_price") or tp.get("entry_high") or (cur_c * 0.98))
+                        sup_lbl = str(tp.get("support_label") or "Support Terdekat")
+                        if 0 < b_avg < cur_c:
+                            raw_ep = b_avg
+                            sup_lbl = "Support Avg Bandar"
+                        raw_sl = float(tp.get("stop_loss") or (raw_ep * 0.965))
+                        raw_tp1 = float(tp.get("target_1") or (raw_ep * 1.07))
+                        raw_tp2 = float(tp.get("target_2") or (raw_ep * 1.12))
+                        clean_ep, clean_sl, clean_tp1, clean_tp2 = align_signal_prices(raw_ep, raw_sl, raw_tp1, raw_tp2)
+                        pri_tp = clean_tp2 if self.tp_level == 2 else clean_tp1
+                        score_v = int(d.get("smart_money_score") or r.get("score") or 75)
+                        buyers_txt = d.get("top_buyers") or "-"
+                        bdr_v = d.get("bdr_pct")
+                        bdr_str = f"BDR {bdr_v:+.1f}% (3H)" if bdr_v is not None else "Broksum 3H"
+                        note_str = f"MENUNGGU: Campuran, {bdr_str}, tunggu konfirmasi · Buyer: {buyers_txt} · Antre di {sup_lbl} (Rp {clean_ep:,.0f})"
+                        conn.execute(
+                            update(signals_table)
+                            .where(signals_table.c.id == r["id"])
+                            .values(
+                                signal_date=latest_dt,
+                                signal_close=cur_c,
+                                last_close=cur_c,
+                                score=score_v,
+                                entry_low=clean_ep,
+                                entry_high=clean_ep,
+                                stop_loss=clean_sl,
+                                target=pri_tp,
+                                target_2=clean_tp2,
+                                status="WATCHLIST",
+                                entry_date=None,
+                                entry_price=None,
+                                exit_date=None,
+                                exit_price=None,
+                                pnl_pct=None,
+                                last_eval_date=latest_dt,
+                                bars_waited=0,
+                                bars_held=0,
+                                note=note_str,
+                                updated_at=_now_str(),
+                            )
+                        )
+                        repaired += 1
+
             rows = conn.execute(
                 select(signals_table).where(
                     signals_table.c.status.in_(["LOSS", "WIN", "TIMEOUT", "EXPIRED"])
@@ -313,7 +394,7 @@ class SignalTracker:
                     repaired += 1
 
         if repaired > 0:
-            print(f"[SignalTracker] Berhasil memulihkan {repaired} sinyal ke status aktif (RUNNING/WATCHLIST)!")
+            print(f"[SignalTracker] Berhasil memulihkan/menyinkronkan {repaired} sinyal ke data terbaru!")
         return repaired
 
     def repair_and_sync_watchlist_entries(self, details: dict[str, dict] | None = None) -> int:

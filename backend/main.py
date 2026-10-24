@@ -385,7 +385,7 @@ def _process_tracker(analysis: dict, sync_live_network: bool = False, force_auto
 
         # 2. Evaluasi dataset analisis penuh (sudah berisi harga terbaru dari sync)
         if analysis and "details" in analysis:
-            TRACKER.repair_corrupted_loss_signals()
+            TRACKER.repair_corrupted_loss_signals(analysis["details"])
             main_res = TRACKER.evaluate(analysis["details"])
             for k in ("entered", "win", "loss", "expired", "timeout"):
                 result[k] = max(result.get(k, 0), main_res.get(k, 0))
@@ -1706,8 +1706,17 @@ def tracker_signals(
     else:
         rows = TRACKER.list_signals(status=status_clean, sort_by=sort_clean)
 
-    # Memperkaya data sinyal dengan metrik broker summary terkini dari memori/analisis
+    # Memperkaya data sinyal dengan metrik broker summary & harga pasar terkini dari memori/analisis
     details_map = STATE.get("analysis", {}).get("details", {}) if STATE.get("analysis") else {}
+    if details_map:
+        try:
+            if TRACKER.repair_corrupted_loss_signals(details_map) > 0:
+                if st_up == "PRIORITY":
+                    rows = TRACKER.list_signals(status="WATCHLIST", sort_by="distance_asc")
+                else:
+                    rows = TRACKER.list_signals(status=status_clean, sort_by=sort_clean)
+        except Exception:
+            pass
     if details_map and rows:
         enriched_rows = []
         for r in rows:
@@ -1715,6 +1724,17 @@ def tracker_signals(
             t_up = str(r.get("ticker", "")).upper()
             if t_up in details_map:
                 d = details_map[t_up]
+                d_close = float(d.get("close") or 0)
+                d_date = str(d.get("date") or "")
+                if d_close > 0:
+                    r_dict["live_close"] = d_close
+                    r_dict["live_date"] = d_date
+                    if r_dict.get("status") in ("WATCHLIST", "RUNNING"):
+                        r_dict["last_close"] = d_close
+                        if r_dict.get("status") == "RUNNING" and r_dict.get("entry_price"):
+                            ep_val = float(r_dict["entry_price"])
+                            if ep_val > 0:
+                                r_dict["pnl_pct"] = round((d_close - ep_val) / ep_val * 100.0, 2)
                 # Jika masih di antrean WATCHLIST, pastikan Harga Beli sinkron dengan Trading Plan terkini
                 if r_dict.get("status") == "WATCHLIST" and d.get("trading_plan"):
                     try:
