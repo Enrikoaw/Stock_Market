@@ -988,6 +988,7 @@ async function loadMarketNews(forceRefresh = false) {
     cachedNewsItems = (data.items || []).sort((a, b) => (b.published_ts || 0) - (a.published_ts || 0));
     renderMarketNewsFeed(cachedNewsItems);
     triggerPositiveNewsBarNotification(cachedNewsItems);
+    try { generateAlertsFromMarketData(currentStocks); } catch (_) {}
   } catch (err) {
     if (listEl && (!cachedNewsItems || cachedNewsItems.length === 0)) {
       renderNewsError(err.message);
@@ -1590,6 +1591,9 @@ async function sendSystemNotification(title, body, url = '/', tag = '') {
   try {
     const prefs = getAlertPreferences();
     if (!prefs.news && tag.startsWith('news-')) return false;
+    if (!prefs.support && tag.startsWith('support-')) return false;
+    if (!prefs.tpSl && tag.startsWith('tpsl-')) return false;
+    if (!prefs.volSpike && tag.startsWith('vol-')) return false;
 
     // 1. Prioritas Utama: Service Worker showNotification (Muncul di bar notifikasi HP)
     if ('serviceWorker' in navigator) {
@@ -1726,7 +1730,9 @@ function saveAlertPreferences() {
     news: document.getElementById('prefAlertNews')?.checked ?? true,
   };
   localStorage.setItem('smartflow_alert_prefs', JSON.stringify(prefs));
-  showToast('Preferensi kategori alert disimpan.', 'success');
+  generateAlertsFromMarketData(currentStocks);
+  const activeCount = [prefs.support, prefs.tpSl, prefs.volSpike, prefs.news].filter(Boolean).length;
+  showToast(`Filter sinyal diperbarui (${activeCount}/4 kategori aktif, ${activeAlertList.length} sinyal tampil).`, 'success');
 }
 
 function loadAlertPreferences() {
@@ -1743,16 +1749,18 @@ function loadAlertPreferences() {
 }
 
 function generateAlertsFromMarketData(stocks) {
-  if (!stocks || !Array.isArray(stocks)) return;
+  const allStocks = (currentStocks && currentStocks.length > 0) ? currentStocks : (Array.isArray(stocks) ? stocks : []);
+  const candStocks = (currentTodayCandidates && currentTodayCandidates.length > 0) ? currentTodayCandidates : allStocks;
+  const trackerList = Array.isArray(currentTrackerSignals) ? currentTrackerSignals : [];
 
   const alerts = [];
   const regime = currentMarketRegime || {};
 
-  // 1. Alert Market Regime
+  // 1. Kategori Antre Support (Pullback): Alert Market Regime & Watchlist/Kandidat Support
   if (regime.status === 'DEFENSIVE_PULLBACK' || regime.color === 'rose' || regime.color === 'amber') {
     alerts.push({
       id: 'regime-defensive',
-      type: 'REGIME',
+      type: 'SUPPORT_ENTRY',
       badge: 'PASAR DEFENSIF',
       badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-400/30',
       title: 'IHSG Tertekan (Mode Defensif)',
@@ -1761,7 +1769,151 @@ function generateAlertsFromMarketData(stocks) {
     });
   }
 
-  // 2. Alert Katalis Berita Positif Emiten (Paling Relevan untuk Bar HP & Feed)
+  const supportSeen = new Set();
+  const watchlistRows = trackerList
+    .filter(r => r.status === 'WATCHLIST')
+    .sort((a, b) => Math.abs(Number(a.dist_to_entry_pct ?? 99)) - Math.abs(Number(b.dist_to_entry_pct ?? 99)))
+    .slice(0, 3);
+
+  watchlistRows.forEach(r => {
+    const t = String(r.ticker || '').toUpperCase();
+    if (!t || supportSeen.has(t)) return;
+    supportSeen.add(t);
+    const entryPlan = r.entry_high || r.entry_low || r.entry_price || r.last_close;
+    const distNum = r.dist_to_entry_pct != null ? Number(r.dist_to_entry_pct) : null;
+    const distLabel = distNum != null ? `${distNum >= 0 ? '+' : ''}${distNum.toFixed(2)}% dari area beli` : 'Menunggu Pullback';
+    const readyBadge = (distNum != null && Math.abs(distNum) <= 1.0) ? 'SIAP BELI' : 'ANTRE SUPPORT';
+    alerts.push({
+      id: 'support-wl-' + t,
+      ticker: t,
+      type: 'SUPPORT_ENTRY',
+      badge: readyBadge,
+      badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
+      title: `${t} • Antre Support ${fmtPrice(entryPlan)}`,
+      desc: `Harga Terkini ${fmtPrice(r.last_close)} (${distLabel}) • Target TP ${fmtPrice(r.target)} • SL ${fmtPrice(r.stop_loss)}`,
+      time: r.signal_date || 'Pantauan'
+    });
+  });
+
+  const topCandidates = candStocks.filter(s =>
+    (s.close || 0) >= 70 &&
+    (s.value_b_idr || 0) >= 1.0 &&
+    (s.tape_quality == null || s.tape_quality.is_organic !== false) &&
+    !s.retail_trap &&
+    (s.bdr_pct >= 5.0 || s.top3_bsr >= 1.15 || (s.smart_money_score || 0) >= 70)
+  ).slice(0, 4);
+
+  topCandidates.forEach(s => {
+    const t = String(s.ticker || '').toUpperCase();
+    if (!t || supportSeen.has(t) || supportSeen.size >= 4) return;
+    supportSeen.add(t);
+    const plan = s.trading_plan || {};
+    const entryPrice = plan.entry_price || plan.entry_low || s.close;
+    const supportLabel = plan.support_label || 'Support Terdekat';
+    alerts.push({
+      id: 'support-' + t,
+      ticker: t,
+      type: 'SUPPORT_ENTRY',
+      badge: 'BUY ON SUPPORT',
+      badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
+      title: `${t} • Antre Support ${fmtPrice(entryPrice)}`,
+      desc: `Area ${supportLabel} • Skor SM ${s.smart_money_score || '-'} • Target TP1 ${fmtPrice(plan.target_1 || Math.round(s.close * 1.07))}`,
+      time: 'Sesi Ini'
+    });
+  });
+
+  // 2. Kategori Target TP1/TP2 & Stop Loss (TP_SL) dari Signal Tracker
+  const tpSlSignals = [];
+  const winSignals = trackerList
+    .filter(r => r.status === 'WIN')
+    .sort((a, b) => String(b.exit_date || b.signal_date || '').localeCompare(String(a.exit_date || a.signal_date || '')))
+    .slice(0, 2);
+  winSignals.forEach(r => tpSlSignals.push({ row: r, kind: 'WIN' }));
+
+  const nearTpOrSlRunning = trackerList
+    .filter(r => r.status === 'RUNNING' && r.pnl_pct != null && (Number(r.pnl_pct) >= 4.0 || Number(r.pnl_pct) <= -2.5))
+    .sort((a, b) => Math.abs(Number(b.pnl_pct || 0)) - Math.abs(Number(a.pnl_pct || 0)))
+    .slice(0, 2);
+  nearTpOrSlRunning.forEach(r => tpSlSignals.push({ row: r, kind: Number(r.pnl_pct) >= 4.0 ? 'NEAR_TP' : 'NEAR_SL' }));
+
+  const lossSignals = trackerList
+    .filter(r => r.status === 'LOSS')
+    .sort((a, b) => String(b.exit_date || b.signal_date || '').localeCompare(String(a.exit_date || a.signal_date || '')))
+    .slice(0, 1);
+  lossSignals.forEach(r => tpSlSignals.push({ row: r, kind: 'LOSS' }));
+
+  tpSlSignals.slice(0, 4).forEach(({ row: r, kind }) => {
+    const t = String(r.ticker || '').toUpperCase();
+    const pnlVal = Number(r.pnl_pct || 0);
+    const pnlStr = `${pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(1)}%`;
+    if (kind === 'WIN') {
+      alerts.push({
+        id: 'tpsl-win-' + t + '-' + (r.id || ''),
+        ticker: t,
+        type: 'TP_SL',
+        badge: 'TARGET TP HIT',
+        badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40',
+        title: `${t} • Target Profit Tercapai (${pnlStr})`,
+        desc: `Masuk ${fmtPrice(r.entry_price)} → Tercapai di ${fmtPrice(r.exit_price || r.target)} • Profit terkunci.`,
+        time: r.exit_date || r.signal_date || 'Tercapai'
+      });
+    } else if (kind === 'NEAR_TP') {
+      alerts.push({
+        id: 'tpsl-neartp-' + t + '-' + (r.id || ''),
+        ticker: t,
+        type: 'TP_SL',
+        badge: 'DEKAT TARGET TP',
+        badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-400/40',
+        title: `${t} • Running Profit ${pnlStr} Mendekati TP`,
+        desc: `Harga Terkini ${fmtPrice(r.last_close)} • Target TP ${fmtPrice(r.target)} • Siapkan pengamanan profit.`,
+        time: 'Running'
+      });
+    } else if (kind === 'NEAR_SL') {
+      alerts.push({
+        id: 'tpsl-nearsl-' + t + '-' + (r.id || ''),
+        ticker: t,
+        type: 'TP_SL',
+        badge: 'WASPADA SL',
+        badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-400/40',
+        title: `${t} • Mendekati Batas Stop Loss (${pnlStr})`,
+        desc: `Harga Terkini ${fmtPrice(r.last_close)} • Batas SL ${fmtPrice(r.stop_loss)} • Disiplin jaga batas risiko.`,
+        time: 'Running'
+      });
+    } else {
+      alerts.push({
+        id: 'tpsl-loss-' + t + '-' + (r.id || ''),
+        ticker: t,
+        type: 'TP_SL',
+        badge: 'STOP LOSS HIT',
+        badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-400/40',
+        title: `${t} • Batas Stop Loss Tersentuh (${pnlStr})`,
+        desc: `Keluar disiplin di ${fmtPrice(r.exit_price || r.stop_loss)} untuk melindungi modal trading.`,
+        time: r.exit_date || r.signal_date || 'Selesai'
+      });
+    }
+  });
+
+  // 3. Kategori Volume Spike Ekstrem (> 1.5x) dari seluruh pasar (allStocks)
+  const volSpikes = allStocks
+    .filter(s => (s.vol_ratio || 0) >= 1.5 && (s.value_b_idr || 0) >= 1.0 && (s.close || 0) >= 70)
+    .sort((a, b) => (b.vol_ratio || 0) - (a.vol_ratio || 0))
+    .slice(0, 4);
+
+  volSpikes.forEach(s => {
+    const t = String(s.ticker || '').toUpperCase();
+    alerts.push({
+      id: 'vol-' + t,
+      ticker: t,
+      type: 'VOL_SPIKE',
+      badge: 'VOL SPIKE',
+      badgeColor: 'bg-teal-500/15 text-teal-300 border-teal-400/30',
+      title: `${t} • Lonjakan Volume ${Number(s.vol_ratio || 0).toFixed(2)}x`,
+      desc: `Transaksi Rp ${(s.value_b_idr || 0).toFixed(1)} Miliar • Harga ${fmtPrice(s.close)} (${fmtSignPct(s.pct_change)}).`,
+      time: 'Terdeteksi'
+    });
+  });
+
+  // 4. Kategori Katalis Berita Terverifikasi
   if (cachedNewsItems && cachedNewsItems.length > 0) {
     const posNews = cachedNewsItems.filter(n => n.sentiment === 'POSITIVE' && n.ticker && n.ticker !== 'IHSG').slice(0, 4);
     posNews.forEach(n => {
@@ -1778,67 +1930,25 @@ function generateAlertsFromMarketData(stocks) {
     });
   }
 
-  // 3. Alert Kandidat Saham Pilihan (Fix double Rp Rp)
-  const topCandidates = stocks.filter(s =>
-    (s.close || 0) >= 70 &&
-    (s.value_b_idr || 0) >= 1.0 &&
-    (s.tape_quality == null || s.tape_quality.is_organic !== false) &&
-    !s.retail_trap &&
-    (s.bdr_pct >= 5.0 || s.top3_bsr >= 1.15 || (s.smart_money_score || 0) >= 70)
-  ).slice(0, 3);
-
-  topCandidates.forEach(s => {
-    const plan = s.trading_plan || {};
-    const entryPrice = plan.entry_price || plan.entry_low || s.close;
-    const supportLabel = plan.support_label || 'Support Terdekat';
-    alerts.push({
-      id: 'support-' + s.ticker,
-      ticker: s.ticker,
-      type: 'SUPPORT_ENTRY',
-      badge: 'BUY ON SUPPORT',
-      badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
-      title: `${s.ticker} • Antre Support ${fmtPrice(entryPrice)}`,
-      desc: `Area ${supportLabel} • Skor SM ${s.smart_money_score || '-'} • Target TP1 ${fmtPrice(plan.target_1 || Math.round(s.close * 1.07))}`,
-      time: 'Sesi Ini'
-    });
-  });
-
-  // 4. Alert Volume Spike Ekstrem (> 1.5x)
-  const volSpikes = stocks
-    .filter(s => (s.vol_ratio || 0) >= 1.5 && (s.value_b_idr || 0) >= 1.0 && (s.close || 0) >= 70)
-    .sort((a, b) => (b.vol_ratio || 0) - (a.vol_ratio || 0))
-    .slice(0, 2);
-
-  volSpikes.forEach(s => {
-    if (!alerts.some(a => a.ticker === s.ticker)) {
-      alerts.push({
-        id: 'vol-' + s.ticker,
-        ticker: s.ticker,
-        type: 'VOL_SPIKE',
-        badge: 'VOL SPIKE',
-        badgeColor: 'bg-teal-500/15 text-teal-300 border-teal-400/30',
-        title: `${s.ticker} • Lonjakan Volume ${s.vol_ratio}x`,
-        desc: `Transaksi Rp ${(s.value_b_idr || 0).toFixed(1)} Miliar • Terdeteksi lonjakan volume di atas rata-rata.`,
-        time: 'Terdeteksi'
-      });
-    }
-  });
-
-  // Filter alerts berdasarkan preferensi yang dicentang di modal
+  // Filter alerts secara ketat berdasarkan preferensi yang dicentang di modal
   const prefs = getAlertPreferences();
   activeAlertList = alerts.filter(a => {
-    if (a.type === 'NEWS_CATALYST' && !prefs.news) return false;
     if (a.type === 'SUPPORT_ENTRY' && !prefs.support) return false;
+    if (a.type === 'TP_SL' && !prefs.tpSl) return false;
     if (a.type === 'VOL_SPIKE' && !prefs.volSpike) return false;
+    if (a.type === 'NEWS_CATALYST' && !prefs.news) return false;
     return true;
   });
 
   renderAlertFeed();
 
-  // Tampilkan indikator badge jika ada sinyal
+  // Perbarui indikator badge secara reaktif (termasuk mereset ke 0 jika semua difilter habis)
   if (activeAlertList.length > 0) {
     hasUnreadAlerts = true;
     updateAlertBadgeUI(true, activeAlertList.length);
+  } else {
+    hasUnreadAlerts = false;
+    updateAlertBadgeUI(false, 0);
   }
 }
 
@@ -1850,9 +1960,14 @@ function renderAlertFeed() {
   if (!container) return;
 
   if (activeAlertList.length === 0) {
+    const prefs = getAlertPreferences();
+    const anyChecked = Boolean(prefs.support || prefs.tpSl || prefs.volSpike || prefs.news);
+    const emptyMsg = anyChecked
+      ? 'Belum ada sinyal aktif untuk kategori filter yang dicentang saat ini.'
+      : 'Seluruh filter kategori sinyal sedang dinonaktifkan. Centang minimal satu kategori di atas untuk menampilkan sinyal.';
     container.innerHTML = `
       <div class="p-4 rounded-xl bg-slate-900/30 border border-white/[0.04] text-center text-slate-400 text-xs">
-        Belum ada sinyal baru. Sinkronisasi data pasar untuk memperbarui feed peringatan.
+        ${emptyMsg}
       </div>
     `;
     return;
@@ -1922,7 +2037,7 @@ function openAlertModal() {
     updateAlertSoundUI(soundEnabled);
     updateBrowserNotificationUI();
     loadAlertPreferences();
-    renderAlertFeed();
+    generateAlertsFromMarketData(currentStocks);
   }
 }
 
@@ -3968,6 +4083,7 @@ async function loadTracker() {
     currentTrackerSignals = sigData.signals || [];
     renderTrackerStats(statsData);
     filterAndRenderTracker();
+    try { generateAlertsFromMarketData(currentStocks); } catch (_) {}
   } catch (err) {
     console.warn('Tracker error:', err);
     if (!currentTrackerSignals || currentTrackerSignals.length === 0) {
