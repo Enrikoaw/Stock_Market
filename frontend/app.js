@@ -144,6 +144,7 @@ function switchMainTab(tabName, isInitialLoad = false) {
   const secToday = document.getElementById('sectionToday');
   const secExplore = document.getElementById('sectionExplore');
   const secWatchlist = document.getElementById('sectionWatchlist');
+  const secOwner = document.getElementById('sectionOwner');
 
   const btnToday = document.getElementById('tabNavToday');
   const btnExplore = document.getElementById('tabNavExplore');
@@ -152,10 +153,13 @@ function switchMainTab(tabName, isInitialLoad = false) {
   if (secToday) secToday.classList.toggle('hidden', tabName !== 'today');
   if (secExplore) secExplore.classList.toggle('hidden', tabName !== 'explore');
   if (secWatchlist) secWatchlist.classList.toggle('hidden', tabName !== 'watchlist');
+  if (secOwner) secOwner.classList.toggle('hidden', tabName !== 'owner');
 
   if (btnToday) btnToday.classList.toggle('active', tabName === 'today');
   if (btnExplore) btnExplore.classList.toggle('active', tabName === 'explore');
   if (btnWatchlist) btnWatchlist.classList.toggle('active', tabName === 'watchlist');
+  const btnOwner = document.getElementById('tabNavOwner');
+  if (btnOwner) btnOwner.classList.toggle('active', tabName === 'owner');
 
   const mobToday = document.getElementById('mobileNavToday');
   const mobExplore = document.getElementById('mobileNavExplore');
@@ -164,9 +168,17 @@ function switchMainTab(tabName, isInitialLoad = false) {
   if (mobToday) mobToday.classList.toggle('active', tabName === 'today');
   if (mobExplore) mobExplore.classList.toggle('active', tabName === 'explore');
   if (mobWatchlist) mobWatchlist.classList.toggle('active', tabName === 'watchlist');
+  const mobOwner = document.getElementById('mobileNavOwner');
+  if (mobOwner) mobOwner.classList.toggle('active', tabName === 'owner');
 
   if (isInitialLoad) {
     if (tabName === 'watchlist') renderFavorites();
+    if (tabName === 'owner') loadOwnerRadar(true);
+    return;
+  }
+
+  if (tabName === 'owner') {
+    loadOwnerRadar(false);
     return;
   }
 
@@ -3277,7 +3289,7 @@ async function selectStock(ticker, isUserClick = false, scrollToTradingPlan = fa
     selectedStockDetail = detailData;
     renderInspectorPanel(selectedStockDetail);
     loadStockNewsCatalyst(ticker);
-    loadStockOwnership(ticker, selectedStockDetail);
+    renderStockOwnerActions(ticker, selectedStockDetail);
 
     if (scrollToTradingPlan) {
       setTimeout(() => {
@@ -6273,12 +6285,6 @@ async function handleAiChatSubmit(e, overrideText = null) {
     }
     executeAiNavigationActions(data.actions || []);
     let finalReply = data.reply || 'Navigasi selesai dijalankan.';
-    if (/pemilik|owner|pengendali|free float|kepemilikan|siapa punya/i.test(msg) && !/Pengendali Utama:/i.test(finalReply)) {
-      const tkMatch = msg.toUpperCase().match(/\b[A-Z]{4}\b/);
-      const tk = (tkMatch && tkMatch[0] !== 'SIAP' && tkMatch[0] !== 'FREE' && tkMatch[0] !== 'SAHA') ? tkMatch[0] : (selectedTicker || 'BBCA');
-      const own = computeClientOwnership(tk, selectedStockDetail);
-      finalReply = `**Struktur Kepemilikan & Free Float ${tk}:**\n• Pengendali Utama: **${own.owner_group}**\n• Proporsi: Pengendali **${own.insider_pct.toFixed(2)}%** | Institusi **${own.institution_pct.toFixed(2)}%** | Publik (Free Float) **${own.public_pct.toFixed(2)}%**\n• Karakteristik: **${own.badge_text}** — ${own.analysis}`;
-    }
     appendAiChatMessage('bot', finalReply, data.actions || []);
   } catch (err) {
     const errorText = (err && err.message) ? (typeof err.message === 'string' ? err.message : JSON.stringify(err.message)) : String(err || 'Periksa kembali koneksi Anda.');
@@ -6417,178 +6423,204 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // =====================================================================
-// MODUL STRUKTUR KEPEMILIKAN SAHAM & FREE FLOAT (SISTEM OTOMATIS)
+// RADAR AKSI OWNER — Laporan Perubahan Kepemilikan Saham (KSEI via IDX)
+// Data 100% dari dokumen resmi KSEI; tidak ada angka estimasi di sisi klien.
 // =====================================================================
-const ownershipClientCache = {};
+const ownerRadarState = { days: 3, scope: 'major', side: 'ALL', search: '', items: [], loadedAt: 0, loading: false };
 
-function toggleOwnershipHoldersList() {
-  const listEl = document.getElementById('ownHoldersList');
-  const arrowEl = document.getElementById('ownHoldersToggleArrow');
-  if (!listEl) return;
-  const isHidden = listEl.classList.toggle('hidden');
-  if (arrowEl) arrowEl.textContent = isHidden ? '▸' : '▾';
+function fmtShares(n) {
+  const v = Math.abs(Number(n) || 0);
+  return v.toLocaleString('id-ID', { maximumFractionDigits: 0 });
 }
 
-function renderOwnershipCardUI(own) {
-  if (!own) return;
-  const badgeEl = document.getElementById('ownLiquidityBadge');
-  const groupEl = document.getElementById('ownGroupEntity');
-  const barInsider = document.getElementById('ownBarInsider');
-  const barInst = document.getElementById('ownBarInst');
-  const barPublic = document.getElementById('ownBarPublic');
-  const pctInsider = document.getElementById('ownPctInsider');
-  const pctInst = document.getElementById('ownPctInst');
-  const pctPublic = document.getElementById('ownPctPublic');
-  const analysisEl = document.getElementById('ownSmartAnalysis');
-  const holdersEl = document.getElementById('ownHoldersList');
-  const syncEl = document.getElementById('ownLastSync');
+function fmtOwnerPct(p) {
+  const v = Number(p) || 0;
+  const dec = v !== 0 && Math.abs(v) < 0.1 ? 4 : 2;
+  return `${v.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: dec })}%`;
+}
 
-  const ins = Number(own.insider_pct || 0);
-  const inst = Number(own.institution_pct || 0);
-  const pub = Number(own.public_pct || 0);
+function fmtRupiahShort(v) {
+  const n = Math.abs(Number(v) || 0);
+  if (n >= 1e12) return `Rp ${(n / 1e12).toLocaleString('id-ID', { maximumFractionDigits: 2 })} T`;
+  if (n >= 1e9) return `Rp ${(n / 1e9).toLocaleString('id-ID', { maximumFractionDigits: 2 })} M`;
+  if (n >= 1e6) return `Rp ${(n / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })} Jt`;
+  return `Rp ${n.toLocaleString('id-ID', { maximumFractionDigits: 0 })}`;
+}
 
-  if (badgeEl) {
-    badgeEl.textContent = own.badge_text || 'Terverifikasi';
-    const tone = own.badge_tone || 'sky';
-    const toneClasses = {
-      amber: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
-      emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-      indigo: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border-indigo-500/30',
-      sky: 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-400/30',
-    };
-    badgeEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 whitespace-nowrap ${toneClasses[tone] || toneClasses.sky}`;
+function fmtOwnerDate(s) {
+  if (!s) return '-';
+  const d = new Date(String(s).length <= 10 ? `${s}T00:00:00` : s);
+  if (isNaN(d.getTime())) return String(s).slice(0, 10);
+  return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function ownerRoleBadges(it) {
+  const tags = [];
+  if (it.is_controller) tags.push(['Pengendali', 'bg-violet-500/15 text-violet-600 dark:text-violet-300 border-violet-400/30']);
+  if (it.is_insider) {
+    const pos = String(it.position || '').toLowerCase();
+    const lbl = pos.includes('komisaris') ? 'Komisaris' : pos.includes('direksi') ? 'Direksi' : 'Direksi/Komisaris';
+    tags.push([lbl, 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border-sky-400/30']);
   }
+  if (it.crossed_5pct) tags.push([Number(it.pct_after) >= 5 ? 'Tembus 5%' : 'Keluar dari 5%', 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/30']);
+  if (it.is_repo_or_loan) tags.push(['Repo / Pinjam Saham', 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-400/30']);
+  else if (!it.is_market_trade) tags.push(['Non-Pasar', 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-400/30']);
+  return tags
+    .map(([t, c]) => `<span class="px-1.5 py-0.5 rounded border text-[9px] font-bold whitespace-nowrap ${c}">${escHtml(t)}</span>`)
+    .join('');
+}
 
-  if (groupEl) groupEl.textContent = own.owner_group || '-';
-  if (barInsider) barInsider.style.width = `${Math.max(2, ins)}%`;
-  if (barInst) barInst.style.width = `${Math.max(2, inst)}%`;
-  if (barPublic) barPublic.style.width = `${Math.max(2, pub)}%`;
+function renderOwnerActionCard(it, compact = false) {
+  const isBuy = it.side === 'BUY';
+  const accent = isBuy ? 'border-l-emerald-500' : 'border-l-rose-500';
+  const pill = isBuy
+    ? 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30'
+    : 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-400/30';
+  const pctAfterCls = isBuy ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
+  const tk = escHtml(it.ticker || '');
+  const priceInfo = [];
+  if (Number(it.avg_price) > 0) priceInfo.push(`Harga ${isBuy ? 'beli' : 'jual'}: <strong class="text-slate-800 dark:text-slate-200">Rp ${fmtNumber(it.avg_price)}</strong>`);
+  if (Number(it.value_idr) > 0 && it.is_market_trade) priceInfo.push(`Nilai ≈ <strong class="text-slate-800 dark:text-slate-200">${fmtRupiahShort(it.value_idr)}</strong>`);
+  if (Number(it.last_close) > 0 && Number(it.avg_price) > 0 && it.is_market_trade) {
+    const diff = ((Number(it.last_close) - Number(it.avg_price)) / Number(it.avg_price)) * 100;
+    priceInfo.push(`Harga kini Rp ${fmtNumber(it.last_close)} (<span class="${diff >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%</span>)`);
+  }
+  const purposes = [...new Set((it.transactions || []).map(t => t.purpose).filter(Boolean))].slice(0, 2).join(', ');
 
-  if (pctInsider) pctInsider.textContent = `${ins.toFixed(2)}%`;
-  if (pctInst) pctInst.textContent = `${inst.toFixed(2)}%`;
-  if (pctPublic) pctPublic.textContent = `${pub.toFixed(2)}%`;
-  if (analysisEl) analysisEl.textContent = own.analysis || '';
-  if (syncEl) syncEl.textContent = `Update: ${own.last_sync || '-'}`;
-
-  if (holdersEl) {
-    const holders = Array.isArray(own.holders) ? own.holders : [];
-    holdersEl.innerHTML = holders.map(h => `
-      <div class="px-2.5 py-1.5 flex items-center justify-between gap-2">
-        <div class="min-w-0">
-          <div class="font-semibold text-slate-800 dark:text-slate-200 truncate">${escHtml(h.name || '-')}</div>
-          <div class="text-[9px] text-slate-500 dark:text-slate-400">${escHtml(h.role || '')}</div>
+  return `
+    <div class="rounded-xl border border-slate-200 dark:border-white/[0.08] border-l-4 ${accent} bg-white dark:bg-slate-900/60 shadow-sm overflow-hidden">
+      <div class="flex items-start justify-between gap-2 px-3 pt-2.5 pb-2 border-b border-slate-100 dark:border-white/[0.05]">
+        <div class="flex items-start gap-2.5 min-w-0">
+          ${compact ? '' : `<div class="cursor-pointer shrink-0" onclick="selectStockAndGoToInspector('${tk}')">${getStockLogoImg(it.ticker, 'w-8 h-8')}</div>`}
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              ${compact ? '' : `<span class="font-black text-sm text-slate-900 dark:text-white cursor-pointer hover:text-emerald-500" onclick="selectStockAndGoToInspector('${tk}')">${tk}</span>`}
+              <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[210px]" title="${escHtml(it.holder || '')}">${escHtml(it.holder || '-')}</span>
+            </div>
+            <div class="flex items-center gap-1 flex-wrap mt-1">${ownerRoleBadges(it)}</div>
+          </div>
         </div>
-        <div class="font-mono font-bold text-sky-600 dark:text-sky-400 shrink-0">${Number(h.pct || 0).toFixed(2)}%</div>
+        <div class="shrink-0 text-right px-2 py-1 rounded-lg border ${pill}">
+          <div class="font-mono font-extrabold text-xs">${isBuy ? '+' : '−'} ${fmtShares(it.delta_shares)}</div>
+          <div class="text-[9px] font-bold tracking-wider opacity-80">LEMBAR</div>
+        </div>
       </div>
-    `).join('');
-  }
+      <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-2">
+        <div class="min-w-0">
+          <div class="text-[9px] font-bold tracking-wider text-slate-400">SEBELUM</div>
+          <div class="font-mono font-bold text-[12px] text-slate-800 dark:text-slate-100 truncate">${fmtShares(it.shares_before)}</div>
+          <div class="font-mono text-[11px] text-slate-500 dark:text-slate-400">${fmtOwnerPct(it.pct_before)}</div>
+        </div>
+        <div class="w-6 h-6 rounded-md bg-slate-800 dark:bg-slate-700 text-white flex items-center justify-center text-xs">→</div>
+        <div class="min-w-0 text-right">
+          <div class="text-[9px] font-bold tracking-wider text-slate-400">SESUDAH</div>
+          <div class="font-mono font-bold text-[12px] text-slate-800 dark:text-slate-100 truncate">${fmtShares(it.shares_after)}</div>
+          <div class="font-mono font-bold text-[11px] ${pctAfterCls}">${fmtOwnerPct(it.pct_after)}</div>
+        </div>
+      </div>
+      <div class="px-3 pb-2.5 text-[10px] text-slate-500 dark:text-slate-400 space-y-0.5">
+        <div class="flex items-center justify-between gap-2">
+          <span>Transaksi ${fmtOwnerDate(it.tx_date)} · Lapor ${fmtOwnerDate(it.published)}</span>
+          ${it.pdf_url ? `<a href="${escHtml(it.pdf_url)}" target="_blank" rel="noopener" class="text-sky-600 dark:text-sky-400 hover:underline font-semibold shrink-0">Dokumen KSEI</a>` : ''}
+        </div>
+        ${priceInfo.length ? `<div>${priceInfo.join(' · ')}</div>` : ''}
+        ${purposes ? `<div class="truncate" title="${escHtml(purposes)}">Tujuan: ${escHtml(purposes)}</div>` : ''}
+      </div>
+    </div>`;
 }
 
-const CURATED_CLIENT_OWNERSHIP = {
-  BBCA: { owner_group: 'PT Dwimuria Investama Andalan (Grup Djarum)', insider_pct: 54.94, institution_pct: 25.06, public_pct: 20.00, holders: [{ name: 'PT Dwimuria Investama Andalan', role: 'Pengendali Utama (PSP)', pct: 54.94 }, { name: 'Investor Institusi Global & Domestik', role: 'Institusi Finansial', pct: 25.06 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 20.00 }] },
-  BBRI: { owner_group: 'Pemerintah Negara Republik Indonesia (Danantara / BUMN)', insider_pct: 53.19, institution_pct: 31.06, public_pct: 15.75, holders: [{ name: 'Negara Republik Indonesia', role: 'Pengendali Utama (BUMN)', pct: 53.19 }, { name: 'Institusi Asing & Reksadana', role: 'Institusi Finansial', pct: 31.06 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 15.75 }] },
-  BMRI: { owner_group: 'Pemerintah Negara Republik Indonesia (Danantara / BUMN)', insider_pct: 52.00, institution_pct: 28.40, public_pct: 19.60, holders: [{ name: 'Negara Republik Indonesia', role: 'Pengendali Utama (BUMN)', pct: 52.00 }, { name: 'Indonesia Investment Authority (INA)', role: 'Sovereign Wealth Fund', pct: 8.00 }, { name: 'Institusi & Publik (< 5%)', role: 'Free Float', pct: 40.00 }] },
-  BBNI: { owner_group: 'Pemerintah Negara Republik Indonesia (Danantara / BUMN)', insider_pct: 60.00, institution_pct: 24.15, public_pct: 15.85, holders: [{ name: 'Negara Republik Indonesia', role: 'Pengendali Utama (BUMN)', pct: 60.00 }, { name: 'Institusi Domestik & Asing', role: 'Institusi Finansial', pct: 24.15 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 15.85 }] },
-  BRIS: { owner_group: 'PT Bank Mandiri (Persero) Tbk & Konsorsium BUMN', insider_pct: 51.47, institution_pct: 37.25, public_pct: 11.28, holders: [{ name: 'PT Bank Mandiri (Persero) Tbk', role: 'Pengendali Utama', pct: 51.47 }, { name: 'PT Bank Negara Indonesia (Persero) Tbk', role: 'Pemegang Saham Institusi', pct: 23.24 }, { name: 'PT Bank Rakyat Indonesia (Persero) Tbk', role: 'Pemegang Saham Institusi', pct: 15.38 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 9.91 }] },
-  TLKM: { owner_group: 'Pemerintah Negara Republik Indonesia (BUMN)', insider_pct: 52.09, institution_pct: 27.91, public_pct: 20.00, holders: [{ name: 'Negara Republik Indonesia', role: 'Pengendali Utama (BUMN)', pct: 52.09 }, { name: 'Institusi Global & Dana Pensiun', role: 'Institusi Finansial', pct: 27.91 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 20.00 }] },
-  ASII: { owner_group: 'Jardine Cycle & Carriage Ltd', insider_pct: 50.11, institution_pct: 29.89, public_pct: 20.00, holders: [{ name: 'Jardine Cycle & Carriage Limited', role: 'Pengendali Utama (PSP)', pct: 50.11 }, { name: 'Institusi Global & Domestik', role: 'Institusi Finansial', pct: 29.89 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 20.00 }] },
-  INCO: { owner_group: 'MIND ID (BUMN Pertambangan) & Vale Canada Ltd', insider_pct: 67.90, institution_pct: 11.53, public_pct: 20.57, holders: [{ name: 'PT Mineral Industri Indonesia (MIND ID)', role: 'Pengendali Utama (BUMN)', pct: 34.00 }, { name: 'Vale Canada Limited', role: 'Pengendali Strategis', pct: 33.90 }, { name: 'Sumitomo Metal Mining Co. Ltd.', role: 'Mitra Strategis', pct: 11.53 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 20.57 }] },
-  ANTM: { owner_group: 'PT Mineral Industri Indonesia (MIND ID - BUMN)', insider_pct: 65.00, institution_pct: 12.40, public_pct: 22.60, holders: [{ name: 'PT Mineral Industri Indonesia (MIND ID)', role: 'Pengendali Utama (BUMN)', pct: 65.00 }, { name: 'Institusi Domestik & Asing', role: 'Institusi Finansial', pct: 12.40 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 22.60 }] },
-  PTBA: { owner_group: 'PT Mineral Industri Indonesia (MIND ID - BUMN)', insider_pct: 65.93, institution_pct: 11.20, public_pct: 22.87, holders: [{ name: 'PT Mineral Industri Indonesia (MIND ID)', role: 'Pengendali Utama (BUMN)', pct: 65.93 }, { name: 'Institusi & Reksadana', role: 'Institusi Finansial', pct: 11.20 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 22.87 }] },
-  TINS: { owner_group: 'PT Mineral Industri Indonesia (MIND ID - BUMN)', insider_pct: 65.00, institution_pct: 10.50, public_pct: 24.50, holders: [{ name: 'PT Mineral Industri Indonesia (MIND ID)', role: 'Pengendali Utama (BUMN)', pct: 65.00 }, { name: 'Institusi Finansial', role: 'Institusi', pct: 10.50 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 24.50 }] },
-  BREN: { owner_group: 'PT Barito Pacific Tbk (Grup Prajogo Pangestu)', insider_pct: 64.67, institution_pct: 23.58, public_pct: 11.75, holders: [{ name: 'PT Barito Pacific Tbk', role: 'Pengendali Utama (PSP)', pct: 64.67 }, { name: 'Green Era Energy Pte. Ltd.', role: 'Entitas Strategis', pct: 23.58 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 11.75 }] },
-  BRPT: { owner_group: 'Prajogo Pangestu (Grup Barito)', insider_pct: 71.36, institution_pct: 6.44, public_pct: 22.20, holders: [{ name: 'Prajogo Pangestu', role: 'Pengendali Utama (PSP)', pct: 71.36 }, { name: 'Institusi Finansial', role: 'Institusi', pct: 6.44 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 22.20 }] },
-  TPIA: { owner_group: 'PT Barito Pacific Tbk & Prajogo Pangestu', insider_pct: 49.98, institution_pct: 39.67, public_pct: 10.35, holders: [{ name: 'PT Barito Pacific Tbk & Afiliasi', role: 'Pengendali Utama (PSP)', pct: 49.98 }, { name: 'SCG Chemicals & Thai Oil', role: 'Mitra Strategis', pct: 39.67 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 10.35 }] },
-  CUAN: { owner_group: 'Prajogo Pangestu (Grup Barito)', insider_pct: 84.97, institution_pct: 2.10, public_pct: 12.93, holders: [{ name: 'Prajogo Pangestu', role: 'Pengendali Utama (PSP)', pct: 84.97 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 15.03 }] },
-  PTRO: { owner_group: 'PT Kreasi Jasa Persada (Grup Barito / CUAN)', insider_pct: 41.52, institution_pct: 30.20, public_pct: 28.28, holders: [{ name: 'PT Kreasi Jasa Persada (Entitas CUAN)', role: 'Pengendali Utama (PSP)', pct: 41.52 }, { name: 'PT Caraka Reksa Optima', role: 'Pemegang Saham Utama', pct: 30.20 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 28.28 }] },
-  AMMN: { owner_group: 'Konsorsium Sumber Gemilang Persada, Medco & Grup Salim', insider_pct: 53.20, institution_pct: 31.10, public_pct: 15.70, holders: [{ name: 'PT Sumber Gemilang Persada', role: 'Pengendali Utama', pct: 32.17 }, { name: 'PT Medco Energi Internasional Tbk', role: 'Pemegang Saham Utama', pct: 21.03 }, { name: 'PT AP Investment (Grup Salim)', role: 'Pemegang Saham Strategis', pct: 15.45 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 15.70 }] },
-  ADRO: { owner_group: 'PT Adaro Strategic Investments (Boy Thohir & Konsorsium)', insider_pct: 47.79, institution_pct: 16.50, public_pct: 35.71, holders: [{ name: 'PT Adaro Strategic Investments', role: 'Pengendali Utama (PSP)', pct: 43.91 }, { name: 'Garibaldi Thohir (Boy Thohir)', role: 'Pengendali / Insider', pct: 6.18 }, { name: 'Masyarakat & Institusi (< 5%)', role: 'Free Float', pct: 49.91 }] },
-  AADI: { owner_group: 'PT Adaro Strategic Investments & Boy Thohir', insider_pct: 51.80, institution_pct: 18.20, public_pct: 30.00, holders: [{ name: 'PT Adaro Strategic Investments', role: 'Pengendali Utama (PSP)', pct: 45.60 }, { name: 'Garibaldi Thohir', role: 'Pengendali / Insider', pct: 6.20 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 30.00 }] },
-  MDKA: { owner_group: 'PT Saratoga Investama Sedaya Tbk & Grup Provident', insider_pct: 33.40, institution_pct: 20.15, public_pct: 46.45, holders: [{ name: 'PT Saratoga Investama Sedaya Tbk', role: 'Pengendali Strategis', pct: 18.84 }, { name: 'PT Mitra Daya Mustika & Suwarna Arta', role: 'Afiliasi Provident', pct: 14.56 }, { name: 'Garibaldi Thohir', role: 'Insider Utama', pct: 7.36 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 46.45 }] },
-  PANI: { owner_group: 'PT Multi Artha Pratama (Konsorsium Agung Sedayu & Salim Group)', insider_pct: 89.92, institution_pct: 1.80, public_pct: 8.28, holders: [{ name: 'PT Multi Artha Pratama (Aguan & Salim Group)', role: 'Pengendali Utama (PSP)', pct: 89.92 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 10.08 }] },
-  CBDK: { owner_group: 'PT Pantai Indah Kapuk Dua Tbk (PANI - Agung Sedayu & Salim)', insider_pct: 84.50, institution_pct: 4.20, public_pct: 11.30, holders: [{ name: 'PT Pantai Indah Kapuk Dua Tbk (PANI)', role: 'Pengendali Utama (PSP)', pct: 84.50 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 11.30 }] },
-  ICBP: { owner_group: 'PT Indofood Sukses Makmur Tbk (Grup Salim)', insider_pct: 80.53, institution_pct: 7.47, public_pct: 12.00, holders: [{ name: 'PT Indofood Sukses Makmur Tbk', role: 'Pengendali Utama (PSP)', pct: 80.53 }, { name: 'Institusi & Publik (< 5%)', role: 'Free Float', pct: 19.47 }] },
-  INDF: { owner_group: 'First Pacific Investment Management (Grup Salim)', insider_pct: 50.07, institution_pct: 24.13, public_pct: 25.80, holders: [{ name: 'First Pacific Investment Management Ltd', role: 'Pengendali Utama (PSP)', pct: 50.07 }, { name: 'Institusi Global & Domestik', role: 'Institusi Finansial', pct: 24.13 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 25.80 }] },
-  GOTO: { owner_group: 'Multiple Voting Shares (MVS) Founders & Investor Institusi', insider_pct: 8.60, institution_pct: 18.40, public_pct: 73.00, holders: [{ name: 'Goto Peopleverse Fund & Founders (MVS)', role: 'Pengendali Hak Suara', pct: 8.60 }, { name: 'SVF GT Subco (SoftBank) & Taobao China', role: 'Institusi Global', pct: 16.50 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 73.00 }] },
-  BUKA: { owner_group: 'PT Kreatif Media Karya (Emtek Group) & Antfin (Alibaba)', insider_pct: 24.63, institution_pct: 25.17, public_pct: 50.20, holders: [{ name: 'PT Kreatif Media Karya (Emtek Group)', role: 'Pengendali Utama (PSP)', pct: 24.63 }, { name: 'Antfin (Netherlands) Holding B.V.', role: 'Pemegang Saham Strategis', pct: 13.05 }, { name: 'GIC Private Limited (Archipelago Investment)', role: 'Institusi Global', pct: 9.45 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 50.20 }] },
-  GPRA: { owner_group: 'PT Citraabadi Kotapersada (Keluarga Gunarso Susanto)', insider_pct: 54.10, institution_pct: 11.40, public_pct: 34.50, holders: [{ name: 'PT Citraabadi Kotapersada', role: 'Pengendali Utama (PSP)', pct: 47.25 }, { name: 'Rudy Margono & Manajemen Insider', role: 'Direksi / Komisaris', pct: 6.85 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 34.50 }] },
-  PGAS: { owner_group: 'PT Pertamina (Persero) - Holding Migas BUMN', insider_pct: 56.96, institution_pct: 16.04, public_pct: 27.00, holders: [{ name: 'PT Pertamina (Persero)', role: 'Pengendali Utama (BUMN)', pct: 56.96 }, { name: 'Institusi & Dana Pensiun', role: 'Institusi Finansial', pct: 16.04 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 27.00 }] },
-  UNTR: { owner_group: 'PT Astra International Tbk', insider_pct: 59.50, institution_pct: 19.50, public_pct: 21.00, holders: [{ name: 'PT Astra International Tbk', role: 'Pengendali Utama (PSP)', pct: 59.50 }, { name: 'Institusi Finansial', role: 'Institusi', pct: 19.50 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 21.00 }] },
-  MEDC: { owner_group: 'PT Medco Daya Abadi Lestari (Keluarga Panigoro)', insider_pct: 51.72, institution_pct: 21.48, public_pct: 26.80, holders: [{ name: 'PT Medco Daya Abadi Lestari', role: 'Pengendali Utama (PSP)', pct: 51.72 }, { name: 'Diamond Bridge Pte. Ltd.', role: 'Pemegang Saham Utama', pct: 21.48 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 26.80 }] },
-  ITMG: { owner_group: 'Banpu Minerals (Singapore) Pte. Ltd.', insider_pct: 65.14, institution_pct: 10.36, public_pct: 24.50, holders: [{ name: 'Banpu Minerals (Singapore) Pte. Ltd.', role: 'Pengendali Utama (PSP)', pct: 65.14 }, { name: 'Institusi & Publik (< 5%)', role: 'Free Float', pct: 34.86 }] },
-  AKRA: { owner_group: 'PT Arthakencana Rayatama (Keluarga Soegiarto Adikoesoemo)', insider_pct: 60.65, institution_pct: 15.35, public_pct: 24.00, holders: [{ name: 'PT Arthakencana Rayatama', role: 'Pengendali Utama (PSP)', pct: 60.65 }, { name: 'Institusi & Publik (< 5%)', role: 'Free Float', pct: 39.35 }] },
-  AMRT: { owner_group: 'PT Sigmantara Alfindo (Keluarga Djoko Susanto)', insider_pct: 53.19, institution_pct: 22.81, public_pct: 24.00, holders: [{ name: 'PT Sigmantara Alfindo', role: 'Pengendali Utama (PSP)', pct: 53.19 }, { name: 'Institusi Global & Domestik', role: 'Institusi Finansial', pct: 22.81 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 24.00 }] },
-  KLBF: { owner_group: 'Konsorsium Keluarga Boenjamin Setiawan (Pendiri Kalbe)', insider_pct: 59.10, institution_pct: 18.40, public_pct: 22.50, holders: [{ name: 'PT Gira Sole Prima, Santa Seha & Diptanala', role: 'Konsorsium Pengendali (PSP)', pct: 59.10 }, { name: 'Institusi & Publik (< 5%)', role: 'Free Float', pct: 40.90 }] },
-  INKP: { owner_group: 'PT Purinusa Ekapersada (Grup Sinar Mas)', insider_pct: 53.25, institution_pct: 14.75, public_pct: 32.00, holders: [{ name: 'PT Purinusa Ekapersada', role: 'Pengendali Utama (Grup Sinar Mas)', pct: 53.25 }, { name: 'Institusi & Publik (< 5%)', role: 'Free Float', pct: 46.75 }] },
-  BSDE: { owner_group: 'PT Paraga Artamida & Ekacentra (Grup Sinar Mas Land)', insider_pct: 66.02, institution_pct: 11.48, public_pct: 22.50, holders: [{ name: 'PT Paraga Artamida & Entitas Sinar Mas', role: 'Pengendali Utama (PSP)', pct: 66.02 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 33.98 }] },
-  BUMI: { owner_group: 'Konsorsium Grup Salim (Mach Energy) & Grup Bakrie', insider_pct: 62.60, institution_pct: 11.40, public_pct: 26.00, holders: [{ name: 'Mach Energy (Hongkong) Ltd (Konsorsium Salim & Bakrie)', role: 'Pengendali Utama', pct: 45.78 }, { name: 'Treasure Global Investments Ltd (Grup Salim)', role: 'Pemegang Saham Strategis', pct: 8.08 }, { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: 26.00 }] },
-};
-
-function computeClientOwnership(ticker, detailData) {
-  const clean = String(ticker || '').trim().toUpperCase();
-  if (detailData && detailData.ownership && detailData.ownership.owner_group) {
-    return detailData.ownership;
-  }
-  const cur = CURATED_CLIENT_OWNERSHIP[clean];
-  let insider_pct, institution_pct, public_pct, owner_group, holders;
-  if (cur) {
-    insider_pct = cur.insider_pct;
-    institution_pct = cur.institution_pct;
-    public_pct = cur.public_pct;
-    owner_group = cur.owner_group;
-    holders = cur.holders;
+function setOwnerRadarFilter(key, value) {
+  ownerRadarState[key] = key === 'days' ? Number(value) : value;
+  document.querySelectorAll(`[data-owner-${key}]`).forEach(btn => {
+    const on = String(btn.getAttribute(`data-owner-${key}`)) === String(value);
+    btn.classList.toggle('owner-chip-active', on);
+  });
+  if (key === 'search') {
+    renderOwnerRadarList();
   } else {
-    let seed = 0;
-    for (let i = 0; i < clean.length; i++) seed += clean.charCodeAt(i);
-    insider_pct = Number((52.0 + (seed % 22) * 0.85).toFixed(2));
-    institution_pct = Number((14.0 + (seed % 15) * 0.75).toFixed(2));
-    public_pct = Number(Math.max(8.5, 100.0 - insider_pct - institution_pct).toFixed(2));
-    owner_group = `Pemegang Saham Pengendali (PSP) ${clean}`;
-    holders = [
-      { name: `Entitas Pengendali Utama (PSP) ${clean}`, role: 'Pengendali / Insider', pct: insider_pct },
-      { name: 'Investor Institusi Domestik & Asing', role: 'Institusi Finansial', pct: institution_pct },
-      { name: 'Masyarakat / Publik (< 5%)', role: 'Free Float', pct: public_pct },
-    ];
+    loadOwnerRadar(true);
   }
-
-  let badge_text = 'Likuid / Struktur Seimbang';
-  let badge_tone = 'emerald';
-  let analysis = `Struktur kepemilikan sehat dengan porsi pengendali ${insider_pct.toFixed(1)}% dan pasokan publik (free float) ${public_pct.toFixed(2)}%. Ideal untuk ditransaksikan mengikuti jejak akumulasi Broker Summary dan aliran dana Smart Money.`;
-
-  if (public_pct <= 15.0) {
-    badge_text = 'Floating Ketat / Akselerasi Tinggi';
-    badge_tone = 'amber';
-    analysis = `Free float ${public_pct.toFixed(2)}% tergolong ketat (tight float). Mayoritas pasokan saham dikunci oleh pengendali (${insider_pct.toFixed(1)}%), sehingga harga sangat responsif dan mudah berakselerasi saat terjadi akumulasi Smart Money.`;
-  } else if (public_pct >= 45.0) {
-    badge_text = 'Free Float Lebar / Dominasi Pasar';
-    badge_tone = 'indigo';
-    analysis = `Free float ${public_pct.toFixed(2)}% cukup lebar di pasar reguler. Pergerakan kenaikan harga membutuhkan absorpsi volume yang masif oleh institusi atau konsorsium bandar besar untuk menggerakkan tren.`;
-  } else if (/BUMN|Negara Republik|MIND ID|Pertamina/i.test(owner_group)) {
-    badge_text = 'BUMN Strategis / Institusi Kuat';
-    badge_tone = 'sky';
-    analysis = `Saham strategis berafiliasi Negara/BUMN dengan kepemilikan terkendali (${insider_pct.toFixed(1)}%) dan free float ${public_pct.toFixed(2)}% yang ideal. Pergerakan harga sangat dipengaruhi oleh aliran dana institusi domestik dan asing (Foreign Flow).`;
-  }
-
-  const todayStr = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-  return {
-    ticker: clean,
-    company_name: (detailData && detailData.name) || `PT ${clean} Tbk`,
-    owner_group,
-    insider_pct,
-    institution_pct,
-    public_pct,
-    holders,
-    badge_text,
-    badge_tone,
-    analysis,
-    last_sync: todayStr,
-  };
 }
 
-function loadStockOwnership(ticker, detailData = null) {
-  const clean = String(ticker || '').trim().toUpperCase();
-  if (!clean) return;
-  const ownData = computeClientOwnership(clean, detailData);
-  ownershipClientCache[clean] = ownData;
-  renderOwnershipCardUI(ownData);
+async function loadOwnerRadar(force = false) {
+  const listEl = document.getElementById('ownerActionList');
+  if (!listEl || ownerRadarState.loading) return;
+  if (!force && Date.now() - ownerRadarState.loadedAt < 60 * 1000 && ownerRadarState.items.length) {
+    renderOwnerRadarList();
+    return;
+  }
+  ownerRadarState.loading = true;
+  listEl.innerHTML = `<div class="col-span-full py-10 text-center text-xs text-slate-400">Memuat laporan kepemilikan dari KSEI...</div>`;
+  try {
+    const q = new URLSearchParams({ days: ownerRadarState.days, scope: ownerRadarState.scope, side: ownerRadarState.side, limit: 300 });
+    const res = await fetch(`/api/owner-actions?${q.toString()}&_t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    ownerRadarState.items = data.items || [];
+    ownerRadarState.loadedAt = Date.now();
+    const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    setTxt('ownerKpiChanges', data.count ?? 0);
+    setTxt('ownerKpiEmiten', data.emiten_count ?? 0);
+    setTxt('ownerKpiBuy', data.buy_count ?? 0);
+    setTxt('ownerKpiSell', data.sell_count ?? 0);
+    const upd = data.updated_at ? `Diperbarui ${data.updated_at.slice(0, 16)} WIB` : 'Menunggu sinkron pertama';
+    setTxt('ownerRadarUpdated', upd);
+    renderOwnerRadarList();
+  } catch (err) {
+    listEl.innerHTML = `<div class="col-span-full py-10 text-center text-xs text-rose-400">Gagal memuat Radar Aksi Owner (${escHtml(err.message || err)}).</div>`;
+  } finally {
+    ownerRadarState.loading = false;
+  }
+}
+
+function renderOwnerRadarList() {
+  const listEl = document.getElementById('ownerActionList');
+  if (!listEl) return;
+  const q = String(ownerRadarState.search || '').trim().toUpperCase();
+  const rows = ownerRadarState.items.filter(it => !q || String(it.ticker).includes(q) || String(it.holder || '').toUpperCase().includes(q));
+  if (!rows.length) {
+    listEl.innerHTML = `<div class="col-span-full py-10 text-center text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-white/[0.08] rounded-xl">Belum ada laporan perubahan kepemilikan untuk filter ini.</div>`;
+    return;
+  }
+  listEl.innerHTML = rows.map(it => renderOwnerActionCard(it)).join('');
+}
+
+function renderStockOwnerActions(ticker, detailData = null) {
+  const card = document.getElementById('stockOwnerActionCard');
+  if (!card) return;
+  const listEl = document.getElementById('soaList');
+  const badgeEl = document.getElementById('soaSignalBadge');
+  const sumEl = document.getElementById('soaSummary');
+  const updEl = document.getElementById('soaUpdated');
+  const data = detailData && detailData.owner_actions;
+
+  const setBadge = (txt, cls) => {
+    if (!badgeEl) return;
+    badgeEl.textContent = txt;
+    badgeEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 whitespace-nowrap ${cls}`;
+  };
+
+  if (!data) {
+    setBadge('Tidak tersedia', 'bg-slate-500/15 text-slate-400 border-slate-400/30');
+    if (sumEl) sumEl.textContent = 'Data laporan kepemilikan belum tersedia di server.';
+    if (listEl) listEl.innerHTML = '';
+    return;
+  }
+
+  const sig = data.signal;
+  if (sig === 'ACCUMULATION') setBadge('Akumulasi Owner', 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-400/30');
+  else if (sig === 'DISTRIBUTION') setBadge('Distribusi Owner', 'bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-400/30');
+  else if (sig === 'MIXED') setBadge('Campuran', 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/30');
+  else setBadge('Tidak ada laporan', 'bg-slate-500/15 text-slate-500 dark:text-slate-400 border-slate-400/30');
+
+  if (sumEl) {
+    if (data.reports > 0) {
+      const net = Number(data.net_shares) || 0;
+      sumEl.innerHTML = `${data.days} hari terakhir: <strong>${data.reports}</strong> laporan · Net <strong class="${net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">${net >= 0 ? '+' : '−'}${fmtShares(net)}</strong> lembar`;
+    } else {
+      sumEl.textContent = `Tidak ada laporan perubahan kepemilikan ${String(ticker).toUpperCase()} dalam ${data.days} hari terakhir.`;
+    }
+  }
+  if (listEl) listEl.innerHTML = (data.items || []).slice(0, 5).map(it => renderOwnerActionCard(it, true)).join('');
+  if (updEl) updEl.textContent = data.updated_at ? data.updated_at.slice(0, 16) : '-';
 }

@@ -13,3 +13,5 @@ psycopg[binary]>=3.1
 tzdata>=2024.1
 pywebpush>=2.0.0
 cryptography>=41.0.0
+curl_cffi>=0.7.0
+pypdf>=4.0.0

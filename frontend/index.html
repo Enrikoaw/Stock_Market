@@ -18,7 +18,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png?v=96.6" />
   <link rel="icon" type="image/png" sizes="512x512" href="/static/icons/icon-512.png?v=96.6" />
   <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192.png?v=96.6" />
-  <link rel="stylesheet" href="/static/styles.css?v=98.5" />
+  <link rel="stylesheet" href="/static/styles.css?v=98.6" />
   <style>
     .glass-panel {
       background: rgba(12, 20, 36, 0.72);
@@ -138,6 +138,18 @@
               </svg>
             </span>
             <span>Pantauan</span>
+          </button>
+          <button
+            id="tabNavOwner"
+            onclick="switchMainTab('owner')"
+            class="liquid-glass-btn neon-purple"
+          >
+            <span class="neon-icon-badge">
+              <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="#090d16" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            </span>
+            <span>Aksi Owner</span>
           </button>
         </nav>
       </div>
@@ -1096,69 +1108,20 @@
             <div id="snc-news" class="space-y-1"></div>
           </div>
 
-          <!-- 2c. STRUKTUR KEPEMILIKAN SAHAM & FREE FLOAT (SISTEM OTOMATIS) -->
-          <div id="stockOwnershipCard" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.08] space-y-2.5 shadow-sm dark:shadow-none">
+          <!-- 2c. AKSI OWNER (LAPORAN PERUBAHAN KEPEMILIKAN SAHAM KSEI) -->
+          <div id="stockOwnerActionCard" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.08] space-y-2.5 shadow-sm dark:shadow-none">
             <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-bold text-slate-900 dark:text-white">Struktur Kepemilikan &amp; Free Float</span>
-              <span id="ownLiquidityBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-sky-500/15 text-sky-400 border border-sky-400/30 shrink-0 whitespace-nowrap">Memuat...</span>
+              <span class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-violet-500"></span>
+                Aksi Owner (Laporan KSEI)
+              </span>
+              <span id="soaSignalBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 whitespace-nowrap bg-slate-500/15 text-slate-400 border-slate-400/30">Memuat...</span>
             </div>
-
-            <div class="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
-              Pengendali Utama: <strong id="ownGroupEntity" class="text-slate-900 dark:text-white font-semibold">-</strong>
-            </div>
-
-            <!-- Segmented Ownership Bar -->
-            <div class="space-y-1.5">
-              <div class="h-3 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden flex p-0.5 border border-slate-300 dark:border-white/10">
-                <div id="ownBarInsider" class="bg-sky-500 h-full rounded-l-full transition-all duration-500" style="width: 55%"></div>
-                <div id="ownBarInst" class="bg-indigo-500 h-full transition-all duration-500" style="width: 25%"></div>
-                <div id="ownBarPublic" class="bg-emerald-500 h-full rounded-r-full transition-all duration-500" style="width: 20%"></div>
-              </div>
-
-              <div class="grid grid-cols-3 gap-1.5 text-[10px]">
-                <div class="p-1.5 rounded-lg bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-white/[0.06]">
-                  <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                    <span class="w-2 h-2 rounded-full bg-sky-500 inline-block shrink-0"></span>
-                    <span class="truncate">Pengendali</span>
-                  </div>
-                  <div id="ownPctInsider" class="font-mono font-bold text-sky-600 dark:text-sky-400 text-xs mt-0.5">-</div>
-                </div>
-                <div class="p-1.5 rounded-lg bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-white/[0.06]">
-                  <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                    <span class="w-2 h-2 rounded-full bg-indigo-500 inline-block shrink-0"></span>
-                    <span class="truncate">Institusi</span>
-                  </div>
-                  <div id="ownPctInst" class="font-mono font-bold text-indigo-600 dark:text-indigo-300 text-xs mt-0.5">-</div>
-                </div>
-                <div class="p-1.5 rounded-lg bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-white/[0.06]">
-                  <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0"></span>
-                    <span class="truncate">Free Float</span>
-                  </div>
-                  <div id="ownPctPublic" class="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">-</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Implikasi Smart Money -->
-            <p id="ownSmartAnalysis" class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed bg-sky-500/[0.07] border border-sky-400/20 rounded-lg p-2"></p>
-
-            <!-- Daftar Pemegang Saham Signifikan (>5%) -->
-            <div class="space-y-1">
-              <button
-                type="button"
-                onclick="toggleOwnershipHoldersList()"
-                class="w-full flex items-center justify-between text-[10px] font-semibold text-sky-600 dark:text-sky-400 hover:underline py-0.5 cursor-pointer"
-              >
-                <span>Rincian Pemegang Saham Utama (&gt; 5%)</span>
-                <span id="ownHoldersToggleArrow">▾</span>
-              </button>
-              <div id="ownHoldersList" class="divide-y divide-slate-200 dark:divide-white/[0.06] rounded-lg border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-slate-950/50 overflow-hidden text-[10px]"></div>
-            </div>
-
+            <p id="soaSummary" class="text-[11px] text-slate-600 dark:text-slate-300 leading-snug"></p>
+            <div id="soaList" class="space-y-2"></div>
             <div class="pt-1.5 border-t border-slate-200 dark:border-white/[0.06] flex items-center justify-between text-[10px] text-slate-400">
-              <span>Sistem Otomatis (Siklus 3 Hari)</span>
-              <span id="ownLastSync" class="font-mono text-sky-400/80">-</span>
+              <button type="button" onclick="switchMainTab('owner')" class="text-violet-600 dark:text-violet-300 font-semibold hover:underline">Buka Radar Aksi Owner</button>
+              <span>Sinkron: <span id="soaUpdated" class="font-mono">-</span></span>
             </div>
           </div>
 
@@ -1632,6 +1595,72 @@
         </div>
       </div>
 
+    </section>
+
+    <!-- =====================================================================
+         HALAMAN 4: RADAR AKSI OWNER (LAPORAN PERUBAHAN KEPEMILIKAN SAHAM KSEI)
+         ===================================================================== -->
+    <section id="sectionOwner" class="space-y-4 hidden">
+      <div class="glass-panel rounded-2xl p-4 sm:p-5 space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 dark:border-white/[0.08] pb-3.5">
+          <div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-2xl sm:text-3xl font-black text-amber-500 dark:text-amber-300 font-mono leading-none">5%</span>
+              <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Radar Aksi Owner</h2>
+            </div>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Laporan resmi perubahan kepemilikan saham pemegang besar, pengendali, Direksi &amp; Komisaris (KSEI via IDX).</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="ownerRadarUpdated" class="text-[10px] font-mono text-slate-500 dark:text-slate-400">-</span>
+            <button type="button" onclick="loadOwnerRadar(true)" class="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-white/10 text-xs font-semibold transition active:scale-95">Muat Ulang</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="p-3 rounded-xl bg-white shadow-sm border border-slate-200 dark:bg-slate-800 dark:border-slate-700 text-center">
+            <div class="text-[11px] font-medium text-slate-600 dark:text-slate-300">Perubahan</div>
+            <div id="ownerKpiChanges" class="text-xl font-black font-mono text-slate-900 dark:text-white mt-0.5">-</div>
+          </div>
+          <div class="p-3 rounded-xl bg-white shadow-sm border border-slate-200 dark:bg-slate-800 dark:border-slate-700 text-center">
+            <div class="text-[11px] font-medium text-slate-600 dark:text-slate-300">Emiten</div>
+            <div id="ownerKpiEmiten" class="text-xl font-black font-mono text-slate-900 dark:text-white mt-0.5">-</div>
+          </div>
+          <div class="p-3 rounded-xl bg-white shadow-sm border border-slate-200 dark:bg-slate-800 dark:border-slate-700 text-center">
+            <div class="text-[11px] font-medium text-slate-600 dark:text-slate-300">Akumulasi (+)</div>
+            <div id="ownerKpiBuy" class="text-xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">-</div>
+          </div>
+          <div class="p-3 rounded-xl bg-white shadow-sm border border-slate-200 dark:bg-slate-800 dark:border-slate-700 text-center">
+            <div class="text-[11px] font-medium text-slate-600 dark:text-slate-300">Distribusi (−)</div>
+            <div id="ownerKpiSell" class="text-xl font-black font-mono text-rose-600 dark:text-rose-400 mt-0.5">-</div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button type="button" data-owner-scope="major" onclick="setOwnerRadarFilter('scope','major')" class="owner-chip owner-chip-active">Pemegang &ge; 5%</button>
+            <button type="button" data-owner-scope="insider" onclick="setOwnerRadarFilter('scope','insider')" class="owner-chip">Direksi / Komisaris</button>
+            <button type="button" data-owner-scope="all" onclick="setOwnerRadarFilter('scope','all')" class="owner-chip">Semua Laporan</button>
+            <span class="w-px h-5 bg-slate-300 dark:bg-white/10 mx-1"></span>
+            <button type="button" data-owner-side="ALL" onclick="setOwnerRadarFilter('side','ALL')" class="owner-chip owner-chip-active">Semua</button>
+            <button type="button" data-owner-side="BUY" onclick="setOwnerRadarFilter('side','BUY')" class="owner-chip">Akumulasi</button>
+            <button type="button" data-owner-side="SELL" onclick="setOwnerRadarFilter('side','SELL')" class="owner-chip">Distribusi</button>
+          </div>
+          <div class="flex items-center gap-1.5 w-full sm:w-auto">
+            <button type="button" data-owner-days="1" onclick="setOwnerRadarFilter('days',1)" class="owner-chip">1H</button>
+            <button type="button" data-owner-days="3" onclick="setOwnerRadarFilter('days',3)" class="owner-chip owner-chip-active">3H</button>
+            <button type="button" data-owner-days="7" onclick="setOwnerRadarFilter('days',7)" class="owner-chip">7H</button>
+            <button type="button" data-owner-days="30" onclick="setOwnerRadarFilter('days',30)" class="owner-chip">30H</button>
+            <input type="text" placeholder="Cari kode / nama pemegang..." oninput="setOwnerRadarFilter('search', this.value)" class="flex-1 sm:w-48 min-w-[120px] px-3 py-1.5 rounded-xl bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-violet-400" />
+          </div>
+        </div>
+
+        <div id="ownerActionList" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+
+        <p class="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed border-t border-slate-200 dark:border-white/[0.06] pt-3">
+          Sumber: Laporan Kepemilikan atau Setiap Perubahan Kepemilikan Saham Perusahaan Terbuka (POJK 4/2024) yang diterbitkan KSEI melalui IDX. Diperbarui otomatis setiap 20 menit.
+          Label <strong>Repo / Pinjam Saham</strong> dan <strong>Non-Pasar</strong> menandakan perpindahan saham yang bukan pembelian/penjualan di pasar, sehingga tidak dihitung sebagai sinyal akumulasi/distribusi owner.
+        </p>
+      </div>
     </section>
 
       <!-- =====================================================================
@@ -2600,7 +2629,7 @@
   </div>
 
   <!-- STANDARD NATIVE MOBILE BOTTOM NAVIGATION BAR (md:hidden - FLAT RECTANGULAR APP STYLE) -->
-  <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 inset-x-0 h-14 bg-slate-950/95 backdrop-blur-xl border-t border-white/10 grid grid-cols-3 z-40 shadow-2xl" aria-label="Navigasi Mobile">
+  <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 inset-x-0 h-14 bg-slate-950/95 backdrop-blur-xl border-t border-white/10 grid grid-cols-4 z-40 shadow-2xl" aria-label="Navigasi Mobile">
     <button
       id="mobileNavToday"
       onclick="switchMainTab('today')"
@@ -2640,9 +2669,22 @@
       </div>
       <span class="mobile-nav-text">Pantauan</span>
     </button>
+    <button
+      id="mobileNavOwner"
+      onclick="switchMainTab('owner')"
+      class="mobile-nav-item"
+      aria-label="Tab Aksi Owner"
+    >
+      <div class="mobile-nav-icon neon-purple">
+        <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <span class="mobile-nav-text">Aksi Owner</span>
+    </button>
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=98.5"></script>
+  <script src="/static/app.js?v=98.6"></script>
 </body>
 </html>

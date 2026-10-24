@@ -1201,3 +1201,26 @@ html.light .ai-msg-user {
   color: #ffffff !important;
 }
 
+
+
+/* Radar Aksi Owner - filter chips */
+.owner-chip {
+  padding: 0.3rem 0.65rem;
+  border-radius: 0.6rem;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: rgb(100, 116, 139);
+  background: transparent;
+  transition: all 0.15s ease;
+}
+.owner-chip:hover { border-color: rgba(167, 139, 250, 0.5); color: rgb(124, 58, 237); }
+html:not(.light) .owner-chip { color: rgb(203, 213, 225); }
+html:not(.light) .owner-chip:hover { color: rgb(221, 214, 254); }
+.owner-chip.owner-chip-active {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(167, 139, 250, 0.55);
+  color: rgb(109, 40, 217);
+}
+html:not(.light) .owner-chip.owner-chip-active { color: rgb(221, 214, 254); }
