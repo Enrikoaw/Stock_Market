@@ -196,21 +196,29 @@ def get_vapid_keys() -> dict[str, str]:
                     return d
         except Exception:
             pass
-    from cryptography.hazmat.primitives.asymmetric import ec
-    from cryptography.hazmat.primitives import serialization
-    key = ec.generate_private_key(ec.SECP256R1())
-    raw_priv = key.private_numbers().private_value.to_bytes(32, "big")
-    raw_pub = key.public_key().public_bytes(
-        serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
-    )
-    d = {"public": _b64u(raw_pub), "private": _b64u(raw_priv)}
+    fallback_keys = {
+        "public": "BIwlaEq_zpXWqFpeIx-iFnJe3S2xBSnJFR6Io8zdcNQ6_0ArEx8osH1DWO8qFx0SuN5XptQDuueKbAR-tVl2VLQ",
+        "private": "_nb4sX8mPwGRYOBFQ1eLcbBoLQfGm1n6hMt7TeRHiY4",
+    }
     try:
-        VAPID_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(VAPID_PATH, "w", encoding="utf-8") as f:
-            json.dump(d, f)
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives import serialization
+        key = ec.generate_private_key(ec.SECP256R1())
+        raw_priv = key.private_numbers().private_value.to_bytes(32, "big")
+        raw_pub = key.public_key().public_bytes(
+            serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+        )
+        d = {"public": _b64u(raw_pub), "private": _b64u(raw_priv)}
+        try:
+            VAPID_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(VAPID_PATH, "w", encoding="utf-8") as f:
+                json.dump(d, f)
+        except Exception as ex:
+            print(f"[WebPush] Gagal simpan VAPID key: {ex}")
+        return d
     except Exception as ex:
-        print(f"[WebPush] Gagal simpan VAPID key: {ex}")
-    return d
+        print(f"[WebPush] Menggunakan fallback VAPID key: {ex}")
+        return fallback_keys
 
 
 def _load_subs() -> list[dict[str, Any]]:

@@ -1528,22 +1528,28 @@ function _b64uToUint8(b64u) {
 // Daftarkan perangkat ke Web Push server agar alert berita positif emiten masuk ke bar notifikasi HP
 async function subscribeWebPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
-  const reg = await navigator.serviceWorker.ready;
-  let sub = await reg.pushManager.getSubscription();
-  if (!sub) {
-    const keyRes = await fetch('/api/push/public-key');
-    const { public_key } = await keyRes.json();
-    sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: _b64uToUint8(public_key),
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const keyRes = await fetch('/api/push/public-key');
+      if (!keyRes.ok) return false;
+      const data = await keyRes.json();
+      if (!data || !data.public_key) return false;
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _b64uToUint8(data.public_key),
+      });
+    }
+    const res = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub.toJSON()),
     });
+    return res.ok;
+  } catch (err) {
+    return false;
   }
-  const res = await fetch('/api/push/subscribe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(sub.toJSON()),
-  });
-  return res.ok;
 }
 
 async function requestBrowserNotification() {

@@ -2275,7 +2275,12 @@ def test_broker_api_endpoint(req: BrokerTestRequest) -> dict:
 
 @app.get("/api/push/public-key")
 def push_public_key() -> dict:
-    return {"public_key": get_vapid_keys()["public"]}
+    try:
+        keys = get_vapid_keys()
+        return {"public_key": keys.get("public", "")}
+    except Exception as exc:
+        print(f"[PushPublicKey] Error: {exc}")
+        return {"public_key": "BIwlaEq_zpXWqFpeIx-iFnJe3S2xBSnJFR6Io8zdcNQ6_0ArEx8osH1DWO8qFx0SuN5XptQDuueKbAR-tVl2VLQ"}
 
 
 @app.post("/api/push/subscribe")
