@@ -242,6 +242,38 @@ html.light header {
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06) !important;
 }
 
+html.light #telegramCommunityBanner {
+  background: linear-gradient(90deg, #e0f2fe 0%, #f0f9ff 50%, #e0f2fe 100%) !important;
+  border-bottom: 1px solid #bae6fd !important;
+  color: #0f172a !important;
+}
+
+html.light #telegramCommunityBanner span {
+  color: #0f172a !important;
+}
+
+html.light #telegramCommunityBanner svg {
+  color: #0284c7 !important;
+}
+
+html.light #telegramCommunityBanner a {
+  background: #0284c7 !important;
+  color: #ffffff !important;
+  border-color: #0369a1 !important;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25) !important;
+}
+
+html.light #telegramCommunityBanner a:hover {
+  background: #0369a1 !important;
+}
+
+html.light #toastBanner {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15) !important;
+}
+
 /* 2. Semua garis border gelap berganti border halus abu-abu terang */
 html.light [class*="border-slate-800"],
 html.light [class*="border-slate-700"],
