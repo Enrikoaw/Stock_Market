@@ -1241,21 +1241,6 @@
             </div>
           </div>
           <div class="flex items-center gap-1.5 flex-wrap">
-            <button
-              type="button"
-              onclick="exportFavoritesData()"
-              class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer active:scale-95"
-              title="Ekspor daftar pantauan bintang favorit ke file JSON"
-            >
-              <span>📥 Ekspor Data</span>
-            </button>
-            <label
-              class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer active:scale-95"
-              title="Pulihkan daftar pantauan dari file cadangan JSON"
-            >
-              <span>📤 Impor Cadangan</span>
-              <input type="file" id="inputImportFavorites" accept=".json,.csv" class="hidden" onchange="importFavoritesData(event)" />
-            </label>
             <span id="favoritesCountBadge" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/30">
               0 Saham
             </span>
@@ -2347,6 +2332,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=96.7"></script>
+  <script src="/static/app.js?v=96.8"></script>
 </body>
 </html>
