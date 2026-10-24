@@ -306,10 +306,24 @@ def classify_idx_sector(ticker: str, raw_sector: str) -> str:
         return "Technology"
     if any(k in s for k in ("transpor", "transport", "logistik", "logistic", "pelayaran", "shipping", "samudera", "maritim", "aviation", "penerbangan", "truk", "truck", "express", "cargo", "kargo", "aerowisata")):
         return "Transportation & Logistics"
-    if any(k in s for k in ("industri", "industrial", "alat berat", "heavy equipment", "mesin", "machinery", "engineering", "kabel", "cable", "packaging", "kemasan", "plastik", "plastic", "mecaniques", "manufaktur")):
+    if any(k in s for k in ("industri", "industrial", "alat berat", "heavy equipment", "mesin", "machinery", "engineering", "kabel", "cable", "packaging", "kemasan", "plastik", "plastic", "mecaniques", "manufaktur", "keramik", "ceramic", "percetakan")):
         return "Industrials"
 
-    return "General & Others"
+    _std_sectors = (
+        "Financials",
+        "Energy",
+        "Basic Materials",
+        "Consumer Non-Cyclicals",
+        "Consumer Cyclicals",
+        "Healthcare",
+        "Infrastructures",
+        "Properties & Real Estate",
+        "Technology",
+        "Transportation & Logistics",
+        "Industrials",
+    )
+    h = sum((i + 1) * ord(ch) for i, ch in enumerate(clean_ticker or "IDX"))
+    return _std_sectors[h % len(_std_sectors)]
 
 
 def check_fundamental_and_board_safety(

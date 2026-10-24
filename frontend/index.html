@@ -18,7 +18,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png?v=96.6" />
   <link rel="icon" type="image/png" sizes="512x512" href="/static/icons/icon-512.png?v=96.6" />
   <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192.png?v=96.6" />
-  <link rel="stylesheet" href="/static/styles.css?v=97.1" />
+  <link rel="stylesheet" href="/static/styles.css?v=97.2" />
   <style>
     .glass-panel {
       background: rgba(12, 20, 36, 0.72);
@@ -383,40 +383,57 @@
          ===================================================================== -->
     <section id="sectionToday" class="space-y-4">
       
-      <!-- Ringkasan Pasar Satu Kalimat -->
-      <div class="p-4 rounded-2xl glass-panel border border-emerald-500/20 flex flex-wrap items-center justify-between gap-3 shadow-[0_4px_24px_rgba(0,0,0,0.3)]">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300 text-lg font-bold shrink-0">
-            📊
+      <!-- Ringkasan Kondisi Pasar Hari Ini (Tanpa Ikon, Bersih & Profesional) -->
+      <div class="p-4 rounded-2xl glass-panel border border-sky-500/20 flex flex-wrap items-center justify-between gap-3 shadow-[0_4px_24px_rgba(0,0,0,0.3)]">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs font-bold text-white uppercase tracking-wider">Kondisi Pasar Hari Ini</span>
+            <span id="todayRegimeBadge" class="hidden">Memuat...</span>
+            <button
+              id="btnMarketRegime"
+              onclick="openMarketRegimeModal()"
+              class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900/60 hover:bg-slate-800/80 border border-white/[0.08] text-xs shadow-inner transition active:scale-95 cursor-pointer"
+              title="Klik untuk melihat Analisis Rezim Pasar IHSG &amp; Panduan Alokasi Modal"
+            >
+              <span id="regimeDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="regimeLabel" class="font-bold text-emerald-300 text-[11px] sm:text-xs">Bullish Expansion (58%)</span>
+              <span class="term-tip text-slate-400 hover:text-emerald-300 ml-0.5 text-[10px]" onclick="event.stopPropagation(); openGlossaryModal('market_breadth')" title="Market Breadth: Persentase saham di bursa yang berada di atas MA20.">ⓘ</span>
+            </button>
           </div>
-          <div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-xs font-bold text-white uppercase tracking-wider">Kondisi Pasar Hari Ini</span>
-              <span id="todayRegimeBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">Memuat...</span>
-              <!-- Indikator Rezim Pasar IHSG (Market Breadth) Dipindah ke sini -->
-              <button
-                id="btnMarketRegime"
-                onclick="openMarketRegimeModal()"
-                class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900/60 hover:bg-slate-800/80 border border-white/[0.08] text-xs shadow-inner transition active:scale-95 cursor-pointer"
-                title="Klik untuk melihat Analisis Rezim Pasar IHSG &amp; Panduan Alokasi Modal"
-              >
-                <span id="regimeDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span id="regimeLabel" class="font-bold text-emerald-300 text-[11px] sm:text-xs">Bullish Expansion (58%)</span>
-                <span class="term-tip text-slate-400 hover:text-emerald-300 ml-0.5 text-[10px]" onclick="event.stopPropagation(); openGlossaryModal('market_breadth')" title="Market Breadth: Persentase saham di bursa yang berada di atas MA20.">ⓘ</span>
-              </button>
-            </div>
-            <p id="todayMarketSentence" class="text-xs text-slate-200 mt-0.5 leading-relaxed">
-              Memeriksa struktur tren dan aliran dana dari seluruh emiten bursa...
-            </p>
-          </div>
+          <p id="todayMarketSentence" class="text-xs text-slate-300 leading-relaxed">
+            Memeriksa struktur tren dan aliran dana dari seluruh emiten bursa...
+          </p>
         </div>
         <button
           onclick="switchMainTab('explore')"
-          class="px-3.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-xs font-semibold text-emerald-300 border border-emerald-400/30 transition flex items-center gap-1"
+          class="px-3.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-xs font-semibold text-sky-300 border border-sky-400/30 transition flex items-center gap-1"
         >
-          <span>Buka Screener Lengkap</span>
-          <span>→</span>
+          <span>Screener Lengkap</span>
+          <span>&rarr;</span>
         </button>
+      </div>
+
+      <!-- Panel Rotasi Sektor Hari Ini (Aliran Dana Sektoral BEI - Tanpa Ikon) -->
+      <div id="todaySectorRotationCard" class="p-4 rounded-2xl glass-panel border border-white/[0.08] space-y-3 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2.5">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs font-bold text-white uppercase tracking-wider">Rotasi Sektor Hari Ini</span>
+            <span id="todaySectorSummaryBadge" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-400/30">Aliran Dana Terbesar</span>
+          </div>
+          <button
+            type="button"
+            onclick="openSectorModal()"
+            class="px-3 py-1 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-xs font-semibold text-sky-300 border border-sky-400/30 transition flex items-center gap-1 cursor-pointer"
+          >
+            <span>Peta Sektor Lengkap</span>
+            <span>&rarr;</span>
+          </button>
+        </div>
+        <div id="todayTopSectorsGrid" class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+          <div class="p-3 rounded-xl glass-subcard animate-pulse h-20"></div>
+          <div class="p-3 rounded-xl glass-subcard animate-pulse h-20 hidden md:block"></div>
+          <div class="p-3 rounded-xl glass-subcard animate-pulse h-20 hidden md:block"></div>
+        </div>
       </div>
 
       <!-- Panel Grafik Indeks Harga Saham Gabungan (IHSG / ^JKSE) -->
@@ -524,7 +541,6 @@
               <span class="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400">Arus Berita &amp; Katalis Pasar</span>
               <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">BEI Terverifikasi</span>
             </div>
-            <p class="text-xs text-slate-400 mt-0.5">Informasi dan sentimen emiten terkini yang dikorelasikan langsung dengan analisis Smart Money &amp; Trading Plan.</p>
           </div>
 
           <!-- Filter Kategori Berita & Refresh -->
@@ -845,6 +861,31 @@
                 <option value="pct_change" class="bg-slate-900 text-white">Urutkan: % Kenaikan</option>
               </select>
             </div>
+
+            <!-- Baris 3: Filter Cepat Sektor BEI (Tanpa Ikon, Bersih & Profesional) -->
+            <div class="pt-1.5 border-t border-white/[0.06] flex items-center justify-between gap-2">
+              <div id="sectorFilterPills" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 flex-1">
+                <button type="button" data-sector="ALL" onclick="filterScreenerBySector('ALL')" class="sector-pill active px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap cursor-pointer">Semua Sektor</button>
+                <button type="button" data-sector="Energy" onclick="filterScreenerBySector('Energy')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Energi</button>
+                <button type="button" data-sector="Basic Materials" onclick="filterScreenerBySector('Basic Materials')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Bahan Baku</button>
+                <button type="button" data-sector="Financials" onclick="filterScreenerBySector('Financials')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Keuangan</button>
+                <button type="button" data-sector="Consumer Non-Cyclicals" onclick="filterScreenerBySector('Consumer Non-Cyclicals')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Konsumer Primer</button>
+                <button type="button" data-sector="Consumer Cyclicals" onclick="filterScreenerBySector('Consumer Cyclicals')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Konsumer Non-Primer</button>
+                <button type="button" data-sector="Infrastructures" onclick="filterScreenerBySector('Infrastructures')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Infrastruktur</button>
+                <button type="button" data-sector="Properties & Real Estate" onclick="filterScreenerBySector('Properties & Real Estate')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Properti</button>
+                <button type="button" data-sector="Healthcare" onclick="filterScreenerBySector('Healthcare')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Kesehatan</button>
+                <button type="button" data-sector="Technology" onclick="filterScreenerBySector('Technology')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Teknologi</button>
+                <button type="button" data-sector="Industrials" onclick="filterScreenerBySector('Industrials')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Perindustrian</button>
+                <button type="button" data-sector="Transportation & Logistics" onclick="filterScreenerBySector('Transportation & Logistics')" class="sector-pill px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer">Transportasi</button>
+              </div>
+              <button
+                type="button"
+                onclick="openSectorModal()"
+                class="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-[11px] font-semibold whitespace-nowrap transition shrink-0 cursor-pointer"
+              >
+                Peta Sektor
+              </button>
+            </div>
           </div>
 
           <!-- Desktop Table Container (Tampil di Layar Desktop & Tablet >= md) -->
@@ -981,7 +1022,6 @@
           <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-800/60 dark:border-white/[0.06] shadow-sm dark:shadow-none">
             <div>
               <span class="text-xs font-bold text-slate-900 dark:text-white">Skor Kekuatan Kuantitatif</span>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400">Berdasarkan 5 pilar volume &amp; struktur harga</p>
             </div>
             <span id="inspTotalScoreBadge" class="text-sm font-extrabold font-mono text-emerald-800 bg-emerald-100 border border-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/15 dark:border-emerald-400/30 px-2.5 py-1 rounded-lg">
               - / 100
@@ -1155,8 +1195,7 @@
                 class="col-span-2 py-2 px-3 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
                 title="Salin ringkasan Trading Plan untuk dibagikan ke WhatsApp atau Telegram"
               >
-                <span>??</span>
-                <span>Bagikan Trading Plan (WA / Telegram)</span>
+                <span>Bagikan Trading Plan</span>
               </button>
             </div>
           </div>
@@ -1241,8 +1280,7 @@
                 onclick="openTradingViewSuperchart(selectedTicker)"
                 class="w-full py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-xs font-semibold transition flex items-center justify-center gap-1.5"
               >
-                <span>📈</span>
-                <span>Buka Superchart Lengkap (TradingView)</span>
+                <span>Buka Superchart TradingView</span>
               </button>
             </div>
           </div>
@@ -1261,12 +1299,8 @@
       <!-- BAGIAN 1: DAFTAR FAVORIT PRIBADI (BINTANG ★) -->
       <div id="favoritesSection" class="glass-panel rounded-2xl p-4 sm:p-5 space-y-3">
         <div class="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-white/[0.08] pb-3 gap-2">
-          <div class="flex items-center gap-2">
-            <span class="text-base font-extrabold text-amber-500 dark:text-amber-300">⭐</span>
-            <div>
-              <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Daftar Pantauan Favorit Saya</h2>
-              <p class="text-xs text-slate-600 dark:text-slate-300">Saham yang Anda tandai bintang ★. Disimpan di peramban Anda tanpa penolakan syarat skor.</p>
-            </div>
+          <div>
+            <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Daftar Pantauan Favorit</h2>
           </div>
           <div class="flex items-center gap-1.5 flex-wrap">
             <span id="favoritesCountBadge" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-orange-100 text-orange-800 border border-orange-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/30">
@@ -1290,16 +1324,14 @@
             onclick="switchPantauanSubTab('paper')"
             class="px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm"
           >
-            <span>🔬</span>
-            <span>Paper Tracker (Forward-Test)</span>
+            <span>Uji Sinyal (Forward-Test)</span>
           </button>
           <button
             id="subTabBtnPortfolio"
             onclick="switchPantauanSubTab('portfolio')"
             class="px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
           >
-            <span>💼</span>
-            <span>Portofolio Riil (Jurnal Saya)</span>
+            <span>Portofolio Riil</span>
           </button>
         </div>
 
@@ -1320,13 +1352,7 @@
         <!-- Header Uji Sinyal -->
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-3.5">
           <div>
-            <h2 class="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-              <span>🔬</span>
-              <span>Hasil Uji Sinyal Kuantitatif (Simulasi)</span>
-            </h2>
-            <p class="text-xs text-slate-300 mt-0.5">
-              Ini adalah simulasi forward-test otomatis oleh sistem untuk memverifikasi akurasi teknis, bukan transaksi sungguhan.
-            </p>
+            <h2 class="text-sm sm:text-base font-bold text-white">Evaluasi Sinyal Kuantitatif (Forward-Test)</h2>
           </div>
           <div id="sampleSizeWarning" class="text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-400/25 px-3 py-1 rounded-xl flex items-center gap-1.5">
             <span>✓</span>
@@ -1443,13 +1469,7 @@
       <div id="portfolioSection" class="glass-panel rounded-2xl p-4 sm:p-5 space-y-4 hidden">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-3.5">
           <div>
-            <h2 class="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-              <span>💼</span>
-              <span>Jurnal &amp; Portofolio Riil Saya</span>
-            </h2>
-            <p class="text-xs text-slate-300 mt-0.5">
-              Catatan transaksi saham nyata yang Anda beli di sekuritas beserta live floating &amp; realized P/L terupdate.
-            </p>
+            <h2 class="text-sm sm:text-base font-bold text-white">Jurnal &amp; Portofolio Riil</h2>
           </div>
           <div class="flex items-center gap-1.5 flex-wrap">
             <button
@@ -1458,13 +1478,13 @@
               class="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-xs font-semibold transition flex items-center gap-1 cursor-pointer active:scale-95"
               title="Ekspor seluruh riwayat transaksi jurnal portofolio ke file CSV"
             >
-              <span>📥 Ekspor Jurnal (CSV)</span>
+              <span>Ekspor CSV</span>
             </button>
             <label
               class="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-xs font-semibold transition flex items-center gap-1 cursor-pointer active:scale-95"
               title="Impor catatan transaksi dari file cadangan CSV/JSON"
             >
-              <span>📤 Impor Cadangan</span>
+              <span>Impor Data</span>
               <input type="file" id="inputImportPortfolio" accept=".json,.csv" class="hidden" onchange="importPortfolioData(event)" />
             </label>
             <button
@@ -1553,8 +1573,7 @@
          ===================================================================== -->
     <footer class="mt-8 mb-20 sm:mb-8 p-4 sm:p-5 rounded-2xl bg-slate-900/60 border border-white/[0.08] text-slate-400 text-xs space-y-2.5">
       <div class="flex items-center gap-2 text-slate-200 font-bold text-xs uppercase tracking-wider">
-        <span>⚖️</span>
-        <span>Pernyataan Penyangkalan (Disclaimer) &amp; Kepatuhan Regulasi Pasar Modal</span>
+                <span>Pernyataan Penyangkalan (Disclaimer) &amp; Kepatuhan Regulasi Pasar Modal</span>
       </div>
       <p class="text-[11px] leading-relaxed text-slate-400">
         RadarBandarIDX adalah aplikasi perangkat lunak berbasis formula kuantitatif independen untuk penyaringan data pasar saham (*stock screener*). Seluruh data, indikator Smart Money, status setup teknikal, skenario trading plan, dan kalkulator simulasi lot yang disajikan bersifat informatif dan edukatif untuk riset pribadi pengguna (DYOR &mdash; <em>Do Your Own Research</em>), serta <strong>BUKAN merupakan rekomendasi beli/jual, nasihat investasi, atau ajakan transaksi efek</strong> sesuai ketentuan peraturan Otoritas Jasa Keuangan (OJK).
@@ -1576,8 +1595,7 @@
       <!-- Header -->
       <div class="flex items-center justify-between border-b border-white/[0.08] pb-3 shrink-0">
         <div class="flex items-center gap-2.5">
-          <span class="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-300 flex items-center justify-center text-base">🔔</span>
-          <div>
+                    <div>
             <h3 class="text-base font-bold text-white flex items-center gap-1.5">
               <span>Notifikasi &amp; Alert Sinyal</span>
               <span id="alertLivePulse" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -1594,8 +1612,7 @@
         <div class="p-3.5 rounded-xl glass-subcard space-y-3">
           <div class="font-bold text-white flex items-center justify-between text-xs">
             <span class="flex items-center gap-1.5">
-              <span>🔊</span>
-              <span>Audio Alert &amp; Notifikasi Browser</span>
+                            <span>Audio Alert &amp; Notifikasi Browser</span>
             </span>
             <span id="alertSoundStatusBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
               Suara Aktif
@@ -1615,7 +1632,7 @@
                 class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[10px] font-medium transition active:scale-95 cursor-pointer"
                 title="Dengarkan contoh nada lonceng alert"
               >
-                🔊 Tes Bunyi
+                Tes Bunyi
               </button>
               <button
                 type="button"
@@ -1660,8 +1677,7 @@
         <div class="p-3.5 rounded-xl glass-subcard space-y-2">
           <div class="font-bold text-white flex items-center justify-between text-xs">
             <span class="flex items-center gap-1.5">
-              <span>⚡</span>
-              <span>Filter Sinyal yang Dipantau</span>
+                            <span>Filter Sinyal yang Dipantau</span>
             </span>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
@@ -1688,8 +1704,7 @@
         <div class="p-3.5 rounded-xl glass-subcard space-y-2.5">
           <div class="flex items-center justify-between">
             <div class="font-bold text-white flex items-center gap-1.5 text-xs">
-              <span>📋</span>
-              <span>Daftar Sinyal &amp; Peringatan Terkini</span>
+                            <span>Daftar Sinyal &amp; Peringatan Terkini</span>
               <span id="alertFeedCountBadge" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">0</span>
             </div>
             <div class="flex items-center gap-2">
@@ -1720,8 +1735,7 @@
     <div class="glass-panel rounded-2xl max-w-md w-full p-6 border border-white/15 shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
-          <span>🧮</span>
-          <span>Kalkulator Ukuran Lot &amp; Risiko</span>
+                    <span>Kalkulator Ukuran Lot &amp; Risiko</span>
         </h3>
         <button onclick="closeLotCalculatorModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
       </div>
@@ -1800,8 +1814,7 @@
     <div class="glass-panel rounded-2xl max-w-lg w-full p-6 border border-white/15 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
         <h3 id="glossaryTitle" class="text-base font-bold text-white flex items-center gap-2">
-          <span>📖</span>
-          <span>Kamus Istilah Saham Ramah Pemula</span>
+                    <span>Kamus Istilah Saham Ramah Pemula</span>
         </h3>
         <button onclick="closeGlossaryModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
       </div>
@@ -1961,14 +1974,60 @@
 
 
   <!-- =====================================================================
+       MODAL: PETA ROTASI SEKTOR BEI (SECTOR FLOW HEATMAP - TANPA IKON)
+       ===================================================================== -->
+  <div id="sectorAnalysisModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+    <div class="glass-panel rounded-2xl max-w-4xl w-full p-5 sm:p-6 border border-white/15 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-white/[0.08] pb-3 shrink-0">
+        <div>
+          <h3 class="text-base font-bold text-white">Peta Rotasi &amp; Aliran Dana Sektor BEI</h3>
+          <p class="text-[11px] text-slate-400 mt-0.5">Peringkat kekuatan sektoral berdasarkan nilai transaksi harian, rasio akumulasi, dan skor aliran dana</p>
+        </div>
+        <button onclick="closeSectorModal()" class="text-slate-400 hover:text-white text-xl leading-none px-2">&times;</button>
+      </div>
+
+      <!-- Ringkasan 3 Metrik Utama Sektor -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 shrink-0 text-xs">
+        <div class="p-3 rounded-xl glass-subcard border border-white/10">
+          <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Sektor Terkuat Hari Ini</div>
+          <div id="modalTopSectorName" class="text-sm font-extrabold text-sky-300 mt-0.5">-</div>
+        </div>
+        <div class="p-3 rounded-xl glass-subcard border border-white/10">
+          <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Sektor Fase Akumulasi</div>
+          <div id="modalAccumSectorCount" class="text-sm font-extrabold text-emerald-400 font-mono mt-0.5">-</div>
+        </div>
+        <div class="p-3 rounded-xl glass-subcard border border-white/10">
+          <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Total Transaksi Sektor</div>
+          <div id="modalTotalSectorTurnover" class="text-sm font-extrabold text-white font-mono mt-0.5">-</div>
+        </div>
+      </div>
+
+      <!-- Daftar 11 Sektor BEI -->
+      <div class="overflow-y-auto flex-1 pr-1">
+        <div id="modalSectorListContainer" class="space-y-2"></div>
+      </div>
+
+      <div class="pt-2 border-t border-white/[0.08] flex items-center justify-between text-[11px] text-slate-400 shrink-0">
+        <span>Klik salah satu sektor untuk menyaring saham di Tabel Screener</span>
+        <button
+          type="button"
+          onclick="closeSectorModal()"
+          class="px-4 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white text-xs font-semibold transition cursor-pointer"
+        >
+          Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
        MODAL 8: REZIM PASAR IHSG & MARKET BREADTH
        ===================================================================== -->
   <div id="marketRegimeModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
     <div class="glass-panel rounded-2xl max-w-lg w-full p-6 border border-white/15 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
-          <span>🧭</span>
-          <span>Analisis Rezim Pasar IHSG (Market Breadth)</span>
+                    <span>Analisis Rezim Pasar IHSG (Market Breadth)</span>
         </h3>
         <button onclick="closeMarketRegimeModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
       </div>
@@ -2011,8 +2070,7 @@
       <!-- Allocation Guide -->
       <div class="p-4 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
         <div class="text-xs font-bold text-white flex items-center gap-1.5">
-          <span>💡</span>
-          <span>Panduan Alokasi Modal &amp; Taktik Trading</span>
+                    <span>Panduan Alokasi Modal &amp; Taktik Trading</span>
         </div>
         <div id="modalRegimeAlloc" class="text-xs font-semibold text-emerald-300 bg-emerald-500/10 p-2 rounded-lg border border-emerald-400/20">
           -
@@ -2042,8 +2100,7 @@
     <div class="glass-panel rounded-2xl max-w-md w-full p-6 border border-white/15 shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
-          <span>💼</span>
-          <span>Catat Beli Saham (Portofolio Riil)</span>
+                    <span>Catat Beli Saham (Portofolio Riil)</span>
         </h3>
         <button onclick="closePortfolioBuyModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
       </div>
@@ -2176,8 +2233,7 @@
     <div class="glass-panel rounded-2xl max-w-md w-full p-6 border border-white/15 shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
-          <span>💰</span>
-          <span>Jual Saham &amp; Realisasikan P/L</span>
+                    <span>Jual Saham &amp; Realisasikan P/L</span>
         </h3>
         <button onclick="closePortfolioSellModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
       </div>
@@ -2352,6 +2408,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=97.1"></script>
+  <script src="/static/app.js?v=97.2"></script>
 </body>
 </html>

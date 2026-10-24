@@ -1035,5 +1035,39 @@ html.light .theme-select-btn .theme-btn-sub {
   color: #64748b !important;
 }
 
-
+/* =====================================================================
+   SECTOR ROTATION & FILTER PILLS (CLEAN INSTITUTIONAL STYLE, NO ICONS)
+   ===================================================================== */
+.sector-pill {
+  background: rgba(12, 20, 36, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.16);
+  color: #cbd5e1;
+  transition: all 0.18s ease;
+}
+.sector-pill:hover {
+  background: rgba(17, 29, 53, 0.92);
+  border-color: rgba(56, 189, 248, 0.38);
+  color: #ffffff;
+}
+.sector-pill.active {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.28) 0%, rgba(2, 132, 199, 0.16) 100%);
+  border-color: #38bdf8;
+  color: #e0f2fe;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.22);
+}
+html.light .sector-pill {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+html.light .sector-pill:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+html.light .sector-pill.active {
+  background: #0284c7 !important;
+  border-color: #0369a1 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.2) !important;
+}
 

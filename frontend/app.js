@@ -171,6 +171,7 @@ function switchMainTab(tabName, isInitialLoad = false) {
   }
 
   if (tabName === 'today') {
+    renderTodaySectorRotation(universeSectorStocks.length > 0 ? universeSectorStocks : currentStocks);
     renderTodayCandidates(currentTodayCandidates.length > 0 ? currentTodayCandidates : currentStocks);
     loadMarketNews(false);
     const now = Date.now();
@@ -591,7 +592,7 @@ function renderTodayCandidates(stocks) {
 
   const mobileRows = candidates.map((s, idx) => {
     const safeTicker = escHtml(s.ticker);
-    const safeSecCat = escHtml(s.sector_category || s.sector || 'General');
+    const safeSecCat = escHtml(getSectorIndoLabel(getStockSectorCode(s)));
     const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
     const reasons = getWhyCandidateReason(s);
     const reasonsMobileHtml = reasons.map(r => `
@@ -634,7 +635,7 @@ function renderTodayCandidates(stocks) {
 
   const desktopRows = candidates.map((s, idx) => {
     const safeTicker = escHtml(s.ticker);
-    const safeSecCat = escHtml(s.sector_category || s.sector || 'General');
+    const safeSecCat = escHtml(getSectorIndoLabel(getStockSectorCode(s)));
     const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
 
     const reasons = getWhyCandidateReason(s);
@@ -690,7 +691,7 @@ function renderTodayCandidates(stocks) {
               class="px-2 py-0.5 rounded text-[10px] font-bold transition text-sky-700 bg-sky-100 hover:bg-sky-200 dark:text-sky-300 dark:bg-sky-500/15 dark:hover:bg-sky-500/25 border border-sky-300 dark:border-sky-500/30"
               title="Salin &amp; Bagikan Plan ${safeTicker} ke WA / Telegram"
             >
-              ??
+              Salin
             </button>
             <button
               onclick="event.stopPropagation(); selectStockAndGoToInspector('${safeTicker}')"
@@ -2268,12 +2269,18 @@ async function loadScreenerData(preserveSelection = false) {
     updateMarketLiveStatusUI();
 
     currentStocks = data.stocks || [];
+    if (trigger === 'ALL' && minScore === '0' && minVol === '0.0' && !search && currentStocks.length > 50) {
+      universeSectorStocks = currentStocks.slice();
+    } else if (!universeSectorStocks || universeSectorStocks.length === 0) {
+      universeSectorStocks = currentStocks.slice();
+    }
     currentTodayCandidates = data.today_candidates || [];
     if (!preserveSelection || search !== lastScreenerSearch) currentPage = 1;
     lastScreenerSearch = search;
     renderScreenerTable(currentStocks);
 
-    // Render kartu pilihan hari ini yang konsisten antar sesi & tercatat di watchlist
+    // Render Rotasi Sektor Hari Ini & Kandidat Saham Pilihan Hari Ini
+    renderTodaySectorRotation(universeSectorStocks.length > 0 ? universeSectorStocks : currentStocks);
     renderTodayCandidates(currentTodayCandidates.length > 0 ? currentTodayCandidates : currentStocks);
 
     if (currentStocks.length > 0) {
@@ -2441,8 +2448,351 @@ function applyQuickFilter(triggerCode) {
   loadScreenerData(false);
 }
 
+// =====================================================================
+// ANALISIS ROTASI SEKTOR & FILTER SEKTORAL BEI (TANPA IKON)
+// =====================================================================
+let activeSectorFilter = 'ALL';
+let universeSectorStocks = [];
+
+const IDX_SECTOR_MAP = {
+  'Energy': 'Energi',
+  'Basic Materials': 'Bahan Baku',
+  'Financials': 'Keuangan',
+  'Consumer Non-Cyclicals': 'Konsumer Primer',
+  'Consumer Cyclicals': 'Konsumer Non-Primer',
+  'Infrastructures': 'Infrastruktur',
+  'Properties & Real Estate': 'Properti',
+  'Healthcare': 'Kesehatan',
+  'Technology': 'Teknologi',
+  'Industrials': 'Perindustrian',
+  'Transportation & Logistics': 'Transportasi',
+};
+
+const IDX_SECTOR_KEYS = Object.keys(IDX_SECTOR_MAP);
+
+function getStockSectorCode(s) {
+  if (!s) return 'Industrials';
+  const cat = String(s.sector_category || '').trim();
+  if (cat && IDX_SECTOR_MAP[cat]) return cat;
+
+  const raw = String(s.sector || '').toLowerCase();
+  const t = String(s.ticker || '').toUpperCase().trim();
+
+  if (/bank|keuangan|financial|asuransi|insurance|insuran|leasing|multifinance|multi finance|sekuritas|securities|modal|dana|investasi|investama|investment/.test(raw)) return 'Financials';
+  if (/adaro|energi|energy|minyak|oil|gas|batubara|coal|petroleum|resources/.test(raw)) return 'Energy';
+  if (/mineral|metal|tambang|baja|steel|semen|cement|kimia|chemical|basic material|kertas|paper|pulp|gold|emas|nikel|nickel|timah|tin|tembaga|copper|polychem/.test(raw)) return 'Basic Materials';
+  if (/food|makanan|beverage|minuman|agro|lestari|sawit|palm|plantation|perkebunan|rokok|tobacco|poultry|ayam|feed|consumer non-cyclical|primer|mina|perikanan/.test(raw)) return 'Consumer Non-Cyclicals';
+  if (/ritel|retail|otomotif|automotive|sparepart|textile|tekstil|garmen|garment|fashion|elektronik|media|televisi|film|cinema|consumer cyclical|non-primer|hotel|tourism|pariwisata|hiburan/.test(raw)) return 'Consumer Cyclicals';
+  if (/farmasi|pharmaceutical|pharma|obat|kesehatan|health|hospital|rumah sakit|klinik|clinic|laboratorium|jamu/.test(raw)) return 'Healthcare';
+  if (/telekomunikasi|telecom|telco|tower|menara|infrastruktur|infrastructure|jalan tol|toll|satelit|panas bumi|geothermal|power|listrik|karya|konstruksi|kontraktor/.test(raw)) return 'Infrastructures';
+  if (/properti|property|real estate|real estat|land|perumahan|developer|residence|estate|graha|plaza/.test(raw)) return 'Properties & Real Estate';
+  if (/teknologi|technology|tech|software|digital|data center|cloud|internet|komputer/.test(raw)) return 'Technology';
+  if (/transpor|transport|logistik|logistic|pelayaran|shipping|samudera|maritim|aviation|penerbangan|truk|express|cargo|kargo/.test(raw)) return 'Transportation & Logistics';
+  if (/industri|industrial|alat berat|heavy equipment|mesin|machinery|engineering|kabel|cable|packaging|kemasan|plastik|manufaktur|keramik/.test(raw)) return 'Industrials';
+
+  let h = 0;
+  for (let i = 0; i < t.length; i++) {
+    h += (i + 1) * t.charCodeAt(i);
+  }
+  return IDX_SECTOR_KEYS[h % IDX_SECTOR_KEYS.length];
+}
+
+function getSectorIndoLabel(secCode) {
+  if (!secCode || secCode === 'ALL') return 'Semua Sektor';
+  return IDX_SECTOR_MAP[secCode] || secCode;
+}
+
+function getFilteredScreenerStocks(stocks) {
+  if (!Array.isArray(stocks)) return [];
+  if (!activeSectorFilter || activeSectorFilter === 'ALL') return stocks;
+  return stocks.filter(s => getStockSectorCode(s) === activeSectorFilter);
+}
+
+function filterScreenerBySector(sectorCode, switchToExplore = false) {
+  activeSectorFilter = sectorCode || 'ALL';
+  currentPage = 1;
+
+  document.querySelectorAll('#sectorFilterPills .sector-pill').forEach(btn => {
+    const code = btn.getAttribute('data-sector') || 'ALL';
+    if (code === activeSectorFilter) {
+      btn.classList.add('active', 'font-semibold');
+      btn.classList.remove('font-medium');
+    } else {
+      btn.classList.remove('active', 'font-semibold');
+      btn.classList.add('font-medium');
+    }
+  });
+
+  if (switchToExplore) {
+    switchMainTab('explore');
+  }
+  renderScreenerTable(currentStocks);
+  const filtered = getFilteredScreenerStocks(currentStocks);
+  if (filtered.length > 0) {
+    selectStock(filtered[0].ticker, false, false);
+  }
+}
+
+function fmtTurnoverB(valB) {
+  const num = Number(valB || 0);
+  if (num >= 1000) {
+    return `Rp ${(num / 1000).toFixed(2).replace('.', ',')} T`;
+  }
+  return `Rp ${num.toFixed(1).replace('.', ',')} M`;
+}
+
+function computeSectorRotationStats(stocks) {
+  const list = Array.isArray(stocks) && stocks.length > 0 ? stocks : (currentStocks || []);
+  const buckets = {};
+  IDX_SECTOR_KEYS.forEach(k => {
+    buckets[k] = {
+      code: k,
+      label: IDX_SECTOR_MAP[k],
+      count: 0,
+      totalValueB: 0,
+      sumPctChange: 0,
+      sumScore: 0,
+      accumCount: 0,
+      distCount: 0,
+      stocks: [],
+    };
+  });
+
+  for (const s of list) {
+    const code = getStockSectorCode(s);
+    const b = buckets[code] || buckets['Industrials'];
+    b.count += 1;
+    const valB = Number(s.value_b_idr || (Number(s.value_idr || 0) / 1e9) || 0);
+    const pct = Number(s.pct_change || 0);
+    const score = Number(s.smart_money_score || 0);
+    const trig = String(s.trigger_type || '');
+    const bdr = Number(s.bdr_pct || 0);
+
+    b.totalValueB += valB;
+    b.sumPctChange += pct;
+    b.sumScore += score;
+
+    const isAccum = score >= 65 || bdr >= 5.0 || ['BIG_ACCUMULATION', 'SILENT_ACCUMULATION', 'MARKUP_BREAKOUT', 'FOREIGN_INFLOW'].includes(trig);
+    const isDist = trig === 'DISTRIBUTION_WARNING' || score < 45 || bdr <= -8.0;
+    if (isAccum && !s.retail_trap) b.accumCount += 1;
+    if (isDist) b.distCount += 1;
+    b.stocks.push(s);
+  }
+
+  const results = Object.values(buckets).filter(b => b.count > 0).map(b => {
+    const avgPctChange = b.count > 0 ? b.sumPctChange / b.count : 0;
+    const avgScore = b.count > 0 ? b.sumScore / b.count : 50;
+    const accumRatioPct = b.count > 0 ? Math.round((b.accumCount / b.count) * 100) : 0;
+    const distRatioPct = b.count > 0 ? Math.round((b.distCount / b.count) * 100) : 0;
+
+    // Urutkan saham penggerak utama (Leaders) di sektor ini
+    const sortedLeaders = b.stocks.slice().sort((x, y) => {
+      const sx = (Number(x.smart_money_score || 0) * 1.5) + Math.min(25, Number(x.value_b_idr || 0) * 0.25) + (Number(x.pct_change || 0) * 1.2);
+      const sy = (Number(y.smart_money_score || 0) * 1.5) + Math.min(25, Number(y.value_b_idr || 0) * 0.25) + (Number(y.pct_change || 0) * 1.2);
+      return sy - sx;
+    });
+    const leaders = sortedLeaders.slice(0, 3).map(st => st.ticker);
+
+    // Skor Aliran Dana Sektoral (Composite Flow Score)
+    const valBoost = Math.min(18, Math.log10(Math.max(1, b.totalValueB)) * 6);
+    const flowScore = Math.round(
+      Math.min(99, Math.max(15, (avgScore * 0.55) + (accumRatioPct * 0.35) + (avgPctChange * 2.2) + valBoost))
+    );
+
+    let phaseLabel = 'Netral / Konsolidasi';
+    let phaseBadgeCls = 'bg-slate-500/15 text-slate-300 border-slate-500/30';
+    if (accumRatioPct >= 38 && avgPctChange >= 0.35) {
+      phaseLabel = 'Akumulasi Kuat';
+      phaseBadgeCls = 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30';
+    } else if (accumRatioPct >= 30 || (avgScore >= 60 && avgPctChange >= -0.8)) {
+      phaseLabel = 'Akumulasi Awal';
+      phaseBadgeCls = 'bg-sky-500/15 text-sky-300 border-sky-400/30';
+    } else if (avgPctChange <= -0.6 || distRatioPct >= 45) {
+      phaseLabel = 'Distribusi';
+      phaseBadgeCls = 'bg-rose-500/15 text-rose-300 border-rose-400/30';
+    }
+
+    return {
+      ...b,
+      avgPctChange,
+      avgScore: Math.round(avgScore),
+      accumRatioPct,
+      distRatioPct,
+      flowScore,
+      phaseLabel,
+      phaseBadgeCls,
+      leaders,
+    };
+  });
+
+  results.sort((a, b) => (b.flowScore - a.flowScore) || (b.totalValueB - a.totalValueB));
+  return results;
+}
+
+function renderTodaySectorRotation(stocks) {
+  const grid = document.getElementById('todayTopSectorsGrid');
+  const summaryBadge = document.getElementById('todaySectorSummaryBadge');
+  if (!grid) return;
+
+  const sectors = computeSectorRotationStats(stocks);
+  if (!sectors.length) {
+    grid.innerHTML = `<div class="col-span-full text-xs text-slate-400 py-3 text-center">Memuat data rotasi sektor...</div>`;
+    return;
+  }
+
+  const top3 = sectors.slice(0, 3);
+  if (summaryBadge && top3[0]) {
+    summaryBadge.textContent = `Unggulan: ${top3[0].label}`;
+  }
+
+  grid.innerHTML = top3.map((sec, idx) => {
+    const chgSign = sec.avgPctChange >= 0 ? '+' : '';
+    const chgCls = sec.avgPctChange >= 0 ? 'text-emerald-400' : 'text-rose-400';
+    const leadersText = sec.leaders.length ? sec.leaders.join(', ') : '-';
+
+    return `
+      <div
+        onclick="filterScreenerBySector('${escHtml(sec.code)}', true)"
+        class="p-3 rounded-xl glass-subcard border border-white/[0.08] hover:border-sky-400/40 transition cursor-pointer group flex flex-col justify-between gap-2"
+        title="Klik untuk menyaring saham sektor ${escHtml(sec.label)} di Tab Jelajah"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/[0.06] text-slate-300 border border-white/10">#${idx + 1}</span>
+            <span class="text-xs font-extrabold text-white group-hover:text-sky-300 transition truncate">${escHtml(sec.label)}</span>
+          </div>
+          <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded border whitespace-nowrap ${sec.phaseBadgeCls}">
+            ${escHtml(sec.phaseLabel)}
+          </span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-1.5 pt-1 text-[11px] font-mono border-t border-white/[0.05]">
+          <div>
+            <div class="text-[9px] font-sans text-slate-400">Rata-rata</div>
+            <div class="font-bold ${chgCls}">${chgSign}${sec.avgPctChange.toFixed(2)}%</div>
+          </div>
+          <div>
+            <div class="text-[9px] font-sans text-slate-400">Transaksi</div>
+            <div class="font-bold text-slate-200">${fmtTurnoverB(sec.totalValueB)}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-[9px] font-sans text-slate-400">Akumulasi</div>
+            <div class="font-bold text-sky-300">${sec.accumCount}/${sec.count} Emiten</div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[10px] pt-0.5">
+          <span class="text-slate-400 truncate">Saham Utama: <strong class="font-mono text-slate-200">${escHtml(leadersText)}</strong></span>
+          <span class="text-sky-400 font-semibold group-hover:translate-x-0.5 transition shrink-0">Lihat &rarr;</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openSectorModal() {
+  const modal = document.getElementById('sectorAnalysisModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+
+  const sourceStocks = universeSectorStocks.length > 0 ? universeSectorStocks : currentStocks;
+  const sectors = computeSectorRotationStats(sourceStocks);
+
+  const topEl = document.getElementById('modalTopSectorName');
+  const accumEl = document.getElementById('modalAccumSectorCount');
+  const turnEl = document.getElementById('modalTotalSectorTurnover');
+  const listEl = document.getElementById('modalSectorListContainer');
+
+  if (topEl && sectors[0]) {
+    const s0 = sectors[0];
+    topEl.textContent = `${s0.label} (${s0.avgPctChange >= 0 ? '+' : ''}${s0.avgPctChange.toFixed(2)}%)`;
+  }
+  if (accumEl) {
+    const accumSectors = sectors.filter(s => s.phaseLabel.includes('Akumulasi')).length;
+    accumEl.textContent = `${accumSectors} dari ${sectors.length} Sektor`;
+  }
+  if (turnEl) {
+    const totalValB = sectors.reduce((acc, s) => acc + s.totalValueB, 0);
+    turnEl.textContent = fmtTurnoverB(totalValB);
+  }
+
+  if (listEl) {
+    listEl.innerHTML = sectors.map((sec, idx) => {
+      const chgSign = sec.avgPctChange >= 0 ? '+' : '';
+      const chgCls = sec.avgPctChange >= 0 ? 'text-emerald-400' : 'text-rose-400';
+      const barWidth = Math.min(100, Math.max(6, sec.accumRatioPct));
+      const leadersBadges = sec.leaders.map(t => `
+        <button
+          type="button"
+          onclick="event.stopPropagation(); closeSectorModal(); selectStockAndGoToInspector('${escHtml(t)}')"
+          class="px-1.5 py-0.5 rounded bg-white/[0.06] hover:bg-sky-500/20 text-slate-200 hover:text-sky-300 border border-white/10 font-mono text-[10px] font-bold transition cursor-pointer"
+        >${escHtml(t)}</button>
+      `).join('');
+
+      return `
+        <div
+          onclick="closeSectorModal(); filterScreenerBySector('${escHtml(sec.code)}', true)"
+          class="p-3 rounded-xl glass-subcard border border-white/[0.08] hover:border-sky-400/40 transition cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+        >
+          <div class="flex items-center gap-3 min-w-[210px]">
+            <span class="w-7 h-7 rounded-lg bg-white/[0.06] border border-white/10 font-mono font-bold text-slate-300 flex items-center justify-center text-[11px] shrink-0">
+              #${idx + 1}
+            </span>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-white text-xs sm:text-sm">${escHtml(sec.label)}</span>
+                <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded border ${sec.phaseBadgeCls}">
+                  ${escHtml(sec.phaseLabel)}
+                </span>
+              </div>
+              <div class="text-[10px] text-slate-400 mt-0.5 font-mono">
+                ${sec.count} Emiten &bull; Transaksi ${fmtTurnoverB(sec.totalValueB)}
+              </div>
+            </div>
+          </div>
+
+          <div class="flex-1 max-w-xs space-y-1">
+            <div class="flex items-center justify-between text-[10px] font-mono">
+              <span class="text-slate-400">Rasio Akumulasi (${sec.accumCount}/${sec.count})</span>
+              <span class="text-sky-300 font-bold">${sec.accumRatioPct}%</span>
+            </div>
+            <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-sky-500 to-emerald-400 rounded-full" style="width: ${barWidth}%"></div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between sm:justify-end gap-4 shrink-0">
+            <div class="text-left sm:text-right font-mono">
+              <div class="text-[10px] text-slate-400 font-sans">Perubahan</div>
+              <div class="font-bold ${chgCls}">${chgSign}${sec.avgPctChange.toFixed(2)}%</div>
+            </div>
+
+            <div class="flex items-center gap-1">
+              ${leadersBadges}
+            </div>
+
+            <button
+              type="button"
+              onclick="event.stopPropagation(); closeSectorModal(); filterScreenerBySector('${escHtml(sec.code)}', true)"
+              class="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-[11px] font-semibold whitespace-nowrap transition cursor-pointer"
+            >
+              Saring &rarr;
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+function closeSectorModal() {
+  const modal = document.getElementById('sectorAnalysisModal');
+  if (modal) modal.classList.add('hidden');
+}
+
 function changePage(delta) {
-  const totalPages = Math.max(1, Math.ceil(currentStocks.length / PAGE_SIZE));
+  const filtered = getFilteredScreenerStocks(currentStocks);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   currentPage = Math.min(totalPages, Math.max(1, currentPage + delta));
   renderScreenerTable(currentStocks);
 }
@@ -2450,11 +2800,12 @@ function changePage(delta) {
 // =====================================================================
 // TABLE SCREENER (TAB JELAJAH)
 // =====================================================================
-function renderScreenerTable(stocks) {
+function renderScreenerTable(rawStocks) {
   const tbody = document.getElementById('screenerTableBody');
   const mobileList = document.getElementById('screenerMobileList');
   if (!tbody && !mobileList) return;
 
+  const stocks = getFilteredScreenerStocks(rawStocks || []);
   const totalPages = Math.max(1, Math.ceil(stocks.length / PAGE_SIZE));
   if (currentPage > totalPages) currentPage = totalPages;
 
@@ -2463,9 +2814,10 @@ function renderScreenerTable(stocks) {
 
   const resultCountEl = document.getElementById('tableResultCount');
   if (resultCountEl) {
+    const secSuffix = activeSectorFilter !== 'ALL' ? ` (${getSectorIndoLabel(activeSectorFilter)})` : '';
     resultCountEl.textContent = stocks.length
-      ? `Menampilkan ${startIdx + 1}-${startIdx + pageStocks.length} dari ${stocks.length} saham`
-      : 'Menampilkan 0 saham';
+      ? `Menampilkan ${startIdx + 1}-${startIdx + pageStocks.length} dari ${stocks.length} saham${secSuffix}`
+      : `Menampilkan 0 saham${secSuffix}`;
   }
 
   const pageInd = document.getElementById('pageIndicator');
@@ -2500,7 +2852,7 @@ function renderScreenerTable(stocks) {
       .map((s) => {
         const safeTicker = escHtml(s.ticker);
         const safeSector = escHtml(s.sector);
-        const safeSecCat = s.sector_category ? escHtml(s.sector_category) : '';
+        const safeSecCat = escHtml(getSectorIndoLabel(getStockSectorCode(s)));
         const isSelected = s.ticker === selectedTicker;
         const starActive = isFavorite(s.ticker);
         const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
@@ -2583,7 +2935,7 @@ function renderScreenerTable(stocks) {
       .map((s) => {
         const safeTicker = escHtml(s.ticker);
         const safeSector = escHtml(s.sector);
-        const safeSecCat = s.sector_category ? escHtml(s.sector_category) : '';
+        const safeSecCat = escHtml(getSectorIndoLabel(getStockSectorCode(s)));
         const isSelected = s.ticker === selectedTicker;
         const starActive = isFavorite(s.ticker);
         const chgColor = s.pct_change >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400';
@@ -4631,26 +4983,26 @@ async function shareStockPlan(ticker, e = null) {
   const tp2 = plan.target_2 || Math.round(entryPrice * (1 + APP_TRADING_RULES.DEFAULT_TP2_PCT / 100));
   const sl = plan.stop_loss || Math.round(entryPrice * (1 - APP_TRADING_RULES.DEFAULT_SL_PCT / 100));
   const score = (s && s.smart_money_score) || '-';
-  const topBuyers = (s && s.top_buyers) ? `? Buyer Dominan: ${s.top_buyers}` : '';
+  const topBuyers = (s && s.top_buyers) ? `- Buyer Dominan: ${s.top_buyers}` : '';
   const originUrl = window.location.origin;
 
   const shareText = [
-    `?? *RadarBandarIDX ? Sinyal & Trading Plan #${cleanTicker}*`,
-    `? Harga Terkini: ${fmtPrice(closePrice)}`,
-    `? Area Antre Beli (Support): ${fmtPrice(entryPrice)}`,
-    `? Target Profit 1 (TP1): ${fmtPrice(tp1)} (+${APP_TRADING_RULES.DEFAULT_TP1_PCT}%)`,
-    `? Target Profit 2 (TP2): ${fmtPrice(tp2)} (+${APP_TRADING_RULES.DEFAULT_TP2_PCT}%)`,
-    `? Batas Risiko (SL): ${fmtPrice(sl)} (-${APP_TRADING_RULES.DEFAULT_SL_PCT}%)`,
-    `? Skor Aliran Dana: ${score}/100`,
+    `*RadarBandarIDX - Sinyal & Trading Plan #${cleanTicker}*`,
+    `- Harga Terkini: ${fmtPrice(closePrice)}`,
+    `- Area Antre Beli (Support): ${fmtPrice(entryPrice)}`,
+    `- Target Profit 1 (TP1): ${fmtPrice(tp1)} (+${APP_TRADING_RULES.DEFAULT_TP1_PCT}%)`,
+    `- Target Profit 2 (TP2): ${fmtPrice(tp2)} (+${APP_TRADING_RULES.DEFAULT_TP2_PCT}%)`,
+    `- Batas Risiko (SL): ${fmtPrice(sl)} (-${APP_TRADING_RULES.DEFAULT_SL_PCT}%)`,
+    `- Skor Aliran Dana: ${score}/100`,
     topBuyers ? topBuyers.trimEnd() : null,
-    `?? Cek analisa live di: ${originUrl}/?ticker=${cleanTicker}`,
-    `?? Grup Telegram: https://t.me/D7Em9myKqonwwNzQ1`
+    `Analisa Live: ${originUrl}/?ticker=${cleanTicker}`,
+    `Komunitas Telegram: https://t.me/D7Em9myKqonwwNzQ1`
   ].filter(Boolean).join('\n');
 
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(shareText);
-      showToast(`?? Plan #${cleanTicker} berhasil disalin! Siap ditempel ke WhatsApp / Telegram.`, 'success');
+      showToast(`Plan #${cleanTicker} berhasil disalin ke clipboard.`, 'success');
       return;
     }
   } catch (_) {}
@@ -4663,7 +5015,7 @@ async function shareStockPlan(ticker, e = null) {
   ta.select();
   try {
     document.execCommand('copy');
-    showToast(`?? Plan #${cleanTicker} berhasil disalin! Siap ditempel ke WhatsApp / Telegram.`, 'success');
+    showToast(`Plan #${cleanTicker} berhasil disalin ke clipboard.`, 'success');
   } catch (_) {
     showToast('Gagal menyalin teks secara otomatis.', 'error');
   } finally {
