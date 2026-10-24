@@ -5098,13 +5098,13 @@ if ('serviceWorker' in navigator) {
     if ('caches' in window) {
       caches.keys().then((keys) => {
         keys.forEach((k) => {
-          if (k !== 'radarbandar-idx-v98.8') caches.delete(k).catch(() => {});
+          if (k !== 'radarbandar-idx-v98.9') caches.delete(k).catch(() => {});
         });
       }).catch(() => {});
     }
     const staleCard = document.getElementById('stockOwnershipCard');
     if (staleCard) staleCard.remove();
-    navigator.serviceWorker.register('/sw.js?v=98.8').then((reg) => {
+    navigator.serviceWorker.register('/sw.js?v=98.9').then((reg) => {
       try { reg.update(); } catch (_) {}
       reg.update().catch(() => {});
     }).catch((err) => {
@@ -6420,7 +6420,9 @@ function initCyberDroneInteractive() {
     ];
     tipIdx = (tipIdx + 1) % tips.length;
     bubbleTxt.textContent = tips[tipIdx];
-    bubble.classList.remove('hidden');
+    if (window.innerWidth >= 640) {
+      bubble.classList.remove('hidden');
+    }
   }, 24000);
 }
 
