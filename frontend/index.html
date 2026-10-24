@@ -18,7 +18,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png?v=96.6" />
   <link rel="icon" type="image/png" sizes="512x512" href="/static/icons/icon-512.png?v=96.6" />
   <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192.png?v=96.6" />
-  <link rel="stylesheet" href="/static/styles.css?v=98.7" />
+  <link rel="stylesheet" href="/static/styles.css?v=98.8" />
   <style>
     .glass-panel {
       background: rgba(12, 20, 36, 0.72);
@@ -1108,51 +1108,42 @@
             <div id="snc-news" class="space-y-1"></div>
           </div>
 
-          <!-- 2c. 5% OWNERSHIP UPDATE — RADAR AKSI OWNER (KSEI / IDX) -->
-          <div id="stockOwnerActionCard" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-white/[0.09] space-y-2.5 shadow-sm dark:shadow-none">
-            <!-- Header bergaya 5% OWNERSHIP UPDATE (Shareholder Disclosure / IDX) -->
-            <div class="flex items-start justify-between gap-2 pb-2 border-b border-amber-500/25 dark:border-amber-400/20">
-              <div class="flex items-center gap-2.5">
-                <span class="text-2xl font-black font-mono leading-none text-amber-600 dark:text-amber-300 tracking-tight">5%</span>
-                <div class="h-6 w-px bg-slate-300 dark:bg-white/15"></div>
+          <!-- 2c. 5% OWNERSHIP UPDATE — KHUSUS EMITEN TERPILIH (EFISIEN TEMPAT) -->
+          <div id="stockOwnerActionCard" class="p-3 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-white/[0.09] space-y-2 shadow-sm dark:shadow-none">
+            <!-- Header Ringkas 5% OWNERSHIP UPDATE -->
+            <div class="flex items-center justify-between gap-2 pb-1.5 border-b border-amber-500/20 dark:border-amber-400/20">
+              <div class="flex items-center gap-2">
+                <span class="text-xl font-black font-mono leading-none text-amber-600 dark:text-amber-300 tracking-tight">5%</span>
+                <div class="h-5 w-px bg-slate-300 dark:bg-white/15"></div>
                 <div>
-                  <div class="text-xs font-extrabold tracking-wide text-slate-900 dark:text-white leading-tight">OWNERSHIP <span class="font-semibold text-amber-600 dark:text-amber-300">UPDATE</span></div>
+                  <div class="text-[11px] font-extrabold tracking-wide text-slate-900 dark:text-white leading-tight">OWNERSHIP <span class="font-semibold text-amber-600 dark:text-amber-300">UPDATE</span> · <span id="soaHeaderTicker" class="font-mono text-emerald-600 dark:text-emerald-400">-</span></div>
                   <div class="text-[9px] font-bold tracking-wider uppercase text-slate-500 dark:text-slate-400">SHAREHOLDER DISCLOSURE / IDX (KSEI)</div>
                 </div>
               </div>
-              <div class="flex flex-col items-end gap-1 shrink-0">
-                <span id="soaSignalBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 whitespace-nowrap bg-slate-500/15 text-slate-400 border-slate-400/30">Memuat...</span>
-                <div class="flex items-center gap-1 text-[9px]">
-                  <button type="button" id="soaTabMajor" onclick="setInspectorOwnerMode('major')" class="px-1.5 py-0.5 rounded font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/30 transition">5% Update</button>
-                  <button type="button" id="soaTabTicker" onclick="setInspectorOwnerMode('ticker')" class="px-1.5 py-0.5 rounded font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white border border-transparent transition">Saham Ini</button>
-                </div>
-              </div>
+              <span id="soaSignalBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 whitespace-nowrap bg-slate-500/15 text-slate-400 border-slate-400/30">Memuat...</span>
             </div>
 
-            <!-- Bar Ringkasan: PERUBAHAN | EMITEN | LEMBAR SAHAM / PERSENTASE -->
-            <div class="flex items-center justify-between text-[9px] font-extrabold tracking-wider uppercase text-slate-500 dark:text-slate-300 px-0.5">
-              <span id="soaStatChanges">- PERUBAHAN</span>
-              <span id="soaStatEmiten">- EMITEN</span>
+            <!-- Bar Ringkasan (Hanya tampil bila saham ini punya laporan perubahan) -->
+            <div id="soaStatsBar" class="hidden flex items-center justify-between text-[9px] font-extrabold tracking-wider uppercase text-slate-500 dark:text-slate-300 px-0.5">
+              <span id="soaStatChanges">0 PERUBAHAN</span>
               <span class="text-slate-400 dark:text-slate-400">LEMBAR SAHAM / PERSENTASE</span>
             </div>
 
-            <!-- Info Kontekstual Emiten Terpilih -->
-            <p id="soaSummary" class="text-[11px] text-slate-600 dark:text-slate-300 leading-snug bg-white/80 dark:bg-slate-950/40 px-2.5 py-1.5 rounded-lg border border-slate-200/80 dark:border-white/[0.05]"></p>
+            <!-- Ringkasan Status Emiten Terpilih -->
+            <p id="soaSummary" class="text-[11px] text-slate-600 dark:text-slate-300 leading-snug"></p>
 
-            <!-- Daftar Kartu SEBELUM -> SESUDAH -->
-            <div id="soaList" class="space-y-2"></div>
+            <!-- Daftar Kartu SEBELUM -> SESUDAH Khusus Saham Terpilih -->
+            <div id="soaList" class="hidden space-y-2"></div>
 
-            <!-- Footer Navigasi Halaman & Layar Penuh -->
-            <div class="pt-2 border-t border-slate-200 dark:border-white/[0.06] flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400">
-              <div class="flex items-center gap-1.5">
-                <button type="button" onclick="stepInspectorOwnerPage(-1)" class="px-2 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] hover:bg-slate-300 dark:hover:bg-white/[0.15] text-slate-700 dark:text-slate-200 font-bold transition">&lsaquo;</button>
-                <span id="soaPageLabel" class="font-mono font-bold text-[10px] text-slate-700 dark:text-slate-200">PAGE 01 / 01</span>
-                <button type="button" onclick="stepInspectorOwnerPage(1)" class="px-2 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] hover:bg-slate-300 dark:hover:bg-white/[0.15] text-slate-700 dark:text-slate-200 font-bold transition">&rsaquo;</button>
+            <!-- Footer Ringkas -->
+            <div class="pt-1.5 border-t border-slate-200/80 dark:border-white/[0.06] flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+              <div id="soaPagerWrap" class="hidden flex items-center gap-1.5">
+                <button type="button" onclick="stepInspectorOwnerPage(-1)" class="px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] hover:bg-slate-300 dark:hover:bg-white/[0.15] text-slate-700 dark:text-slate-200 font-bold transition">&lsaquo;</button>
+                <span id="soaPageLabel" class="font-mono font-bold text-[10px] text-slate-700 dark:text-slate-200">01/01</span>
+                <button type="button" onclick="stepInspectorOwnerPage(1)" class="px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] hover:bg-slate-300 dark:hover:bg-white/[0.15] text-slate-700 dark:text-slate-200 font-bold transition">&rsaquo;</button>
               </div>
-              <div class="flex items-center gap-2">
-                <span class="hidden sm:inline">Sumber: IDX/KSEI (<span id="soaUpdated" class="font-mono">-</span>)</span>
-                <button type="button" onclick="switchMainTab('owner')" class="text-amber-600 dark:text-amber-300 font-bold hover:underline">Layar Penuh &nearr;</button>
-              </div>
+              <span class="text-[9px] text-slate-400">KSEI: <span id="soaUpdated" class="font-mono">-</span></span>
+              <button type="button" onclick="switchMainTab('owner')" class="text-amber-600 dark:text-amber-300 font-bold hover:underline">Semua Emiten &nearr;</button>
             </div>
           </div>
 
@@ -2716,6 +2707,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=98.7"></script>
+  <script src="/static/app.js?v=98.8"></script>
 </body>
 </html>

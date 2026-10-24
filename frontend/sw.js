@@ -1,12 +1,12 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'radarbandar-idx-v98.7';
+const CACHE_NAME = 'radarbandar-idx-v98.8';
 const ASSETS_TO_CACHE = [
-  '/static/styles.css?v=98.7',
-  '/static/app.js?v=98.7',
+  '/static/styles.css?v=98.8',
+  '/static/app.js?v=98.8',
   '/manifest.json',
   '/static/icons/icon.svg',
-  '/static/icons/icon-192.png?v=98.7',
-  '/static/icons/icon-512.png?v=98.7'
+  '/static/icons/icon-192.png?v=98.8',
+  '/static/icons/icon-512.png?v=98.8'
 ];
 
 self.addEventListener('install', (event) => {
@@ -49,8 +49,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: '/static/icons/icon-192.png?v=98.7',
-      badge: '/static/icons/icon-192.png?v=98.7',
+      icon: '/static/icons/icon-192.png?v=98.8',
+      badge: '/static/icons/icon-192.png?v=98.8',
       data: { url: data.url || '/' },
       vibrate: [200, 100, 200],
       tag: data.tag || ('smartflow-' + Date.now()),

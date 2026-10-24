@@ -5098,13 +5098,13 @@ if ('serviceWorker' in navigator) {
     if ('caches' in window) {
       caches.keys().then((keys) => {
         keys.forEach((k) => {
-          if (k !== 'radarbandar-idx-v98.7') caches.delete(k).catch(() => {});
+          if (k !== 'radarbandar-idx-v98.8') caches.delete(k).catch(() => {});
         });
       }).catch(() => {});
     }
     const staleCard = document.getElementById('stockOwnershipCard');
     if (staleCard) staleCard.remove();
-    navigator.serviceWorker.register('/sw.js?v=98.7').then((reg) => {
+    navigator.serviceWorker.register('/sw.js?v=98.8').then((reg) => {
       try { reg.update(); } catch (_) {}
       reg.update().catch(() => {});
     }).catch((err) => {
@@ -6614,12 +6614,6 @@ function renderOwnerRadarList() {
   listEl.innerHTML = rows.map(it => renderOwnerActionCard(it, false, selectedTicker)).join('');
 }
 
-function setInspectorOwnerMode(mode) {
-  inspectorOwnerState.mode = mode === 'ticker' ? 'ticker' : 'major';
-  inspectorOwnerState.page = 1;
-  renderStockOwnerActions(inspectorOwnerState.lastTicker || selectedTicker, inspectorOwnerState.lastDetail);
-}
-
 function stepInspectorOwnerPage(delta) {
   inspectorOwnerState.page = Math.max(1, (inspectorOwnerState.page || 1) + Number(delta || 0));
   renderStockOwnerActions(inspectorOwnerState.lastTicker || selectedTicker, inspectorOwnerState.lastDetail);
@@ -6632,13 +6626,15 @@ function renderStockOwnerActions(ticker, detailData = null) {
   const badgeEl = document.getElementById('soaSignalBadge');
   const sumEl = document.getElementById('soaSummary');
   const updEl = document.getElementById('soaUpdated');
+  const headerTkEl = document.getElementById('soaHeaderTicker');
+  const statsBarEl = document.getElementById('soaStatsBar');
   const statChangesEl = document.getElementById('soaStatChanges');
-  const statEmitenEl = document.getElementById('soaStatEmiten');
+  const pagerWrapEl = document.getElementById('soaPagerWrap');
   const pageLabelEl = document.getElementById('soaPageLabel');
-  const tabMajorBtn = document.getElementById('soaTabMajor');
-  const tabTickerBtn = document.getElementById('soaTabTicker');
 
   const tkUp = String(ticker || selectedTicker || '').toUpperCase();
+  if (headerTkEl) headerTkEl.textContent = tkUp ? `#${tkUp}` : '-';
+
   if (tkUp && tkUp !== inspectorOwnerState.lastTicker) {
     inspectorOwnerState.lastTicker = tkUp;
     inspectorOwnerState.page = 1;
@@ -6655,87 +6651,66 @@ function renderStockOwnerActions(ticker, detailData = null) {
     badgeEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 whitespace-nowrap ${cls}`;
   };
 
-  if (tabMajorBtn && tabTickerBtn) {
-    const isMajor = inspectorOwnerState.mode !== 'ticker';
-    tabMajorBtn.className = isMajor
-      ? 'px-1.5 py-0.5 rounded font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/30 transition'
-      : 'px-1.5 py-0.5 rounded font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white border border-transparent transition';
-    tabTickerBtn.className = !isMajor
-      ? 'px-1.5 py-0.5 rounded font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/30 transition'
-      : 'px-1.5 py-0.5 rounded font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white border border-transparent transition';
-    tabTickerBtn.textContent = tkUp ? `Khusus ${tkUp}` : 'Saham Ini';
-  }
-
   if (!data) {
-    setBadge('Memuat KSEI...', 'bg-slate-500/15 text-slate-400 border-slate-400/30');
-    if (sumEl) sumEl.textContent = 'Memuat laporan perubahan kepemilikan saham (5% Ownership Update KSEI/IDX)...';
+    setBadge('Memuat...', 'bg-slate-500/15 text-slate-400 border-slate-400/30');
+    if (sumEl) sumEl.textContent = `Memeriksa laporan kepemilikan #${tkUp}...`;
+    if (statsBarEl) statsBarEl.classList.add('hidden');
+    if (listEl) { listEl.classList.add('hidden'); listEl.innerHTML = ''; }
+    if (pagerWrapEl) pagerWrapEl.classList.add('hidden');
     return;
   }
 
+  // Hanya tampilkan laporan milik saham yang sedang dicari/dipilih (efisiensi tempat di Jelajah)
+  const tickerItems = (Array.isArray(data.items) ? data.items : []).filter(
+    it => String(it.ticker || '').toUpperCase() === tkUp
+  );
+
   const sig = data.signal;
-  if (sig === 'ACCUMULATION') setBadge(`${tkUp}: Akumulasi Owner`, 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-400/30');
-  else if (sig === 'DISTRIBUTION') setBadge(`${tkUp}: Distribusi Owner`, 'bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-400/30');
-  else if (sig === 'MIXED') setBadge(`${tkUp}: Aksi Campuran`, 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/30');
-  else setBadge('5% Ownership Feed Aktif', 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/30');
+  if (sig === 'ACCUMULATION') setBadge('Akumulasi Owner', 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-400/30');
+  else if (sig === 'DISTRIBUTION') setBadge('Distribusi Owner', 'bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-400/30');
+  else if (sig === 'MIXED') setBadge('Aksi Campuran', 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/30');
+  else if (tickerItems.length > 0) setBadge(`${tickerItems.length} Laporan`, 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/30');
+  else setBadge('Tidak Ada Aksi', 'bg-slate-500/15 text-slate-500 dark:text-slate-400 border-slate-400/30');
 
-  const tickerItems = Array.isArray(data.items) ? data.items : [];
-  const majorItems = Array.isArray(data.latest_major_items) && data.latest_major_items.length
-    ? data.latest_major_items
-    : (ownerRadarState.items || []);
+  if (updEl) updEl.textContent = data.updated_at ? data.updated_at.slice(0, 16) : '-';
 
-  // Gabungkan: jika mode 'major', taruh laporan emiten terpilih (jika ada) di paling atas lalu diikuti 5% Ownership Update terkini
-  let combined = [];
-  if (inspectorOwnerState.mode === 'ticker') {
-    combined = tickerItems;
-  } else {
-    const seenNo = new Set();
-    for (const it of [...tickerItems, ...majorItems]) {
-      const k = it.announcement_no || `${it.ticker}-${it.holder}-${it.published}`;
-      if (seenNo.has(k)) continue;
-      seenNo.add(k);
-      combined.push(it);
+  // Jika saham terpilih tidak memiliki laporan perubahan kepemilikan: tampilkan super ringkas (hemat ruang)
+  if (!tickerItems.length) {
+    if (statsBarEl) statsBarEl.classList.add('hidden');
+    if (listEl) { listEl.classList.add('hidden'); listEl.innerHTML = ''; }
+    if (pagerWrapEl) pagerWrapEl.classList.add('hidden');
+    if (sumEl) {
+      sumEl.innerHTML = `Belum ada laporan pembelian/pelepasan kepemilikan (&ge;5% / Direksi / Komisaris) untuk <strong class="text-slate-900 dark:text-white">#${escHtml(tkUp)}</strong> pada periode ini.`;
     }
+    return;
   }
 
-  const totalChanges = inspectorOwnerState.mode === 'ticker'
-    ? combined.length
-    : (data.major_changes_count || combined.length);
-  const totalEmiten = inspectorOwnerState.mode === 'ticker'
-    ? (combined.length ? 1 : 0)
-    : (data.major_emiten_count || new Set(combined.map(x => x.ticker)).size);
-
-  if (statChangesEl) statChangesEl.textContent = `${totalChanges} PERUBAHAN`;
-  if (statEmitenEl) statEmitenEl.textContent = `${totalEmiten} EMITEN`;
+  // Jika saham terpilih memiliki laporan perubahan kepemilikan: tampilkan kartu khusus saham ini
+  if (statsBarEl) statsBarEl.classList.remove('hidden');
+  if (statChangesEl) statChangesEl.textContent = `${tickerItems.length} PERUBAHAN SAHAM #${tkUp}`;
 
   if (sumEl) {
-    if (data.reports > 0) {
-      const net = Number(data.net_shares) || 0;
-      sumEl.innerHTML = `<span class="font-bold text-slate-900 dark:text-white">#${escHtml(tkUp)}</span> (${data.days}H terakhir): <strong>${data.reports}</strong> laporan KSEI · Net <strong class="${net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">${net >= 0 ? '+' : '−'}${fmtShares(net)} lembar</strong>`;
-    } else {
-      sumEl.innerHTML = `<span class="font-bold text-slate-900 dark:text-white">#${escHtml(tkUp)}</span> belum memiliki perubahan &ge;5% dalam ${data.days}H terakhir — menampilkan <strong>5% Ownership Update</strong> terbaru di BEI (klik kode saham untuk inspeksi):`;
-    }
+    const net = Number(data.net_shares) || tickerItems.reduce((acc, r) => acc + (Number(r.delta_shares) || 0), 0);
+    sumEl.innerHTML = `Terdapat <strong>${tickerItems.length}</strong> laporan perubahan kepemilikan <strong class="text-slate-900 dark:text-white">#${escHtml(tkUp)}</strong> · Net <strong class="${net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">${net >= 0 ? '+' : '−'}${fmtShares(net)} lembar</strong>`;
   }
 
-  const pageSize = inspectorOwnerState.pageSize || 6;
-  const totalPages = Math.max(1, Math.ceil(combined.length / pageSize));
+  const pageSize = 3;
+  const totalPages = Math.max(1, Math.ceil(tickerItems.length / pageSize));
   if (inspectorOwnerState.page > totalPages) inspectorOwnerState.page = totalPages;
   const curPage = Math.max(1, inspectorOwnerState.page || 1);
-  const slice = combined.slice((curPage - 1) * pageSize, curPage * pageSize);
-
-  if (pageLabelEl) {
-    pageLabelEl.textContent = `PAGE ${String(curPage).padStart(2, '0')} / ${String(totalPages).padStart(2, '0')}`;
-  }
+  const slice = tickerItems.slice((curPage - 1) * pageSize, curPage * pageSize);
 
   if (listEl) {
-    if (!slice.length) {
-      listEl.innerHTML = `
-        <div class="p-3 rounded-xl border border-slate-200 dark:border-white/[0.08] text-center text-xs text-slate-500 dark:text-slate-400 space-y-1.5">
-          <div>Tidak ada laporan perubahan kepemilikan khusus <strong>#${escHtml(tkUp)}</strong> dalam ${data.days} hari terakhir.</div>
-          <button type="button" onclick="setInspectorOwnerMode('major')" class="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/30 text-[11px] font-bold">Tampilkan 5% Ownership Update Terkini</button>
-        </div>`;
+    listEl.classList.remove('hidden');
+    listEl.innerHTML = slice.map(it => renderOwnerActionCard(it, true, '')).join('');
+  }
+
+  if (pagerWrapEl) {
+    if (totalPages > 1) {
+      pagerWrapEl.classList.remove('hidden');
+      if (pageLabelEl) pageLabelEl.textContent = `PAGE ${String(curPage).padStart(2, '0')}/${String(totalPages).padStart(2, '0')}`;
     } else {
-      listEl.innerHTML = slice.map(it => renderOwnerActionCard(it, true, tkUp)).join('');
+      pagerWrapEl.classList.add('hidden');
     }
   }
-  if (updEl) updEl.textContent = data.updated_at ? data.updated_at.slice(0, 16) : '-';
 }
