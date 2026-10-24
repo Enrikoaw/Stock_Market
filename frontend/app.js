@@ -5098,13 +5098,13 @@ if ('serviceWorker' in navigator) {
     if ('caches' in window) {
       caches.keys().then((keys) => {
         keys.forEach((k) => {
-          if (k !== 'radarbandar-idx-v98.9') caches.delete(k).catch(() => {});
+          if (k !== 'radarbandar-idx-v99.0') caches.delete(k).catch(() => {});
         });
       }).catch(() => {});
     }
     const staleCard = document.getElementById('stockOwnershipCard');
     if (staleCard) staleCard.remove();
-    navigator.serviceWorker.register('/sw.js?v=98.9').then((reg) => {
+    navigator.serviceWorker.register('/sw.js?v=99.0').then((reg) => {
       try { reg.update(); } catch (_) {}
       reg.update().catch(() => {});
     }).catch((err) => {
@@ -6162,7 +6162,10 @@ function toggleAiChatPanel(forceState = null) {
   panel.classList.toggle('hidden', !isAiChatOpen);
 
   if (isAiChatOpen) {
-    if (bubble) bubble.classList.add('hidden');
+    if (bubble) {
+      bubble.classList.add('hidden');
+      bubble.style.display = 'none';
+    }
     setTimeout(() => {
       const inp = document.getElementById('aiChatInput');
       if (inp) inp.focus();
@@ -6172,8 +6175,13 @@ function toggleAiChatPanel(forceState = null) {
 
 function dismissAiDroneBubble() {
   isAiBubbleDismissed = true;
+  try { sessionStorage.setItem('smartflow_ai_bubble_dismissed', '1'); } catch (_) {}
   const bubble = document.getElementById('aiDroneBubble');
-  if (bubble) bubble.classList.add('hidden');
+  if (bubble) {
+    bubble.classList.add('hidden');
+    bubble.classList.remove('sm:block', 'block');
+    bubble.style.display = 'none';
+  }
 }
 
 function formatAiMarkdown(text) {
@@ -6307,6 +6315,18 @@ function initCyberDroneInteractive() {
   const container = document.getElementById('aiDroneContainer');
   const btn = document.getElementById('aiDroneBtn');
   const eyes = document.getElementById('aiDroneEyes');
+  const bubble = document.getElementById('aiDroneBubble');
+  try {
+    if (sessionStorage.getItem('smartflow_ai_bubble_dismissed') === '1' || window.innerWidth < 640) {
+      if (bubble) {
+        bubble.classList.add('hidden');
+        bubble.style.display = 'none';
+      }
+      if (sessionStorage.getItem('smartflow_ai_bubble_dismissed') === '1') {
+        isAiBubbleDismissed = true;
+      }
+    }
+  } catch (_) {}
   if (!container || !btn) return;
 
   // 1. Mata Robot Melirik Mengikuti Kursor Mouse / Sentuhan
@@ -6420,7 +6440,8 @@ function initCyberDroneInteractive() {
     ];
     tipIdx = (tipIdx + 1) % tips.length;
     bubbleTxt.textContent = tips[tipIdx];
-    if (window.innerWidth >= 640) {
+    if (!isAiBubbleDismissed && window.innerWidth >= 640) {
+      bubble.style.display = '';
       bubble.classList.remove('hidden');
     }
   }, 24000);
