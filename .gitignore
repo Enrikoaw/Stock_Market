@@ -17,4 +17,3 @@ data/screener_snapshot.json
 data/broker_sync_state.json
 data/push_subscriptions.json
 data/vapid_keys.json
-data/owner_disclosures.json

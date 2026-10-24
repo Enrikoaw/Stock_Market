@@ -77,9 +77,24 @@ def _clean_purpose(p: str) -> str:
 
 
 def _session():
-    from curl_cffi import requests as cffi_requests  # Wajib: IDX dilindungi Cloudflare
+    try:
+        from curl_cffi import requests as cffi_requests  # Wajib: IDX dilindungi Cloudflare
 
-    return cffi_requests.Session(impersonate="chrome")
+        return cffi_requests.Session(impersonate="chrome")
+    except Exception:
+        import requests as std_requests
+
+        s = std_requests.Session()
+        s.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                ),
+                "Accept": "application/json, text/plain, */*",
+            }
+        )
+        return s
 
 
 # --------------------------------------------------------------------------- storage
@@ -386,6 +401,7 @@ def get_ticker_owner_summary(ticker: str, days: int = 30) -> dict:
             signal = "DISTRIBUTION"
         else:
             signal = "MIXED"
+    major_feed = get_owner_actions(days=7, scope="major", side="ALL", limit=30)
     return {
         "ticker": ticker.upper(),
         "days": days,
@@ -395,6 +411,11 @@ def get_ticker_owner_summary(ticker: str, days: int = 30) -> dict:
         "sell_shares": sell_sh,
         "reports": len(recent),
         "items": items[:12],
+        "latest_major_items": major_feed.get("items", [])[:25],
+        "major_changes_count": major_feed.get("count", 0),
+        "major_emiten_count": major_feed.get("emiten_count", 0),
+        "major_buy_count": major_feed.get("buy_count", 0),
+        "major_sell_count": major_feed.get("sell_count", 0),
         "updated_at": data["updated_at"],
     }
 

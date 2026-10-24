@@ -20,13 +20,14 @@ fi
 
 echo "🚀 [4/4] Me-restart service background SmartFlow IDX..."
 sudo systemctl daemon-reload
-sudo systemctl restart smartflow
+sudo systemctl restart smartflow 2>/dev/null || true
+sudo systemctl restart radarbandar 2>/dev/null || true
 
 echo ""
 echo "=============================================================================="
 echo "🎉 PEMBARUAN SELESAI! SMARTFLOW IDX BERHASIL DIPERBARUI."
 echo "=============================================================================="
-sudo systemctl is-active --quiet smartflow && echo "✅ Service smartflow aktif & berjalan normal!" || echo "⚠️ Perhatian: Cek log dengan: sudo journalctl -u smartflow -f"
+(sudo systemctl is-active --quiet smartflow || sudo systemctl is-active --quiet radarbandar) && echo "✅ Service aktif & berjalan normal!" || echo "⚠️ Perhatian: Cek log dengan: sudo journalctl -u smartflow -f"
 echo ""
-echo "💡 Buka browser Anda dan tekan Ctrl + F5 (Hard Refresh) untuk memuat UI v67.0."
+echo "💡 Buka browser Anda dan tekan Ctrl + F5 (Hard Refresh) untuk memuat UI v98.7."
 echo "=============================================================================="

@@ -5095,7 +5095,16 @@ if ('serviceWorker' in navigator) {
     if ('Notification' in window && Notification.permission === 'granted') {
       setTimeout(() => { subscribeWebPush().catch(() => {}); }, 3000);
     }
-    navigator.serviceWorker.register('/sw.js?v=96.6').then((reg) => {
+    if ('caches' in window) {
+      caches.keys().then((keys) => {
+        keys.forEach((k) => {
+          if (k !== 'radarbandar-idx-v98.7') caches.delete(k).catch(() => {});
+        });
+      }).catch(() => {});
+    }
+    const staleCard = document.getElementById('stockOwnershipCard');
+    if (staleCard) staleCard.remove();
+    navigator.serviceWorker.register('/sw.js?v=98.7').then((reg) => {
       try { reg.update(); } catch (_) {}
       reg.update().catch(() => {});
     }).catch((err) => {
@@ -6426,7 +6435,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // RADAR AKSI OWNER — Laporan Perubahan Kepemilikan Saham (KSEI via IDX)
 // Data 100% dari dokumen resmi KSEI; tidak ada angka estimasi di sisi klien.
 // =====================================================================
-const ownerRadarState = { days: 3, scope: 'major', side: 'ALL', search: '', items: [], loadedAt: 0, loading: false };
+const ownerRadarState = { days: 7, scope: 'major', side: 'ALL', search: '', items: [], loadedAt: 0, loading: false };
+const inspectorOwnerState = { mode: 'major', page: 1, pageSize: 6, lastTicker: '', lastDetail: null };
 
 function fmtShares(n) {
   const v = Math.abs(Number(n) || 0);
@@ -6454,8 +6464,9 @@ function fmtOwnerDate(s) {
   return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function ownerRoleBadges(it) {
+function ownerRoleBadges(it, isSelectedTicker = false) {
   const tags = [];
+  if (isSelectedTicker) tags.push(['SAHAM INI', 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-400/40']);
   if (it.is_controller) tags.push(['Pengendali', 'bg-violet-500/15 text-violet-600 dark:text-violet-300 border-violet-400/30']);
   if (it.is_insider) {
     const pos = String(it.position || '').toLowerCase();
@@ -6470,61 +6481,79 @@ function ownerRoleBadges(it) {
     .join('');
 }
 
-function renderOwnerActionCard(it, compact = false) {
+function renderOwnerActionCard(it, compact = false, highlightTicker = '') {
   const isBuy = it.side === 'BUY';
-  const accent = isBuy ? 'border-l-emerald-500' : 'border-l-rose-500';
-  const pill = isBuy
-    ? 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30'
-    : 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-400/30';
-  const pctAfterCls = isBuy ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
   const tk = escHtml(it.ticker || '');
+  const isSelected = Boolean(highlightTicker && String(it.ticker || '').toUpperCase() === String(highlightTicker).toUpperCase());
+  const borderCls = isSelected
+    ? 'border-amber-400/70 dark:border-amber-400/60 ring-1 ring-amber-400/30'
+    : 'border-slate-200 dark:border-white/[0.08]';
+  const signBoxCls = isBuy
+    ? 'bg-emerald-700 text-white'
+    : 'bg-rose-700 text-white';
+  const deltaBoxCls = isBuy
+    ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30'
+    : 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-400/30';
+  const pctAfterCls = isBuy ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
+
   const priceInfo = [];
   if (Number(it.avg_price) > 0) priceInfo.push(`Harga ${isBuy ? 'beli' : 'jual'}: <strong class="text-slate-800 dark:text-slate-200">Rp ${fmtNumber(it.avg_price)}</strong>`);
   if (Number(it.value_idr) > 0 && it.is_market_trade) priceInfo.push(`Nilai ≈ <strong class="text-slate-800 dark:text-slate-200">${fmtRupiahShort(it.value_idr)}</strong>`);
-  if (Number(it.last_close) > 0 && Number(it.avg_price) > 0 && it.is_market_trade) {
-    const diff = ((Number(it.last_close) - Number(it.avg_price)) / Number(it.avg_price)) * 100;
-    priceInfo.push(`Harga kini Rp ${fmtNumber(it.last_close)} (<span class="${diff >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%</span>)`);
-  }
-  const purposes = [...new Set((it.transactions || []).map(t => t.purpose).filter(Boolean))].slice(0, 2).join(', ');
+  const purposes = [...new Set((it.transactions || []).map(t => t.purpose).filter(Boolean))].slice(0, 1).join(', ');
+  const badgesHtml = ownerRoleBadges(it, isSelected);
 
   return `
-    <div class="rounded-xl border border-slate-200 dark:border-white/[0.08] border-l-4 ${accent} bg-white dark:bg-slate-900/60 shadow-sm overflow-hidden">
-      <div class="flex items-start justify-between gap-2 px-3 pt-2.5 pb-2 border-b border-slate-100 dark:border-white/[0.05]">
-        <div class="flex items-start gap-2.5 min-w-0">
-          ${compact ? '' : `<div class="cursor-pointer shrink-0" onclick="selectStockAndGoToInspector('${tk}')">${getStockLogoImg(it.ticker, 'w-8 h-8')}</div>`}
+    <div class="rounded-xl border ${borderCls} bg-white dark:bg-slate-900/75 shadow-sm overflow-hidden transition hover:border-slate-300 dark:hover:border-white/20">
+      <!-- Baris Atas: Logo + Kode Saham + Nama Pemegang Saham | Badge [ +/- | LEMBAR ] -->
+      <div class="flex items-center justify-between gap-2 px-3 pt-2.5 pb-2 border-b border-slate-100 dark:border-white/[0.06]">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="cursor-pointer shrink-0" onclick="selectStockAndGoToInspector('${tk}')">${getStockLogoImg(it.ticker, 'w-8 h-8')}</div>
           <div class="min-w-0">
-            <div class="flex items-center gap-1.5 flex-wrap">
-              ${compact ? '' : `<span class="font-black text-sm text-slate-900 dark:text-white cursor-pointer hover:text-emerald-500" onclick="selectStockAndGoToInspector('${tk}')">${tk}</span>`}
-              <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[210px]" title="${escHtml(it.holder || '')}">${escHtml(it.holder || '-')}</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-black text-sm text-slate-900 dark:text-white cursor-pointer hover:text-amber-500 tracking-tight" onclick="selectStockAndGoToInspector('${tk}')">${tk}</span>
+              <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[175px] sm:max-w-[220px]" title="${escHtml(it.holder || '')}">${escHtml(it.holder || '-')}</span>
             </div>
-            <div class="flex items-center gap-1 flex-wrap mt-1">${ownerRoleBadges(it)}</div>
+            ${badgesHtml ? `<div class="flex items-center gap-1 flex-wrap mt-0.5">${badgesHtml}</div>` : ''}
           </div>
         </div>
-        <div class="shrink-0 text-right px-2 py-1 rounded-lg border ${pill}">
-          <div class="font-mono font-extrabold text-xs">${isBuy ? '+' : '−'} ${fmtShares(it.delta_shares)}</div>
-          <div class="text-[9px] font-bold tracking-wider opacity-80">LEMBAR</div>
+
+        <!-- Split Badge [+ | 15,975,400 LEMBAR] persis gaya 5% Ownership Update -->
+        <div class="shrink-0 inline-flex items-stretch rounded-lg overflow-hidden border ${deltaBoxCls}">
+          <div class="px-2 flex items-center justify-center font-mono font-black text-xs ${signBoxCls}">
+            ${isBuy ? '+' : '−'}
+          </div>
+          <div class="px-2.5 py-1 text-right leading-tight">
+            <div class="font-mono font-extrabold text-[11px]">${fmtShares(it.delta_shares)}</div>
+            <div class="text-[8px] font-bold tracking-wider uppercase opacity-80">LEMBAR</div>
+          </div>
         </div>
       </div>
-      <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-2">
+
+      <!-- Baris Tengah: SEBELUM (Lembar & %) -> SESUDAH (Lembar & %) -->
+      <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-2 bg-slate-50/50 dark:bg-slate-950/30">
         <div class="min-w-0">
-          <div class="text-[9px] font-bold tracking-wider text-slate-400">SEBELUM</div>
-          <div class="font-mono font-bold text-[12px] text-slate-800 dark:text-slate-100 truncate">${fmtShares(it.shares_before)}</div>
-          <div class="font-mono text-[11px] text-slate-500 dark:text-slate-400">${fmtOwnerPct(it.pct_before)}</div>
+          <div class="text-[9px] font-bold tracking-wider uppercase text-slate-400">SEBELUM</div>
+          <div class="flex items-baseline justify-between gap-1.5 mt-0.5">
+            <span class="font-mono font-extrabold text-[12px] text-slate-900 dark:text-slate-100 truncate">${fmtShares(it.shares_before)}</span>
+            <span class="font-mono font-semibold text-[11px] text-slate-500 dark:text-slate-400 shrink-0">${fmtOwnerPct(it.pct_before)}</span>
+          </div>
         </div>
-        <div class="w-6 h-6 rounded-md bg-slate-800 dark:bg-slate-700 text-white flex items-center justify-center text-xs">→</div>
-        <div class="min-w-0 text-right">
-          <div class="text-[9px] font-bold tracking-wider text-slate-400">SESUDAH</div>
-          <div class="font-mono font-bold text-[12px] text-slate-800 dark:text-slate-100 truncate">${fmtShares(it.shares_after)}</div>
-          <div class="font-mono font-bold text-[11px] ${pctAfterCls}">${fmtOwnerPct(it.pct_after)}</div>
+
+        <div class="w-6 h-6 rounded-md bg-slate-800 dark:bg-slate-700 text-white flex items-center justify-center text-xs font-bold shadow-xs">→</div>
+
+        <div class="min-w-0">
+          <div class="text-[9px] font-bold tracking-wider uppercase text-slate-400">SESUDAH</div>
+          <div class="flex items-baseline justify-between gap-1.5 mt-0.5">
+            <span class="font-mono font-extrabold text-[12px] text-slate-900 dark:text-slate-100 truncate">${fmtShares(it.shares_after)}</span>
+            <span class="font-mono font-extrabold text-[11px] ${pctAfterCls} shrink-0">${fmtOwnerPct(it.pct_after)}</span>
+          </div>
         </div>
       </div>
-      <div class="px-3 pb-2.5 text-[10px] text-slate-500 dark:text-slate-400 space-y-0.5">
-        <div class="flex items-center justify-between gap-2">
-          <span>Transaksi ${fmtOwnerDate(it.tx_date)} · Lapor ${fmtOwnerDate(it.published)}</span>
-          ${it.pdf_url ? `<a href="${escHtml(it.pdf_url)}" target="_blank" rel="noopener" class="text-sky-600 dark:text-sky-400 hover:underline font-semibold shrink-0">Dokumen KSEI</a>` : ''}
-        </div>
-        ${priceInfo.length ? `<div>${priceInfo.join(' · ')}</div>` : ''}
-        ${purposes ? `<div class="truncate" title="${escHtml(purposes)}">Tujuan: ${escHtml(purposes)}</div>` : ''}
+
+      <!-- Baris Bawah: Tanggal & Dokumen KSEI -->
+      <div class="px-3 py-1.5 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between gap-2 border-t border-slate-100 dark:border-white/[0.04]">
+        <span class="truncate">${fmtOwnerDate(it.tx_date || it.published)}${priceInfo.length ? ' · ' + priceInfo.join(' · ') : (purposes ? ' · ' + escHtml(purposes) : '')}</span>
+        ${it.pdf_url ? `<a href="${escHtml(it.pdf_url)}" target="_blank" rel="noopener" class="text-sky-600 dark:text-sky-400 hover:underline font-semibold shrink-0">KSEI ↗</a>` : ''}
       </div>
     </div>`;
 }
@@ -6582,7 +6611,18 @@ function renderOwnerRadarList() {
     listEl.innerHTML = `<div class="col-span-full py-10 text-center text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-white/[0.08] rounded-xl">Belum ada laporan perubahan kepemilikan untuk filter ini.</div>`;
     return;
   }
-  listEl.innerHTML = rows.map(it => renderOwnerActionCard(it)).join('');
+  listEl.innerHTML = rows.map(it => renderOwnerActionCard(it, false, selectedTicker)).join('');
+}
+
+function setInspectorOwnerMode(mode) {
+  inspectorOwnerState.mode = mode === 'ticker' ? 'ticker' : 'major';
+  inspectorOwnerState.page = 1;
+  renderStockOwnerActions(inspectorOwnerState.lastTicker || selectedTicker, inspectorOwnerState.lastDetail);
+}
+
+function stepInspectorOwnerPage(delta) {
+  inspectorOwnerState.page = Math.max(1, (inspectorOwnerState.page || 1) + Number(delta || 0));
+  renderStockOwnerActions(inspectorOwnerState.lastTicker || selectedTicker, inspectorOwnerState.lastDetail);
 }
 
 function renderStockOwnerActions(ticker, detailData = null) {
@@ -6592,7 +6632,22 @@ function renderStockOwnerActions(ticker, detailData = null) {
   const badgeEl = document.getElementById('soaSignalBadge');
   const sumEl = document.getElementById('soaSummary');
   const updEl = document.getElementById('soaUpdated');
-  const data = detailData && detailData.owner_actions;
+  const statChangesEl = document.getElementById('soaStatChanges');
+  const statEmitenEl = document.getElementById('soaStatEmiten');
+  const pageLabelEl = document.getElementById('soaPageLabel');
+  const tabMajorBtn = document.getElementById('soaTabMajor');
+  const tabTickerBtn = document.getElementById('soaTabTicker');
+
+  const tkUp = String(ticker || selectedTicker || '').toUpperCase();
+  if (tkUp && tkUp !== inspectorOwnerState.lastTicker) {
+    inspectorOwnerState.lastTicker = tkUp;
+    inspectorOwnerState.page = 1;
+  }
+  if (detailData) {
+    inspectorOwnerState.lastDetail = detailData;
+  }
+  const activeDetail = detailData || inspectorOwnerState.lastDetail;
+  const data = activeDetail && activeDetail.owner_actions;
 
   const setBadge = (txt, cls) => {
     if (!badgeEl) return;
@@ -6600,27 +6655,87 @@ function renderStockOwnerActions(ticker, detailData = null) {
     badgeEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 whitespace-nowrap ${cls}`;
   };
 
+  if (tabMajorBtn && tabTickerBtn) {
+    const isMajor = inspectorOwnerState.mode !== 'ticker';
+    tabMajorBtn.className = isMajor
+      ? 'px-1.5 py-0.5 rounded font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/30 transition'
+      : 'px-1.5 py-0.5 rounded font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white border border-transparent transition';
+    tabTickerBtn.className = !isMajor
+      ? 'px-1.5 py-0.5 rounded font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/30 transition'
+      : 'px-1.5 py-0.5 rounded font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white border border-transparent transition';
+    tabTickerBtn.textContent = tkUp ? `Khusus ${tkUp}` : 'Saham Ini';
+  }
+
   if (!data) {
-    setBadge('Tidak tersedia', 'bg-slate-500/15 text-slate-400 border-slate-400/30');
-    if (sumEl) sumEl.textContent = 'Data laporan kepemilikan belum tersedia di server.';
-    if (listEl) listEl.innerHTML = '';
+    setBadge('Memuat KSEI...', 'bg-slate-500/15 text-slate-400 border-slate-400/30');
+    if (sumEl) sumEl.textContent = 'Memuat laporan perubahan kepemilikan saham (5% Ownership Update KSEI/IDX)...';
     return;
   }
 
   const sig = data.signal;
-  if (sig === 'ACCUMULATION') setBadge('Akumulasi Owner', 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-400/30');
-  else if (sig === 'DISTRIBUTION') setBadge('Distribusi Owner', 'bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-400/30');
-  else if (sig === 'MIXED') setBadge('Campuran', 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/30');
-  else setBadge('Tidak ada laporan', 'bg-slate-500/15 text-slate-500 dark:text-slate-400 border-slate-400/30');
+  if (sig === 'ACCUMULATION') setBadge(`${tkUp}: Akumulasi Owner`, 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-400/30');
+  else if (sig === 'DISTRIBUTION') setBadge(`${tkUp}: Distribusi Owner`, 'bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-400/30');
+  else if (sig === 'MIXED') setBadge(`${tkUp}: Aksi Campuran`, 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/30');
+  else setBadge('5% Ownership Feed Aktif', 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/30');
+
+  const tickerItems = Array.isArray(data.items) ? data.items : [];
+  const majorItems = Array.isArray(data.latest_major_items) && data.latest_major_items.length
+    ? data.latest_major_items
+    : (ownerRadarState.items || []);
+
+  // Gabungkan: jika mode 'major', taruh laporan emiten terpilih (jika ada) di paling atas lalu diikuti 5% Ownership Update terkini
+  let combined = [];
+  if (inspectorOwnerState.mode === 'ticker') {
+    combined = tickerItems;
+  } else {
+    const seenNo = new Set();
+    for (const it of [...tickerItems, ...majorItems]) {
+      const k = it.announcement_no || `${it.ticker}-${it.holder}-${it.published}`;
+      if (seenNo.has(k)) continue;
+      seenNo.add(k);
+      combined.push(it);
+    }
+  }
+
+  const totalChanges = inspectorOwnerState.mode === 'ticker'
+    ? combined.length
+    : (data.major_changes_count || combined.length);
+  const totalEmiten = inspectorOwnerState.mode === 'ticker'
+    ? (combined.length ? 1 : 0)
+    : (data.major_emiten_count || new Set(combined.map(x => x.ticker)).size);
+
+  if (statChangesEl) statChangesEl.textContent = `${totalChanges} PERUBAHAN`;
+  if (statEmitenEl) statEmitenEl.textContent = `${totalEmiten} EMITEN`;
 
   if (sumEl) {
     if (data.reports > 0) {
       const net = Number(data.net_shares) || 0;
-      sumEl.innerHTML = `${data.days} hari terakhir: <strong>${data.reports}</strong> laporan · Net <strong class="${net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">${net >= 0 ? '+' : '−'}${fmtShares(net)}</strong> lembar`;
+      sumEl.innerHTML = `<span class="font-bold text-slate-900 dark:text-white">#${escHtml(tkUp)}</span> (${data.days}H terakhir): <strong>${data.reports}</strong> laporan KSEI · Net <strong class="${net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">${net >= 0 ? '+' : '−'}${fmtShares(net)} lembar</strong>`;
     } else {
-      sumEl.textContent = `Tidak ada laporan perubahan kepemilikan ${String(ticker).toUpperCase()} dalam ${data.days} hari terakhir.`;
+      sumEl.innerHTML = `<span class="font-bold text-slate-900 dark:text-white">#${escHtml(tkUp)}</span> belum memiliki perubahan &ge;5% dalam ${data.days}H terakhir — menampilkan <strong>5% Ownership Update</strong> terbaru di BEI (klik kode saham untuk inspeksi):`;
     }
   }
-  if (listEl) listEl.innerHTML = (data.items || []).slice(0, 5).map(it => renderOwnerActionCard(it, true)).join('');
+
+  const pageSize = inspectorOwnerState.pageSize || 6;
+  const totalPages = Math.max(1, Math.ceil(combined.length / pageSize));
+  if (inspectorOwnerState.page > totalPages) inspectorOwnerState.page = totalPages;
+  const curPage = Math.max(1, inspectorOwnerState.page || 1);
+  const slice = combined.slice((curPage - 1) * pageSize, curPage * pageSize);
+
+  if (pageLabelEl) {
+    pageLabelEl.textContent = `PAGE ${String(curPage).padStart(2, '0')} / ${String(totalPages).padStart(2, '0')}`;
+  }
+
+  if (listEl) {
+    if (!slice.length) {
+      listEl.innerHTML = `
+        <div class="p-3 rounded-xl border border-slate-200 dark:border-white/[0.08] text-center text-xs text-slate-500 dark:text-slate-400 space-y-1.5">
+          <div>Tidak ada laporan perubahan kepemilikan khusus <strong>#${escHtml(tkUp)}</strong> dalam ${data.days} hari terakhir.</div>
+          <button type="button" onclick="setInspectorOwnerMode('major')" class="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/30 text-[11px] font-bold">Tampilkan 5% Ownership Update Terkini</button>
+        </div>`;
+    } else {
+      listEl.innerHTML = slice.map(it => renderOwnerActionCard(it, true, tkUp)).join('');
+    }
+  }
   if (updEl) updEl.textContent = data.updated_at ? data.updated_at.slice(0, 16) : '-';
 }

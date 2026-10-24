@@ -24,15 +24,16 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     # Reset to latest code cleanly
     git reset --hard origin/main
     
-    # If requirements changed, install new packages
-    if [ -n "$REQ_CHANGED" ]; then
+    # If requirements changed or new packages (curl_cffi / pypdf) missing, install packages
+    if [ -n "$REQ_CHANGED" ] || ! "$APP_DIR/venv/bin/python" -c "import curl_cffi, pypdf" > /dev/null 2>&1; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] 📦 Memperbarui dependensi Python..."
         "$APP_DIR/venv/bin/pip" install -r requirements.txt
     fi
     
-    # Restart the smartflow service
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🔄 Me-restart service smartflow..."
-    sudo systemctl restart smartflow
+    # Restart the smartflow / radarbandar service
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🔄 Me-restart service..."
+    sudo systemctl restart smartflow 2>/dev/null || true
+    sudo systemctl restart radarbandar 2>/dev/null || true
     
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ Pembaruan selesai! SmartFlow IDX berjalan di versi terbaru."
 fi

@@ -1,12 +1,12 @@
 // SmartFlow IDX — Service Worker for PWA Offline Caching
-const CACHE_NAME = 'radarbandar-idx-v96.6';
+const CACHE_NAME = 'radarbandar-idx-v98.7';
 const ASSETS_TO_CACHE = [
-  '/static/styles.css?v=95.0',
-  '/static/app.js?v=95.0',
+  '/static/styles.css?v=98.7',
+  '/static/app.js?v=98.7',
   '/manifest.json',
   '/static/icons/icon.svg',
-  '/static/icons/icon-192.png?v=96.6',
-  '/static/icons/icon-512.png?v=96.6'
+  '/static/icons/icon-192.png?v=98.7',
+  '/static/icons/icon-512.png?v=98.7'
 ];
 
 self.addEventListener('install', (event) => {
@@ -34,9 +34,8 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 // Web Push: tampilkan notifikasi di bar notifikasi HP (meski aplikasi/browser tertutup)
@@ -50,8 +49,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: '/static/icons/icon-192.png?v=96.6',
-      badge: '/static/icons/icon-192.png?v=96.6',
+      icon: '/static/icons/icon-192.png?v=98.7',
+      badge: '/static/icons/icon-192.png?v=98.7',
       data: { url: data.url || '/' },
       vibrate: [200, 100, 200],
       tag: data.tag || ('smartflow-' + Date.now()),
@@ -69,19 +68,16 @@ self.addEventListener('notificationclick', (event) => {
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {
         if (c.url.startsWith(self.location.origin) && 'focus' in c) {
-          // Aplikasi sudah terbuka: fokuskan & arahkan langsung ke Trading Plan emiten
           if (ticker) c.postMessage({ type: 'OPEN_TRADING_PLAN', ticker });
           return c.focus();
         }
       }
-      // Aplikasi tertutup: buka dengan parameter ?ticker= agar langsung ke Trading Plan
       return self.clients.openWindow(targetUrl.href);
     })
   );
 });
 
 self.addEventListener('fetch', (event) => {
-  // Hanya tangani GET requests
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
@@ -92,7 +88,7 @@ self.addEventListener('fetch', (event) => {
   // Navigasi halaman root HTML: Selalu Network-First dengan anti-cache header
   if (event.request.mode === 'navigate' || url.pathname === '/') {
     event.respondWith(
-      fetch(event.request, { cache: 'no-cache' })
+      fetch(event.request, { cache: 'no-store' })
         .then((response) => {
           if (response && response.status === 200) {
             const copy = response.clone();
@@ -118,7 +114,7 @@ self.addEventListener('fetch', (event) => {
   // Asset static (styles, script, icons): Network-first dengan fallback cache offline
   if (url.pathname.startsWith('/static/') || url.pathname === '/manifest.json') {
     event.respondWith(
-      fetch(event.request, { cache: 'no-cache' })
+      fetch(event.request, { cache: 'no-store' })
         .then((response) => {
           if (response && response.status === 200) {
             const copy = response.clone();
