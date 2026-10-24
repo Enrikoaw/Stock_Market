@@ -3273,6 +3273,7 @@ async function selectStock(ticker, isUserClick = false, scrollToTradingPlan = fa
     selectedStockDetail = detailData;
     renderInspectorPanel(selectedStockDetail);
     loadStockNewsCatalyst(ticker);
+    loadStockOwnership(ticker);
 
     if (scrollToTradingPlan) {
       setTimeout(() => {
@@ -6398,3 +6399,94 @@ document.addEventListener('DOMContentLoaded', () => {
   initCyberDroneInteractive();
 });
 
+
+
+// =====================================================================
+// MODUL STRUKTUR KEPEMILIKAN SAHAM & FREE FLOAT (SISTEM OTOMATIS)
+// =====================================================================
+const ownershipClientCache = {};
+
+function toggleOwnershipHoldersList() {
+  const listEl = document.getElementById('ownHoldersList');
+  const arrowEl = document.getElementById('ownHoldersToggleArrow');
+  if (!listEl) return;
+  const isHidden = listEl.classList.toggle('hidden');
+  if (arrowEl) arrowEl.textContent = isHidden ? '▸' : '▾';
+}
+
+function renderOwnershipCardUI(own) {
+  if (!own) return;
+  const badgeEl = document.getElementById('ownLiquidityBadge');
+  const groupEl = document.getElementById('ownGroupEntity');
+  const barInsider = document.getElementById('ownBarInsider');
+  const barInst = document.getElementById('ownBarInst');
+  const barPublic = document.getElementById('ownBarPublic');
+  const pctInsider = document.getElementById('ownPctInsider');
+  const pctInst = document.getElementById('ownPctInst');
+  const pctPublic = document.getElementById('ownPctPublic');
+  const analysisEl = document.getElementById('ownSmartAnalysis');
+  const holdersEl = document.getElementById('ownHoldersList');
+  const syncEl = document.getElementById('ownLastSync');
+
+  const ins = Number(own.insider_pct || 0);
+  const inst = Number(own.institution_pct || 0);
+  const pub = Number(own.public_pct || 0);
+
+  if (badgeEl) {
+    badgeEl.textContent = own.badge_text || 'Terverifikasi';
+    const tone = own.badge_tone || 'sky';
+    const toneClasses = {
+      amber: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
+      emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+      indigo: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border-indigo-500/30',
+      sky: 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-400/30',
+    };
+    badgeEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 whitespace-nowrap ${toneClasses[tone] || toneClasses.sky}`;
+  }
+
+  if (groupEl) groupEl.textContent = own.owner_group || '-';
+  if (barInsider) barInsider.style.width = `${Math.max(2, ins)}%`;
+  if (barInst) barInst.style.width = `${Math.max(2, inst)}%`;
+  if (barPublic) barPublic.style.width = `${Math.max(2, pub)}%`;
+
+  if (pctInsider) pctInsider.textContent = `${ins.toFixed(2)}%`;
+  if (pctInst) pctInst.textContent = `${inst.toFixed(2)}%`;
+  if (pctPublic) pctPublic.textContent = `${pub.toFixed(2)}%`;
+  if (analysisEl) analysisEl.textContent = own.analysis || '';
+  if (syncEl) syncEl.textContent = `Update: ${own.last_sync || '-'}`;
+
+  if (holdersEl) {
+    const holders = Array.isArray(own.holders) ? own.holders : [];
+    holdersEl.innerHTML = holders.map(h => `
+      <div class="px-2.5 py-1.5 flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <div class="font-semibold text-slate-800 dark:text-slate-200 truncate">${escHtml(h.name || '-')}</div>
+          <div class="text-[9px] text-slate-500 dark:text-slate-400">${escHtml(h.role || '')}</div>
+        </div>
+        <div class="font-mono font-bold text-sky-600 dark:text-sky-400 shrink-0">${Number(h.pct || 0).toFixed(2)}%</div>
+      </div>
+    `).join('');
+  }
+}
+
+async function loadStockOwnership(ticker) {
+  const clean = String(ticker || '').trim().toUpperCase();
+  if (!clean) return;
+  if (ownershipClientCache[clean]) {
+    renderOwnershipCardUI(ownershipClientCache[clean]);
+    return;
+  }
+  try {
+    const res = await fetch(`/api/ownership/${encodeURIComponent(clean)}`);
+    if (!res.ok) return;
+    const json = await res.json();
+    if (json && json.data) {
+      ownershipClientCache[clean] = json.data;
+      if (selectedTicker === clean) {
+        renderOwnershipCardUI(json.data);
+      }
+    }
+  } catch (e) {
+    // Silent fallback
+  }
+}

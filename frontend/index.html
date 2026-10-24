@@ -18,7 +18,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png?v=96.6" />
   <link rel="icon" type="image/png" sizes="512x512" href="/static/icons/icon-512.png?v=96.6" />
   <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192.png?v=96.6" />
-  <link rel="stylesheet" href="/static/styles.css?v=98.1" />
+  <link rel="stylesheet" href="/static/styles.css?v=98.2" />
   <style>
     .glass-panel {
       background: rgba(12, 20, 36, 0.72);
@@ -1094,6 +1094,72 @@
             <div id="snc-broksum" class="space-y-1.5 pt-1 border-t border-slate-200/80 dark:border-white/[0.06]"></div>
 
             <div id="snc-news" class="space-y-1"></div>
+          </div>
+
+          <!-- 2c. STRUKTUR KEPEMILIKAN SAHAM & FREE FLOAT (SISTEM OTOMATIS) -->
+          <div id="stockOwnershipCard" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900/40 dark:border-white/[0.08] space-y-2.5 shadow-sm dark:shadow-none">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-slate-900 dark:text-white">Struktur Kepemilikan &amp; Free Float</span>
+              <span id="ownLiquidityBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-sky-500/15 text-sky-400 border border-sky-400/30 shrink-0 whitespace-nowrap">Memuat...</span>
+            </div>
+
+            <div class="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+              Pengendali Utama: <strong id="ownGroupEntity" class="text-slate-900 dark:text-white font-semibold">-</strong>
+            </div>
+
+            <!-- Segmented Ownership Bar -->
+            <div class="space-y-1.5">
+              <div class="h-3 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden flex p-0.5 border border-slate-300 dark:border-white/10">
+                <div id="ownBarInsider" class="bg-sky-500 h-full rounded-l-full transition-all duration-500" style="width: 55%"></div>
+                <div id="ownBarInst" class="bg-indigo-500 h-full transition-all duration-500" style="width: 25%"></div>
+                <div id="ownBarPublic" class="bg-emerald-500 h-full rounded-r-full transition-all duration-500" style="width: 20%"></div>
+              </div>
+
+              <div class="grid grid-cols-3 gap-1.5 text-[10px]">
+                <div class="p-1.5 rounded-lg bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-white/[0.06]">
+                  <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                    <span class="w-2 h-2 rounded-full bg-sky-500 inline-block shrink-0"></span>
+                    <span class="truncate">Pengendali</span>
+                  </div>
+                  <div id="ownPctInsider" class="font-mono font-bold text-sky-600 dark:text-sky-400 text-xs mt-0.5">-</div>
+                </div>
+                <div class="p-1.5 rounded-lg bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-white/[0.06]">
+                  <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                    <span class="w-2 h-2 rounded-full bg-indigo-500 inline-block shrink-0"></span>
+                    <span class="truncate">Institusi</span>
+                  </div>
+                  <div id="ownPctInst" class="font-mono font-bold text-indigo-600 dark:text-indigo-300 text-xs mt-0.5">-</div>
+                </div>
+                <div class="p-1.5 rounded-lg bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-white/[0.06]">
+                  <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0"></span>
+                    <span class="truncate">Free Float</span>
+                  </div>
+                  <div id="ownPctPublic" class="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">-</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Implikasi Smart Money -->
+            <p id="ownSmartAnalysis" class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed bg-sky-500/[0.07] border border-sky-400/20 rounded-lg p-2"></p>
+
+            <!-- Daftar Pemegang Saham Signifikan (>5%) -->
+            <div class="space-y-1">
+              <button
+                type="button"
+                onclick="toggleOwnershipHoldersList()"
+                class="w-full flex items-center justify-between text-[10px] font-semibold text-sky-600 dark:text-sky-400 hover:underline py-0.5 cursor-pointer"
+              >
+                <span>Rincian Pemegang Saham Utama (&gt; 5%)</span>
+                <span id="ownHoldersToggleArrow">▾</span>
+              </button>
+              <div id="ownHoldersList" class="divide-y divide-slate-200 dark:divide-white/[0.06] rounded-lg border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-slate-950/50 overflow-hidden text-[10px]"></div>
+            </div>
+
+            <div class="pt-1.5 border-t border-slate-200 dark:border-white/[0.06] flex items-center justify-between text-[10px] text-slate-400">
+              <span>Sistem Otomatis (Siklus 3 Hari)</span>
+              <span id="ownLastSync" class="font-mono text-sky-400/80">-</span>
+            </div>
           </div>
 
           <!-- 3. SKENARIO TERUKUR & KALKULATOR LOT -->
@@ -2502,6 +2568,7 @@
       <button type="button" onclick="sendAiQuickPrompt('Peta rotasi sektor hari ini')" class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[10px] font-medium whitespace-nowrap transition cursor-pointer">Peta Sektor</button>
       <button type="button" onclick="sendAiQuickPrompt('Tampilkan sektor energi')" class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[10px] font-medium whitespace-nowrap transition cursor-pointer">Sektor Energi</button>
       <button type="button" onclick="sendAiQuickPrompt('Kondisi pasar IHSG hari ini')" class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[10px] font-medium whitespace-nowrap transition cursor-pointer">Kondisi IHSG</button>
+      <button type="button" onclick="sendAiQuickPrompt('Siapa pemilik dan free float saham ini')" class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[10px] font-medium whitespace-nowrap transition cursor-pointer">Cek Pemilik</button>
       <button type="button" onclick="sendAiQuickPrompt('Hitung lot modal 10 juta')" class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 text-[10px] font-medium whitespace-nowrap transition cursor-pointer">Hitung Lot</button>
     </div>
 
@@ -2576,6 +2643,6 @@
   </nav>
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script src="/static/app.js?v=98.1"></script>
+  <script src="/static/app.js?v=98.2"></script>
 </body>
 </html>

@@ -65,6 +65,10 @@ from push_notifier import (
     is_push_configured, process_positive_news_alerts, send_push,
     get_vapid_keys, add_subscription, remove_subscription,
 )
+from ownership_manager import (
+    get_stock_ownership,
+    background_ownership_sync_worker,
+)
 
 DATA_DIR = BASE_DIR / "data"
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -790,16 +794,24 @@ async def _background_fast_watchlist_poller() -> None:
         await asyncio.sleep(max(30, FAST_POLL_INTERVAL_SECONDS))
 
 
+def _get_ownership_candidate_tickers() -> list[str]:
+    analysis = STATE.get("analysis") or {}
+    cands = analysis.get("today_candidates") or []
+    return [str(c.get("ticker", "")).upper() for c in cands if c.get("ticker")]
+
+
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     """Mengelola siklus hidup server: Menjalankan worker market session cerdas secara otomatis."""
     market_task = asyncio.create_task(_background_market_session_worker())
     news_alert_task = asyncio.create_task(_background_news_alert_worker())
     fast_poll_task = asyncio.create_task(_background_fast_watchlist_poller())
+    ownership_task = asyncio.create_task(background_ownership_sync_worker(_get_ownership_candidate_tickers))
     yield
     market_task.cancel()
     news_alert_task.cancel()
     fast_poll_task.cancel()
+    ownership_task.cancel()
     try:
         TRACKER.engine.dispose()
         PORTFOLIO.engine.dispose()
@@ -2477,6 +2489,19 @@ def _call_cloud_llm(system_prompt: str, user_msg: str) -> Optional[str]:
     return None
 
 
+@app.get("/api/ownership/{ticker}")
+def get_ownership_endpoint(ticker: str) -> dict:
+    """Mengambil Struktur Kepemilikan Saham & Free Float secara instan (Read-Only untuk Publik)."""
+    clean = str(ticker or "").strip().upper()
+    if not clean or len(clean) < 2 or len(clean) > 8:
+        raise HTTPException(status_code=400, detail="Kode saham tidak valid.")
+    analysis = STATE.get("analysis") or {}
+    all_stocks = analysis.get("stocks") or []
+    stock_meta = next((s for s in all_stocks if str(s.get("ticker", "")).upper() == clean), None)
+    data = get_stock_ownership(clean, stock_meta)
+    return {"status": "success", "data": data}
+
+
 @app.post("/api/ai/chat")
 def ai_copilot_chat(payload: AIChatRequest, request: Request) -> dict:
     """
@@ -2582,6 +2607,15 @@ def ai_copilot_chat(payload: AIChatRequest, request: Request) -> dict:
         reply_lines.append(f"Saya telah membuka **Kalkulator Lot** untuk **{tk}** dengan modal **Rp {cap_rp:,.0f}**.".replace(",", "."))
         reply_lines.append(f"• Harga Antre Beli: **Rp {entry:,.0f}** | Stop Loss: **Rp {sl:,.0f}**".replace(",", "."))
         reply_lines.append(f"• Kapasitas Aman (Maks 20% Modal / Risiko 2%): **{rec_lots} Lot**")
+    elif any(k in msg_lower for k in ["pemilik", "owner", "pengendali", "free float", "kepemilikan", "siapa punya"]):
+        tk = matched_ticker or (payload.active_ticker if payload.active_ticker in stock_map else (today_cands[0]["ticker"] if today_cands else "BBCA"))
+        st = stock_map.get(tk, {})
+        own = get_stock_ownership(tk, st)
+        actions.append({"type": "select_stock", "ticker": tk})
+        reply_lines.append(f"**Struktur Kepemilikan & Free Float {tk} ({own.get('company_name', tk)}):**")
+        reply_lines.append(f"• Pengendali Utama: **{own.get('owner_group', '-')}**")
+        reply_lines.append(f"• Proporsi: Pengendali **{own.get('insider_pct', 0):.2f}%** | Institusi **{own.get('institution_pct', 0):.2f}%** | Publik (Free Float) **{own.get('public_pct', 0):.2f}%**")
+        reply_lines.append(f"• Karakteristik: **{own.get('badge_text', '-')}** — {own.get('analysis', '')}")
     elif matched_ticker:
         st = stock_map[matched_ticker]
         plan = st.get("trading_plan") or {}
@@ -2591,12 +2625,14 @@ def ai_copilot_chat(payload: AIChatRequest, request: Request) -> dict:
         sl = int(plan.get("stop_loss") or round(entry * 0.965))
         bdr = st.get("bdr_pct", 0)
         buyers = st.get("top_buyers") or "-"
+        own = get_stock_ownership(matched_ticker, st)
         actions.append({"type": "select_stock", "ticker": matched_ticker})
         reply_lines.append(f"Menampilkan analisis & grafik **{matched_ticker}** di panel detail:")
         reply_lines.append(f"• Harga: **Rp {int(st.get('close', 0)):,.0f}** ({st.get('pct_change', 0):+.2f}%) | Skor Aliran Dana: **{st.get('smart_money_score', 0)}/100**".replace(",", "."))
         reply_lines.append(f"• Status: **{st.get('trigger_label', '-')}** | Modal Bandar (VWAP 5H): **Rp {int(st.get('bandar_avg_buy', 0)):,.0f}** ({st.get('diff_bandar_avg_pct', 0):+.1f}%)".replace(",", "."))
         if st.get("has_broker_summary") or buyers != "-":
             reply_lines.append(f"• Broker Summary 3H: Buyer **{buyers}** (BDR {bdr:+.1f}%)")
+        reply_lines.append(f"• Kepemilikan: Pengendali **{own.get('insider_pct', 0):.1f}%** | Free Float **{own.get('public_pct', 0):.1f}%** ({own.get('owner_group', '-')})")
         reply_lines.append(f"• Trading Plan: Antre Beli **Rp {entry:,.0f}** | TP1 **Rp {tp1:,.0f}** | TP2 **Rp {tp2:,.0f}** | SL **Rp {sl:,.0f}**".replace(",", "."))
     elif matched_sector:
         actions.append({"type": "filter_sector", "sector": matched_sector})
