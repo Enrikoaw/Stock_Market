@@ -2135,6 +2135,7 @@ async function loadScreenerData(preserveSelection = false) {
     if (data.kpis && data.kpis.market_regime) {
       renderMarketRegimeBadge(data.kpis.market_regime);
     }
+    updateMarketLiveStatusUI();
 
     currentStocks = data.stocks || [];
     currentTodayCandidates = data.today_candidates || [];
@@ -3818,6 +3819,8 @@ function updateMarketLiveStatusUI() {
   const isLive = isIDXMarketOpenNow();
   const dots = document.querySelectorAll('#marketStatusDot, #dropdownMarketDot');
   const textEls = document.querySelectorAll('#marketStatusText, #dropdownMarketText');
+  const headerAutoDot = document.getElementById('headerAutoUpdateDot');
+  const headerAutoText = document.getElementById('headerAutoUpdateText');
   const timer = document.getElementById('marketAutoTimer');
 
   // Format Jam WIB saat ini
@@ -3846,18 +3849,32 @@ function updateMarketLiveStatusUI() {
       d.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0';
     });
     textEls.forEach(t => {
-      t.textContent = `Harga Delayed 15 Menit • ${wibTime}`;
+      t.textContent = `Live Bursa Aktif • Auto-Update (${wibTime})`;
       t.className = 'font-bold text-emerald-400 text-[11px]';
     });
+    if (headerAutoDot) {
+      headerAutoDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0';
+    }
+    if (headerAutoText) {
+      headerAutoText.textContent = `Live Auto-Update • ${wibTime}`;
+      headerAutoText.className = 'font-semibold text-emerald-300 text-[11px] truncate max-w-[155px] sm:max-w-none';
+    }
     if (timer) timer.textContent = 'Auto-Sync 60s';
   } else {
     dots.forEach(d => {
-      d.className = 'w-2 h-2 rounded-full bg-slate-500 shrink-0';
+      d.className = 'w-2 h-2 rounded-full bg-emerald-400 shrink-0';
     });
     textEls.forEach(t => {
-      t.textContent = `Bursa Tutup • Data Akhir Sesi (${dateStr})`;
+      t.textContent = `Data Akhir Sesi (${dateStr}) • Update Otomatis`;
       t.className = 'font-medium text-slate-300 text-[11px]';
     });
+    if (headerAutoDot) {
+      headerAutoDot.className = 'w-2 h-2 rounded-full bg-emerald-400 shrink-0';
+    }
+    if (headerAutoText) {
+      headerAutoText.textContent = `Data Terkini (${dateStr})`;
+      headerAutoText.className = 'font-medium text-slate-200 text-[11px] truncate max-w-[155px] sm:max-w-none';
+    }
     if (timer) timer.textContent = 'Bursa Buka 09:00 WIB';
   }
 }
@@ -3887,13 +3904,13 @@ function initLiveMarketAutoSync() {
     }
   }, 5 * 60 * 1000);
 
-  // Poller grafik IHSG otomatis setiap 5 menit (300 detik) saat jam bursa aktif
+  // Poller grafik IHSG otomatis setiap 5 menit (300 detik) saat jam bursa aktif (baca cache server)
   if (ihsgAutoSyncTimerId) clearInterval(ihsgAutoSyncTimerId);
   ihsgAutoSyncTimerId = setInterval(async () => {
     if (isIDXMarketOpenNow()) {
       try {
         console.log('[IHSGChart] ⏱️ Memperbarui grafik IHSG 5 menitan (Jam Bursa Aktif)...');
-        await loadIhsgTodayChart(currentIhsgPeriod, true);
+        await loadIhsgTodayChart(currentIhsgPeriod, false);
       } catch (err) {
         console.debug('[IHSGChart] Auto-refresh 5 menit:', err);
       }
@@ -3912,7 +3929,7 @@ function initLiveMarketAutoSync() {
       // Backup trigger jika timer 5 menit terlewat
       const now = Date.now();
       if (now - lastIhsgRefreshTs >= 5 * 60 * 1000) {
-        loadIhsgTodayChart(currentIhsgPeriod, true).catch(() => {});
+        loadIhsgTodayChart(currentIhsgPeriod, false).catch(() => {});
       }
     }
   }, 60 * 1000);
