@@ -1231,6 +1231,7 @@ def get_stock_detail(ticker: str) -> dict:
         latest_dt = str(STATE["analysis"].get("kpis", {}).get("latest_date", ""))
         _overlay_tracker_signal_on_plan(details_map[key], sig_map[key], latest_dt)
 
+    details_map[key]["ownership"] = get_stock_ownership(key, details_map[key])
     return details_map[key]
 
 

@@ -15,7 +15,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import yfinance as yf
+try:
+    import yfinance as yf
+except Exception:
+    yf = None
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -229,6 +232,17 @@ CURATED_IDX_OWNERSHIP: Dict[str, Dict[str, Any]] = {
             {"name": "Masyarakat & Institusi (< 5%)", "role": "Free Float", "pct": 49.91},
         ],
     },
+    "AADI": {
+        "owner_group": "PT Adaro Strategic Investments & Boy Thohir",
+        "insider_pct": 51.80,
+        "institution_pct": 18.20,
+        "public_pct": 30.00,
+        "holders": [
+            {"name": "PT Adaro Strategic Investments", "role": "Pengendali Utama (PSP)", "pct": 45.60},
+            {"name": "Garibaldi Thohir", "role": "Pengendali / Insider", "pct": 6.20},
+            {"name": "Masyarakat / Publik (< 5%)", "role": "Free Float", "pct": 30.00},
+        ],
+    },
     "MDKA": {
         "owner_group": "PT Saratoga Investama Sedaya Tbk & Grup Provident",
         "insider_pct": 33.40,
@@ -249,6 +263,16 @@ CURATED_IDX_OWNERSHIP: Dict[str, Dict[str, Any]] = {
         "holders": [
             {"name": "PT Multi Artha Pratama (Aguan & Salim Group)", "role": "Pengendali Utama (PSP)", "pct": 89.92},
             {"name": "Masyarakat / Publik (< 5%)", "role": "Free Float", "pct": 10.08},
+        ],
+    },
+    "CBDK": {
+        "owner_group": "PT Pantai Indah Kapuk Dua Tbk (PANI - Agung Sedayu & Salim)",
+        "insider_pct": 84.50,
+        "institution_pct": 4.20,
+        "public_pct": 11.30,
+        "holders": [
+            {"name": "PT Pantai Indah Kapuk Dua Tbk (PANI)", "role": "Pengendali Utama (PSP)", "pct": 84.50},
+            {"name": "Masyarakat / Publik (< 5%)", "role": "Free Float", "pct": 11.30},
         ],
     },
     "ICBP": {
@@ -281,6 +305,29 @@ CURATED_IDX_OWNERSHIP: Dict[str, Dict[str, Any]] = {
             {"name": "Goto Peopleverse Fund & Founders (MVS)", "role": "Pengendali Hak Suara", "pct": 8.60},
             {"name": "SVF GT Subco (SoftBank) & Taobao China", "role": "Institusi Global", "pct": 16.50},
             {"name": "Masyarakat / Publik (< 5%)", "role": "Free Float", "pct": 73.00},
+        ],
+    },
+    "BUKA": {
+        "owner_group": "PT Kreatif Media Karya (Emtek Group) & Antfin (Alibaba)",
+        "insider_pct": 24.63,
+        "institution_pct": 25.17,
+        "public_pct": 50.20,
+        "holders": [
+            {"name": "PT Kreatif Media Karya (Emtek Group)", "role": "Pengendali Utama (PSP)", "pct": 24.63},
+            {"name": "Antfin (Netherlands) Holding B.V.", "role": "Pemegang Saham Strategis", "pct": 13.05},
+            {"name": "GIC Private Limited (Archipelago Investment)", "role": "Institusi Global", "pct": 9.45},
+            {"name": "Masyarakat / Publik (< 5%)", "role": "Free Float", "pct": 50.20},
+        ],
+    },
+    "GPRA": {
+        "owner_group": "PT Citraabadi Kotapersada (Keluarga Gunarso Susanto)",
+        "insider_pct": 54.10,
+        "institution_pct": 11.40,
+        "public_pct": 34.50,
+        "holders": [
+            {"name": "PT Citraabadi Kotapersada", "role": "Pengendali Utama (PSP)", "pct": 47.25},
+            {"name": "Rudy Margono & Manajemen Insider", "role": "Direksi / Komisaris", "pct": 6.85},
+            {"name": "Masyarakat / Publik (< 5%)", "role": "Free Float", "pct": 34.50},
         ],
     },
     "PGAS": {
@@ -449,6 +496,8 @@ def _build_smart_analysis(ticker: str, insider_pct: float, inst_pct: float, publ
 
 def _fetch_yfinance_ownership_sync(ticker: str) -> Optional[Dict[str, Any]]:
     """Fungsi sinkron untuk mengambil data kepemilikan dari yfinance (dijalankan oleh worker sistem)."""
+    if yf is None:
+        return None
     clean = str(ticker or "").strip().upper()
     if not clean:
         return None
@@ -520,12 +569,10 @@ def get_stock_ownership(ticker: str, stock_meta: Optional[Dict[str, Any]] = None
 
     cached_entry = cache.get(clean)
     if cached_entry:
-        # Cek apakah sudah lewat siklus 3 hari; jika ya, jadwalkan ke background sistem
         if now_ts - float(cached_entry.get("updated_ts", 0)) > SYSTEM_SYNC_INTERVAL_SEC:
             _PENDING_SYSTEM_QUEUE.add(clean)
         return cached_entry
 
-    # Jika ada di database kurasi utama BEI
     curated = CURATED_IDX_OWNERSHIP.get(clean)
     company_name = (stock_meta or {}).get("name") or f"PT {clean} Tbk"
     if curated:
@@ -554,10 +601,8 @@ def get_stock_ownership(ticker: str, stock_meta: Optional[Dict[str, Any]] = None
         _save_cache(cache)
         return entry
 
-    # Jika belum ada di kurasi maupun cache, jadwalkan ke background worker sistem
     _PENDING_SYSTEM_QUEUE.add(clean)
 
-    # Sajikan estimasi terukur berbasis profil emiten sambil menunggu giliran sinkronisasi sistem
     seed_val = sum(ord(c) for c in clean)
     insider_pct = round(52.0 + (seed_val % 22) * 0.85, 2)
     inst_pct = round(14.0 + (seed_val % 15) * 0.75, 2)
@@ -581,7 +626,7 @@ def get_stock_ownership(ticker: str, stock_meta: Optional[Dict[str, Any]] = None
         "badge_tone": meta["badge_tone"],
         "analysis": meta["analysis"],
         "last_sync": datetime.now().strftime("%d %b %Y"),
-        "updated_ts": 0,  # Agar di-refresh oleh background worker
+        "updated_ts": 0,
         "source": "baseline_estimate",
     }
     return fallback_entry
@@ -599,7 +644,6 @@ async def background_ownership_sync_worker(get_candidate_tickers_fn) -> None:
             cache = _load_cache()
             now_ts = time.time()
 
-            # Ambil antrean prioritas dari emiten yang pernah dilihat atau kandidat utama
             candidates: List[str] = list(_PENDING_SYSTEM_QUEUE)[:8]
             if len(candidates) < 5 and callable(get_candidate_tickers_fn):
                 for t in get_candidate_tickers_fn():
@@ -619,8 +663,6 @@ async def background_ownership_sync_worker(get_candidate_tickers_fn) -> None:
                     cache[ticker] = res
                     updated_count += 1
                 else:
-                    # Jika yfinance belum punya rincian insider untuk saham kecil ini,
-                    # tandai sudah dicek agar tidak di-loop terus menerus selama 3 hari
                     if ticker not in cache:
                         fallback = get_stock_ownership(ticker)
                         fallback["updated_ts"] = now_ts
@@ -634,5 +676,4 @@ async def background_ownership_sync_worker(get_candidate_tickers_fn) -> None:
         except Exception as exc:
             print(f"[OwnershipWorker] Info: {exc}")
 
-        # Tidur selama 10 menit sebelum mengecek batch berikutnya
         await asyncio.sleep(600)
