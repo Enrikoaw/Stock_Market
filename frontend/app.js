@@ -2478,7 +2478,7 @@ function getStockSectorCode(s) {
   const raw = String(s.sector || '').toLowerCase();
   const t = String(s.ticker || '').toUpperCase().trim();
 
-  if (/bank|keuangan|financial|asuransi|insurance|insuran|leasing|multifinance|multi finance|sekuritas|securities|modal|dana|investasi|investama|investment/.test(raw)) return 'Financials';
+  if (/bank|keuangan|financial|asuransi|insurance|insuran|leasing|multifinance|multi finance|sekuritas|securities|modal ventura|reksadana|investasi|investama|investment/.test(raw)) return 'Financials';
   if (/adaro|energi|energy|minyak|oil|gas|batubara|coal|petroleum|resources/.test(raw)) return 'Energy';
   if (/mineral|metal|tambang|baja|steel|semen|cement|kimia|chemical|basic material|kertas|paper|pulp|gold|emas|nikel|nickel|timah|tin|tembaga|copper|polychem/.test(raw)) return 'Basic Materials';
   if (/food|makanan|beverage|minuman|agro|lestari|sawit|palm|plantation|perkebunan|rokok|tobacco|poultry|ayam|feed|consumer non-cyclical|primer|mina|perikanan/.test(raw)) return 'Consumer Non-Cyclicals';
@@ -2585,10 +2585,14 @@ function computeSectorRotationStats(stocks) {
     const accumRatioPct = b.count > 0 ? Math.round((b.accumCount / b.count) * 100) : 0;
     const distRatioPct = b.count > 0 ? Math.round((b.distCount / b.count) * 100) : 0;
 
-    // Urutkan saham penggerak utama (Leaders) di sektor ini
-    const sortedLeaders = b.stocks.slice().sort((x, y) => {
-      const sx = (Number(x.smart_money_score || 0) * 1.5) + Math.min(25, Number(x.value_b_idr || 0) * 0.25) + (Number(x.pct_change || 0) * 1.2);
-      const sy = (Number(y.smart_money_score || 0) * 1.5) + Math.min(25, Number(y.value_b_idr || 0) * 0.25) + (Number(y.pct_change || 0) * 1.2);
+    // Urutkan saham penggerak utama (Leaders) di sektor ini (prioritaskan emiten likuid >= Rp 1M)
+    const liquidPool = b.stocks.filter(st => Number(st.value_b_idr || (Number(st.value_idr || 0) / 1e9) || 0) >= 1.0);
+    const leaderSource = liquidPool.length >= 3 ? liquidPool : b.stocks;
+    const sortedLeaders = leaderSource.slice().sort((x, y) => {
+      const vx = Math.max(0.1, Number(x.value_b_idr || (Number(x.value_idr || 0) / 1e9) || 0));
+      const vy = Math.max(0.1, Number(y.value_b_idr || (Number(y.value_idr || 0) / 1e9) || 0));
+      const sx = (Number(x.smart_money_score || 0) * 1.3) + (Math.log10(vx + 1) * 14) + (Number(x.pct_change || 0) * 1.2);
+      const sy = (Number(y.smart_money_score || 0) * 1.3) + (Math.log10(vy + 1) * 14) + (Number(y.pct_change || 0) * 1.2);
       return sy - sx;
     });
     const leaders = sortedLeaders.slice(0, 3).map(st => st.ticker);
@@ -2604,7 +2608,7 @@ function computeSectorRotationStats(stocks) {
     if (accumRatioPct >= 38 && avgPctChange >= 0.35) {
       phaseLabel = 'Akumulasi Kuat';
       phaseBadgeCls = 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30';
-    } else if (accumRatioPct >= 30 || (avgScore >= 60 && avgPctChange >= -0.8)) {
+    } else if ((accumRatioPct >= 30 && avgPctChange >= -0.35) || (avgScore >= 60 && avgPctChange >= -0.25)) {
       phaseLabel = 'Akumulasi Awal';
       phaseBadgeCls = 'bg-sky-500/15 text-sky-300 border-sky-400/30';
     } else if (avgPctChange <= -0.6 || distRatioPct >= 45) {

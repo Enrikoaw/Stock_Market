@@ -194,6 +194,11 @@ RETAIL_BROKERS_POOL = [
 
 KNOWN_TICKER_SECTORS: dict[str, str] = {
     # Keuangan (Financials)
+    "MEGA": "Financials", "NISP": "Financials", "BNII": "Financials", "SRTG": "Financials",
+    "TEBE": "Energy", "PTRO": "Energy", "DEWA": "Energy", "RATU": "Energy",
+    "SOTS": "Consumer Cyclicals", "BIKE": "Consumer Cyclicals",
+    "GPRA": "Properties & Real Estate", "PANI": "Properties & Real Estate", "CBDK": "Properties & Real Estate",
+    "LOPI": "Transportation & Logistics", "RSCH": "Healthcare",
     "BBCA": "Financials", "BBRI": "Financials", "BMRI": "Financials", "BBNI": "Financials",
     "BBTN": "Financials", "BDMN": "Financials", "BNGA": "Financials", "BRIS": "Financials",
     "BTPS": "Financials", "ARTO": "Financials", "PNBN": "Financials", "BNLI": "Financials",
@@ -278,6 +283,19 @@ KNOWN_TICKER_SECTORS: dict[str, str] = {
     "SMIL": "Industrials", "ASPI": "Industrials", "SATU": "Industrials", "HBAT": "Industrials",
 }
 
+try:
+    import json as _sec_json
+    from pathlib import Path as _SecPath
+    _sec_map_file = _SecPath(__file__).resolve().parent.parent / "data" / "idx_sector_map.json"
+    if _sec_map_file.exists():
+        _loaded_sec = _sec_json.loads(_sec_map_file.read_text(encoding="utf-8"))
+        if isinstance(_loaded_sec, dict):
+            for _tk_k, _sec_v in _loaded_sec.items():
+                if _tk_k not in KNOWN_TICKER_SECTORS:
+                    KNOWN_TICKER_SECTORS[_tk_k] = _sec_v
+except Exception:
+    pass
+
 
 def classify_idx_sector(ticker: str, raw_sector: str) -> str:
     """Mengklasifikasikan saham ke salah satu dari 11 Sektor Standar IDX-IC."""
@@ -286,7 +304,7 @@ def classify_idx_sector(ticker: str, raw_sector: str) -> str:
         return KNOWN_TICKER_SECTORS[clean_ticker]
 
     s = str(raw_sector).lower()
-    if any(k in s for k in ("bank", "keuangan", "financial", "asuransi", "insurance", "insuran", "leasing", "multifinance", "multi finance", "sekuritas", "securities", "modal", "dana", "investasi", "investama", "investment")):
+    if any(k in s for k in ("bank", "keuangan", "financial", "asuransi", "insurance", "insuran", "leasing", "multifinance", "multi finance", "sekuritas", "securities", "modal ventura", "reksadana", "investasi", "investama", "investment")):
         return "Financials"
     if any(k in s for k in ("adaro", "energi", "energy", "minyak", "oil", "gas", "batubara", "coal", "petroleum", "tambang batubara", "resources")):
         return "Energy"
@@ -1605,7 +1623,8 @@ def analyze_smart_money_dataframe(raw_df: pd.DataFrame) -> dict[str, Any]:
         last5 = g.tail(min(5, n))
 
         close_price = int(round(float(latest["Close"])))
-        pct_change = round(float(latest["Pct_Change"]), 2)
+        is_current_day_bar = (str(latest.get("Date", "")) == global_latest_dt)
+        pct_change = round(float(latest["Pct_Change"]), 2) if is_current_day_bar else 0.0
         vol_ratio = round(float(latest["Volume_Ratio"]), 2)
         closing_range = round(float(latest["Closing_Range"]), 2)
         spread_pct = round(float(latest["Spread_Pct"]), 2)

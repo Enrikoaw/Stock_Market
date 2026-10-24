@@ -32,7 +32,7 @@ def _download_batch_safe(yf_symbols: list[str], period: str) -> pd.DataFrame | N
                     period=period,
                     interval="1d",
                     group_by="ticker",
-                    threads=False,
+                    threads=True,
                     progress=False,
                     auto_adjust=False,
                 )
@@ -56,7 +56,7 @@ def _download_batch_safe(yf_symbols: list[str], period: str) -> pd.DataFrame | N
                         period=period,
                         interval="1d",
                         group_by="ticker",
-                        threads=False,
+                        threads=True,
                         progress=False,
                         auto_adjust=False,
                     )
@@ -191,7 +191,7 @@ def fetch_real_idx_market_data(
     tickers_df: pd.DataFrame,
     output_csv_path: Path | None = None,
     period: str = "auto",
-    batch_size: int = 120,
+    batch_size: int = 80,
     max_workers: int = 2,
     force_full: bool = False,
 ) -> pd.DataFrame:
@@ -247,6 +247,8 @@ def fetch_real_idx_market_data(
                 days_gap = (pd.Timestamp.now() - max_dt).days if pd.notna(max_dt) else 999
                 if median_bars >= 55 and days_gap <= 5:
                     cache_sufficient_for_incremental = True
+                elif median_bars >= 50 and days_gap <= 25:
+                    cache_sufficient_for_incremental = "1mo"
                 else:
                     print(
                         f"[LiveIDX] Cache lokal memiliki median {median_bars:.0f} bar (gap {days_gap} hari) "
@@ -257,7 +259,12 @@ def fetch_real_idx_market_data(
             cache_sufficient_for_incremental = False
 
     if period == "auto":
-        download_period = "5d" if cache_sufficient_for_incremental else "90d"
+        if cache_sufficient_for_incremental is True:
+            download_period = "5d"
+        elif cache_sufficient_for_incremental == "1mo":
+            download_period = "1mo"
+        else:
+            download_period = "90d"
     else:
         download_period = period
 
