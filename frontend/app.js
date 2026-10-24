@@ -6148,10 +6148,11 @@ function dismissAiDroneBubble() {
 }
 
 function formatAiMarkdown(text) {
-  const safe = escHtml(text || '');
+  const safe = escHtml(String(text || ''));
   return safe
     .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-bold">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em class="text-sky-300 not-italic">$1</em>')
+    .replace(/\*(.+?)\*/g, '<em class="text-sky-300 not-italic font-medium">$1</em>')
+    .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-sky-950/80 text-sky-300 font-mono text-[10px]">$1</code>')
     .replace(/\n/g, '<br/>');
 }
 
@@ -6252,12 +6253,21 @@ async function handleAiChatSubmit(e, overrideText = null) {
     });
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.detail || 'Gagal memproses perintah');
+      let errMsg = 'Gagal memproses perintah';
+      if (typeof data.detail === 'string') {
+        errMsg = data.detail;
+      } else if (Array.isArray(data.detail)) {
+        errMsg = data.detail.map(d => (d && d.msg) ? d.msg : (typeof d === 'string' ? d : JSON.stringify(d))).join(', ');
+      } else if (data.detail && typeof data.detail === 'object') {
+        errMsg = data.detail.msg || JSON.stringify(data.detail);
+      }
+      throw new Error(errMsg);
     }
     executeAiNavigationActions(data.actions || []);
     appendAiChatMessage('bot', data.reply || 'Navigasi selesai dijalankan.', data.actions || []);
   } catch (err) {
-    appendAiChatMessage('bot', `Info: ${err.message || 'Periksa kembali koneksi Anda.'}`);
+    const errorText = (err && err.message) ? (typeof err.message === 'string' ? err.message : JSON.stringify(err.message)) : String(err || 'Periksa kembali koneksi Anda.');
+    appendAiChatMessage('bot', `Info: ${errorText}`);
   } finally {
     if (droneContainer) droneContainer.classList.remove('is-scanning');
   }
